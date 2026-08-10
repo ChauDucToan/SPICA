@@ -1,0 +1,38 @@
+[project]
+name = "spica"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "matplotlib>=3.11.0",
+    "numpy>=2.5.1",
+    "opencv-python-headless>=5.0.0.93",
+    "pandas>=3.0.3",
+    "pillow>=12.3.0",
+    "pyarrow>=25.0.0",
+    "pyyaml>=6.0.3",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+    "tqdm>=4.68.4",
+    "wandb>=0.28.1",
+]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.3.0",
+    "ipython>=9.15.0",
+    "jupyterlab>=4.6.1",
+    "ruff>=0.15.21",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
