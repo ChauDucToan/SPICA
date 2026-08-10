@@ -1,0 +1,14 @@
+version: 1
+
+name: sketchy_100_25
+root: datasets/Sketchy
+
+train:
+  sketch_manifest: zeroshot1/sketch_tx_000000000000_ready_filelist_train.txt
+  photo_manifest: zeroshot1/all_photo_filelist_train.txt
+  class_map: zeroshot1/cname_cid.txt
+
+test:
+  sketch_manifest: zeroshot1/sketch_tx_000000000000_ready_filelist_zero.txt
+  photo_manifest: zeroshot1/all_photo_filelist_zero.txt
+  class_map: zeroshot1/cname_cid_zero.txt

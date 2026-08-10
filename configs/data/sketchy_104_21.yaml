@@ -1,0 +1,14 @@
+version: 1
+
+name: sketchy_104_21
+root: datasets/Sketchy
+
+train:
+  sketch_manifest: zeroshot0/sketch_tx_000000000000_ready_filelist_train.txt
+  photo_manifest: zeroshot0/all_photo_filelist_train.txt
+  class_map: zeroshot0/cname_cid.txt
+
+test:
+  sketch_manifest: zeroshot0/sketch_tx_000000000000_ready_filelist_zero.txt
+  photo_manifest: zeroshot0/all_photo_filelist_zero.txt
+  class_map: zeroshot0/cname_cid_zero.txt

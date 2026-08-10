@@ -1,0 +1,14 @@
+version: 1
+
+name: tuberlin_220_30
+root: datasets/TUBerlin
+
+train:
+  sketch_manifest: zeroshot/png_ready_filelist_train.txt
+  photo_manifest: zeroshot/ImageResized_ready_filelist_train.txt
+  class_map: zeroshot/cname_cid.txt
+
+test:
+  sketch_manifest: zeroshot/png_ready_filelist_zero.txt
+  photo_manifest: zeroshot/ImageResized_ready_filelist_zero.txt
+  class_map: zeroshot/cname_cid_zero.txt

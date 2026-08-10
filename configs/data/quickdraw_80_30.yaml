@@ -1,0 +1,14 @@
+version: 1
+
+name: quickdraw_80_30
+root: datasets/QuickDraw
+
+train:
+  sketch_manifest: zeroshot/sketch_train.txt
+  photo_manifest: zeroshot/all_photo_train.txt
+  class_map: zeroshot/cname_cid.txt
+
+test:
+  sketch_manifest: zeroshot/sketch_zero.txt
+  photo_manifest: zeroshot/all_photo_zero.txt
+  class_map: zeroshot/cname_cid_zero.txt
