@@ -20,7 +20,7 @@ class DataConfig:
     test: SplitConfig
 
 
-def find_project_root(start: Path) -> Path:
+def _find_project_root(start: Path) -> Path:
     for candidate in (start, *start.parents):
         if (candidate / "pyproject.toml").is_file():
             return candidate
@@ -36,7 +36,7 @@ def load_data_config(config_path: Path) -> DataConfig:
     if missing:
         raise ValueError(f"Missing config keys: {sorted(missing)}")
 
-    project_root = find_project_root(Path(__file__).resolve().parent)
+    project_root = _find_project_root(Path(__file__).resolve().parent)
 
     root = Path(raw["root"]).expanduser()
     if not root.is_absolute():
