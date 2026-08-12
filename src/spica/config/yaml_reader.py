@@ -9,8 +9,6 @@ def read_yaml(path: Path) -> dict[str, Any]:
         raw = yaml.safe_load(file)
 
     if not isinstance(raw, dict):
-        raise TypeError(
-            f"Config must be a YAML mapping: {path}"
-        )
+        raise TypeError(f"Config must be a YAML mapping: {path}")
 
     return raw
