@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 spica-eval-clip = "spica.evaluate_clip:main"
+spica-eval-text-fusion = "spica.evaluate_text_fusion:main"
 
 [build-system]
 requires = ["uv_build"]

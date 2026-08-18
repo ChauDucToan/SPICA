@@ -15,7 +15,7 @@ from .evaluation.reporting import (
     RETRIEVAL_TABLE_COLUMNS,
     build_retrieval_table_rows,
 )
-from .models.clip import load_frozen_clip_image_encoder
+from .models.clip import load_frozen_clip
 from .tracking.wandb import WandbExperiment
 
 
@@ -34,9 +34,28 @@ def _save_embeddings(
     *,
     sketches: EncodedRetrievalSet,
     photos: EncodedRetrievalSet,
+    dataset_name: str,
+    split: str,
+    model_name: str,
+    pretrained: str | None,
 ) -> None:
-    save_encoded_retrieval_set(sketches, output_dir / "sketches.pt")
-    save_encoded_retrieval_set(photos, output_dir / "photos.pt")
+    common_metadata: dict[str, str | int | float | None] = {
+        "format_version": 1,
+        "dataset": dataset_name,
+        "split": split,
+        "model_name": model_name,
+        "pretrained": pretrained,
+    }
+    save_encoded_retrieval_set(
+        sketches,
+        output_dir / "sketches.pt",
+        metadata={**common_metadata, "modality": "sketch"},
+    )
+    save_encoded_retrieval_set(
+        photos,
+        output_dir / "photos.pt",
+        metadata={**common_metadata, "modality": "photo"},
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -72,7 +91,7 @@ def main(argv: list[str] | None = None) -> None:
         job_type="evaluation",
     ) as experiment:
         print(f"Loading {args.model_name} ({args.pretrained}) on {device}...")
-        clip_bundle = load_frozen_clip_image_encoder(
+        clip_bundle = load_frozen_clip(
             model_name=args.model_name,
             pretrained=args.pretrained,
             device=device,
@@ -131,6 +150,10 @@ def main(argv: list[str] | None = None) -> None:
                 args.output_dir,
                 sketches=sketches,
                 photos=photos,
+                dataset_name=config.name,
+                split=args.split,
+                model_name=args.model_name,
+                pretrained=args.pretrained,
             )
             experiment.log_artifact(
                 args.output_dir,

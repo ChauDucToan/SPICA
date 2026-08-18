@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 import torch
@@ -95,3 +95,65 @@ def build_retrieval_table_rows(
             )
 
     return rows
+
+
+def build_per_class_metric_rows(
+    evaluations: Mapping[str, CategoryRetrievalEvaluation],
+    queries: EncodedRetrievalSet,
+    gallery: EncodedRetrievalSet,
+    class_names: Mapping[int, str],
+    *,
+    precision_at_k: Sequence[int],
+) -> tuple[tuple[str, ...], list[list[Any]]]:
+    ks = tuple(sorted(set(precision_at_k)))
+    if not ks or any(k <= 0 for k in ks):
+        raise ValueError(f"precision_at_k must contain positive values, got {ks}")
+
+    columns = (
+        "mode",
+        "class_label",
+        "class_name",
+        "num_queries",
+        "mAP",
+        *(f"P@{k}" for k in ks),
+    )
+    rows: list[list[Any]] = []
+
+    for mode, evaluation in evaluations.items():
+        if evaluation.top_indices.shape[0] != queries.embeddings.shape[0]:
+            raise ValueError(
+                f"Evaluation {mode!r} does not match the number of queries"
+            )
+        if evaluation.top_indices.shape[1] < max(ks):
+            raise ValueError(
+                f"Evaluation {mode!r} stores fewer than {max(ks)} results per query"
+            )
+
+        top_labels = gallery.labels[evaluation.top_indices[:, : max(ks)]]
+        relevant = top_labels.eq(queries.labels[:, None])
+
+        for class_label in sorted(torch.unique(queries.labels).tolist()):
+            query_mask = queries.labels.eq(class_label)
+            num_class_queries = int(query_mask.sum().item())
+            class_ap = (
+                evaluation.average_precision_per_query[query_mask]
+                .double()
+                .mean()
+                .item()
+            )
+            class_precision = [
+                relevant[query_mask, :k].float().mean().item() for k in ks
+            ]
+
+            rows.append(
+                [
+                    mode,
+                    class_label,
+                    class_names.get(class_label, f"class_{class_label}"),
+                    num_class_queries,
+                    class_ap,
+                    *class_precision,
+                ]
+            )
+
+    return columns, rows

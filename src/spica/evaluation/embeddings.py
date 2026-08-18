@@ -1,11 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 
-from ..models.clip import FrozenClipImageEncoder
+from ..models.clip import FrozenClipEncoder
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,6 +13,7 @@ class EncodedRetrievalSet:
     embeddings: Tensor
     labels: Tensor
     paths: tuple[str, ...]
+    metadata: dict[str, str | int | float | None] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.embeddings.ndim != 2:
@@ -36,7 +37,7 @@ class EncodedRetrievalSet:
 
 @torch.inference_mode()
 def encode_retrieval_loader(
-    encoder: FrozenClipImageEncoder,
+    encoder: FrozenClipEncoder,
     loader: DataLoader,
 ) -> EncodedRetrievalSet:
     """Encode every image from a retrieval loader and keep results on the CPU."""
@@ -69,9 +70,47 @@ def encode_retrieval_loader(
     )
 
 
+def load_encoded_retrieval_set(input_path: Path) -> EncodedRetrievalSet:
+    if not input_path.is_file():
+        raise FileNotFoundError(f"Encoded retrieval set not found: {input_path}")
+
+    payload = torch.load(
+        input_path,
+        map_location="cpu",
+        weights_only=True,
+    )
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid encoded retrieval payload in {input_path}")
+
+    required_keys = {"embeddings", "labels", "paths"}
+    missing_keys = required_keys - payload.keys()
+    if missing_keys:
+        raise ValueError(f"Missing keys in {input_path}: {sorted(missing_keys)}")
+
+    embeddings = payload["embeddings"]
+    labels = payload["labels"]
+    paths = payload["paths"]
+    metadata = payload.get("metadata", {})
+    if not isinstance(embeddings, Tensor) or not isinstance(labels, Tensor):
+        raise TypeError(f"Embeddings and labels in {input_path} must be tensors")
+    if not isinstance(paths, (list, tuple)):
+        raise TypeError(f"Paths in {input_path} must be a list or tuple")
+    if not isinstance(metadata, dict):
+        raise TypeError(f"Metadata in {input_path} must be a dictionary")
+
+    return EncodedRetrievalSet(
+        embeddings=embeddings.float(),
+        labels=labels.long(),
+        paths=tuple(str(path) for path in paths),
+        metadata=dict(metadata),
+    )
+
+
 def save_encoded_retrieval_set(
     encoded_set: EncodedRetrievalSet,
     output_path: Path,
+    *,
+    metadata: dict[str, str | int | float | None] | None = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
@@ -79,6 +118,9 @@ def save_encoded_retrieval_set(
             "embeddings": encoded_set.embeddings,
             "labels": encoded_set.labels,
             "paths": encoded_set.paths,
+            "metadata": dict(
+                metadata if metadata is not None else encoded_set.metadata
+            ),
         },
         output_path,
     )
