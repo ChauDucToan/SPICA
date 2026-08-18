@@ -19,7 +19,7 @@ def build_parser() -> ArgumentParser:
     )
     parser.add_argument(
         "--model-name",
-        default="ViT-B-32",
+        default="ViT-B-32-quickgelu",
         help="OpenCLIP model architecture name.",
     )
     parser.add_argument(

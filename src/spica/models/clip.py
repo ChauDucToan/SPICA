@@ -59,7 +59,8 @@ class FrozenClipImageBundle:
 
 def load_frozen_clip_image_encoder(
     *,
-    model_name: str = "ViT-B-32",
+    # OpenAI ViT-B/32 was pretrained with QuickGELU, not standard GELU.
+    model_name: str = "ViT-B-32-quickgelu",
     pretrained: str | None = "openai",
     device: str | torch.device = "cpu",
     cache_dir: Path | None = None,
