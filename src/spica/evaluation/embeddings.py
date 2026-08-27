@@ -40,7 +40,6 @@ def encode_retrieval_loader(
     encoder: FrozenClipEncoder,
     loader: DataLoader,
 ) -> EncodedRetrievalSet:
-    """Encode every image from a retrieval loader and keep results on the CPU."""
     encoder.eval()
 
     embedding_batches: list[Tensor] = []
@@ -80,7 +79,7 @@ def load_encoded_retrieval_set(input_path: Path) -> EncodedRetrievalSet:
         weights_only=True,
     )
     if not isinstance(payload, dict):
-        raise ValueError(f"Invalid encoded retrieval payload in {input_path}")
+        raise TypeError(f"Invalid encoded retrieval payload in {input_path}")
 
     required_keys = {"embeddings", "labels", "paths"}
     missing_keys = required_keys - payload.keys()

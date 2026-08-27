@@ -1,3 +1,4 @@
+import math
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
@@ -10,8 +11,10 @@ from .evaluation.embeddings import (
     load_encoded_retrieval_set,
 )
 from .evaluation.fusion import (
+    build_soft_query_fusion,
     build_text_conditioned_queries,
     classify_sketches_with_text_bank,
+    soft_post_sketches_with_text_bank,
 )
 from .evaluation.metrics import (
     CategoryRetrievalEvaluation,
@@ -37,6 +40,13 @@ def build_parser() -> ArgumentParser:
         "--prompt-template",
         default="a photo of a {}",
         help="Python format string with one positional class-name placeholder.",
+    )
+    parser.add_argument(
+        "--posterior-temperatures",
+        type=float,
+        nargs="+",
+        default=(0.005, 0.01, 0.02, 0.05, 0.1),
+        help="Soft-posterior temperatures to sweep.",
     )
     parser.add_argument(
         "--fusion-alphas",
@@ -186,12 +196,23 @@ def main(argv: list[str] | None = None) -> None:
     alphas = tuple(sorted(set(args.fusion_alphas) | {0.0, 1.0}))
     if any(not 0.0 <= alpha <= 1.0 for alpha in alphas):
         raise ValueError(f"All fusion alphas must be between 0 and 1: {alphas}")
+
+    temperatures = tuple(sorted(set(args.posterior_temperatures)))
+    if any(
+        not math.isfinite(temperature) or temperature <= 0
+        for temperature in temperatures
+    ):
+        raise ValueError(
+            "All posterior temperatures must be finite and greater "
+            f"than 0: {temperatures}"
+        )
     ks = tuple(sorted(set(args.precision_at_k)))
     stored_top_k = max(ks)
 
     if args.split == "test":
         print(
-            "Warning: alpha selection on the test split is exploratory only. "
+            "Warning: alpha and temperature selection on the test split "
+            "is exploratory only. "
             "Choose final hyperparameters on a held-out seen-class split."
         )
 
@@ -204,6 +225,7 @@ def main(argv: list[str] | None = None) -> None:
         "device": str(device),
         "prompt_template": args.prompt_template,
         "fusion_alphas": list(alphas),
+        "posterior_temperatures": list(temperatures),
         "precision_at_k": list(ks),
         "query_chunk_size": args.query_chunk_size,
         "seed": args.seed,
@@ -325,6 +347,108 @@ def main(argv: list[str] | None = None) -> None:
 
         if oracle_text_only is None or predicted_text_only is None:
             raise RuntimeError("The forced alpha=1.0 text-only evaluation was not run")
+
+        best_soft_evaluation: CategoryRetrievalEvaluation | None = None
+        best_soft_temperature: float | None = None
+        best_soft_alpha: float | None = None
+        best_soft_mean_entropy: float | None = None
+        best_soft_mean_expected_text_norm: float | None = None
+
+        for temperature in temperatures:
+            soft_result = soft_post_sketches_with_text_bank(
+                sketches,
+                text_bank,
+                temperature=temperature,
+            )
+
+            posterior_row_sum_error = (
+                (soft_result.posterior.sum(dim=-1) - 1.0).abs().max().item()
+            )
+
+            if posterior_row_sum_error > 1e-5:
+                raise RuntimeError(
+                    "Soft-posterior rows do not sum to one; "
+                    f"temperature={temperature}, "
+                    f"max_error={posterior_row_sum_error}"
+                )
+
+            mean_entropy = soft_result.normalized_entropy.double().mean().item()
+            mean_expected_text_norm = (
+                soft_result.expected_text_embeddings.norm(dim=-1).double().mean().item()
+            )
+
+            print(
+                f"Soft posterior: temperature={temperature:.6f}, "
+                f"mean_entropy={mean_entropy:.6f}, "
+                f"mean_expected_text_norm="
+                f"{mean_expected_text_norm:.6f}, "
+                f"max_row_sum_error="
+                f"{posterior_row_sum_error:.3e}"
+            )
+
+            for alpha in alphas:
+                if alpha == 0.0:
+                    continue
+
+                print(
+                    "Evaluating soft posterior fusion: "
+                    f"temperature={temperature:.6f}, "
+                    f"alpha={alpha:.2f}..."
+                )
+
+                soft_queries = build_soft_query_fusion(
+                    sketches,
+                    soft_result.expected_text_embeddings,
+                    alpha=alpha,
+                )
+
+                soft_evaluation = evaluate_category_retrieval(
+                    soft_queries,
+                    photos,
+                    precision_at_k=ks,
+                    query_chunk_size=args.query_chunk_size,
+                    top_k=stored_top_k,
+                    device=device,
+                )
+
+                if (
+                    best_soft_evaluation is None
+                    or soft_evaluation.metrics.mean_average_precision
+                    > best_soft_evaluation.metrics.mean_average_precision
+                ):
+                    best_soft_evaluation = soft_evaluation
+                    best_soft_temperature = temperature
+                    best_soft_alpha = alpha
+                    best_soft_mean_entropy = mean_entropy
+                    best_soft_mean_expected_text_norm = mean_expected_text_norm
+
+                print(
+                    "Soft posterior result: "
+                    f"temperature={temperature:.6f}, "
+                    f"alpha={alpha:.2f}, "
+                    "mAP="
+                    f"{soft_evaluation.metrics.mean_average_precision:.6f}"
+                )
+
+        if (
+            best_soft_evaluation is None
+            or best_soft_temperature is None
+            or best_soft_alpha is None
+            or best_soft_mean_entropy is None
+            or best_soft_mean_expected_text_norm is None
+        ):
+            raise RuntimeError("No soft-posterior fusion configuration was evaluated")
+
+        print(
+            "Best soft posterior fusion: "
+            f"temperature={best_soft_temperature:.6f}, "
+            f"alpha={best_soft_alpha:.2f}, "
+            "mAP="
+            f"{best_soft_evaluation.metrics.mean_average_precision:.6f}, "
+            f"mean_entropy={best_soft_mean_entropy:.6f}, "
+            "mean_expected_text_norm="
+            f"{best_soft_mean_expected_text_norm:.6f}"
+        )
 
         experiment.log_metrics(
             {
