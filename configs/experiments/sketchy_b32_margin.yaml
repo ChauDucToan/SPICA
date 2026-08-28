@@ -1,0 +1,20 @@
+# @package _global_
+
+experiment_name: sketchy_b32_margin
+
+data_config: configs/data/sketchy_104_21.yaml
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+split: test
+
+posterior_temperatures:
+  - 0.001
+
+fusion_alphas:
+  - 0.0
+  - 1.0
+
+wandb_mode: disabled
