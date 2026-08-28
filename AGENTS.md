@@ -67,20 +67,26 @@ The existing hard, soft-posterior, and oracle text-fusion experiments are diagno
 - Soft-posterior fusion forms one deterministic mean text vector and therefore collapses distinct semantic hypotheses; it is not a mixture model.
 - On Sketchy 104/21 with frozen OpenAI CLIP ViT-B/32 QuickGELU, observed exploratory test results were: sketch-only `mAP=0.247028`, hard predicted text `mAP=0.698833`, and oracle text `mAP=0.919814`.
 - The soft-posterior sweep converged to hard argmax as temperature approached zero (`mAP=0.697817` at `temperature=0.001`, `alpha=1`). Increasing temperature reduced mAP, and every tested curve preferred `alpha=1`. Static global sketch/text averaging therefore did not improve the hard predicted-text baseline.
+- Per-query branch-complementarity diagnostic (Sketchy 104/21, same setup): text classification accuracy 0.727036. On correct-text queries (9229) sketch mAP=0.291116 vs text mAP=0.924725; on incorrect-text queries (3465) sketch mAP=0.129601 vs text mAP=0.097170. Sketch rescue rate on incorrect queries was 0.594805 with mean AP gain 0.032431. Oracle per-query routing (max of the two branch APs) reached mAP=0.714054, a maximum possible gain of 0.015221 over predicted text.
+- Score-margin bucketing (quartiles of top-1/top-2 class-score margin): text accuracy is monotone in margin (0.387/0.620/0.909/0.992 from low to high) and text mAP beats sketch mAP in every bucket (0.4076 vs 0.1421 in the lowest-margin quartile; 0.9389 vs 0.4164 in the highest). A sketch-route rule breaks even only when it isolates failed predictions at roughly 95% precision; no margin bucket reaches that, and entropy adds no new information because it is monotone in margin through softmax.
 
 These findings reject deterministic global soft averaging for the primary path. They do not reject conditional Mo-vMF: averaging class text embeddings produces one direction, whereas Mo-vMF retains separate photo-space components and scores them with mixture likelihood. Do not conflate uncertainty over class names with one-to-many variation among valid photos.
 
 ### Agreement Gate status
 
-Agreement gating is not currently a primary contribution. Reconsider it only after a per-query branch-complementarity diagnostic shows that sketch evidence can rescue queries for which text-based routing fails.
+Agreement Gate between the sketch-only branch and the predicted-text branch is **rejected** based on the diagnostics above. Complementarity is real but too small and too diluted: the expected gain on failed predictions (+0.032 AP) is dominated by the cost of mis-routing successful ones (-0.634 AP), and the per-query oracle ceiling of +0.0152 mAP leaves no room for a practical router. Do not build a cross-attention or learned gate for this branch pair.
 
-A gate may enter the primary model only if its inference inputs are available from the sketch or from class-agnostic learned parameters. A gate that consumes the unseen text bank belongs to the separately named vocabulary-assisted protocol.
+If gating is reconsidered later, it must satisfy all of:
+
+- Its inference inputs are available from the sketch or from class-agnostic learned parameters (a gate consuming the unseen text bank belongs to the separately named vocabulary-assisted protocol).
+- A per-query diagnostic shows the intended branches are complementary in the relevant operating region, not only in aggregate.
+- The expected gain justifies the added model complexity relative to the conditional Mo-vMF head.
 
 ### Implementation order from the current state
 
 1. Preserve the existing sketch-only standard evaluation as the protocol anchor.
-2. Finish logging text-fusion diagnostics, but do not build the primary architecture around their test-time text assumptions.
-3. Measure per-query complementarity between sketch-only and predicted-text branches; keep Agreement Gate only if the diagnostic supports it.
+2. Treat the text-fusion diagnostics (soft/hard/oracle, branch complementarity, margin buckets) as closed; do not extend them unless a new signal appears.
+3. Agreement Gate is rejected; revisit only under the conditions listed above.
 4. Stabilize the training dataset, transforms, and positive/negative sampling contracts.
 5. Implement a sketch-only conditional Mo-vMF head and mixture-likelihood retrieval before adding text supervision.
 6. Add seen-class text as training-only auxiliary supervision and verify that standard inference remains sketch-only.

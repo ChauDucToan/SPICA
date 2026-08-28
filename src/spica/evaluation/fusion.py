@@ -12,6 +12,7 @@ from .text_bank import EncodedTextBank
 @dataclass(frozen=True, slots=True)
 class TextClassificationResult:
     predicted_labels: Tensor
+    class_scores: Tensor
     accuracy: float
 
 
@@ -86,6 +87,7 @@ def classify_sketches_with_text_bank(
 
     return TextClassificationResult(
         predicted_labels=predicted_labels,
+        class_scores=class_scores,
         accuracy=accuracy,
     )
 

@@ -348,6 +348,204 @@ def main(argv: list[str] | None = None) -> None:
         if oracle_text_only is None or predicted_text_only is None:
             raise RuntimeError("The forced alpha=1.0 text-only evaluation was not run")
 
+        sketch_ap = sketch_evaluation.average_precision_per_query
+        predicted_text_ap = predicted_text_only.average_precision_per_query
+
+        if (
+            sketch_ap.shape != predicted_text_ap.shape
+            or sketch_ap.shape != sketches.labels.shape
+        ):
+            raise RuntimeError(
+                "Per-query AP and query labels must have matching "
+                f"shapes, got sketch AP {tuple(sketch_ap.shape)}, "
+                f"predicted-text AP {tuple(predicted_text_ap.shape)}, "
+                f"and labels {tuple(sketches.labels.shape)}"
+            )
+
+        correct_text_mask = classification.predicted_labels.eq(sketches.labels)
+        incorrect_text_mask = ~correct_text_mask
+
+        if not correct_text_mask.any():
+            raise RuntimeError("No correctly classified sketch queries were found")
+        if not incorrect_text_mask.any():
+            raise RuntimeError("No incorrectly classified sketch queries were found")
+
+        num_correct_text = int(correct_text_mask.sum().item())
+        num_incorrect_text = int(incorrect_text_mask.sum().item())
+
+        sketch_map_when_text_correct = (
+            sketch_ap[correct_text_mask].double().mean().item()
+        )
+        predicted_map_when_text_correct = (
+            predicted_text_ap[correct_text_mask].double().mean().item()
+        )
+
+        sketch_map_when_text_incorrect = (
+            sketch_ap[incorrect_text_mask].double().mean().item()
+        )
+        predicted_map_when_text_incorrect = (
+            predicted_text_ap[incorrect_text_mask].double().mean().item()
+        )
+
+        oracle_routed_ap = torch.maximum(
+            sketch_ap,
+            predicted_text_ap,
+        )
+        oracle_routed_map = oracle_routed_ap.double().mean().item()
+
+        oracle_routing_gain = (
+            oracle_routed_map - predicted_text_only.metrics.mean_average_precision
+        )
+
+        sketch_rescues_incorrect = (
+            sketch_ap[incorrect_text_mask] > predicted_text_ap[incorrect_text_mask]
+        )
+        sketch_rescue_rate = sketch_rescues_incorrect.double().mean().item()
+
+        mean_sketch_gain_when_text_incorrect = (
+            (sketch_ap[incorrect_text_mask] - predicted_text_ap[incorrect_text_mask])
+            .double()
+            .mean()
+            .item()
+        )
+
+        print("Branch complementarity diagnostic:")
+        print(
+            f"  Correct text queries: {num_correct_text}, "
+            f"sketch mAP={sketch_map_when_text_correct:.6f}, "
+            f"text mAP={predicted_map_when_text_correct:.6f}"
+        )
+        print(
+            f"  Incorrect text queries: {num_incorrect_text}, "
+            f"sketch mAP={sketch_map_when_text_incorrect:.6f}, "
+            f"text mAP={predicted_map_when_text_incorrect:.6f}"
+        )
+        print(f"  Sketch rescue rate on incorrect queries: {sketch_rescue_rate:.6f}")
+        print(
+            f"  Mean sketch gain on incorrect queries: "
+            f"{mean_sketch_gain_when_text_incorrect:.6f}"
+        )
+        print(
+            f"  Oracle routing mAP: {oracle_routed_map:.6f}, "
+            f"gain over predicted text: "
+            f"{oracle_routing_gain:.6f}"
+        )
+
+        if classification.class_scores.ndim != 2:
+            raise RuntimeError(
+                "Class scores must have shape [N, C], got "
+                f"{tuple(classification.class_scores.shape)}"
+            )
+
+        if classification.class_scores.shape[1] < 2:
+            raise RuntimeError(
+                "At least two text classes are required to compute "
+                "the top-1/top-2 score margin"
+            )
+
+        top_two_scores = torch.topk(
+            classification.class_scores,
+            k=2,
+            dim=-1,
+        ).values
+        score_margin = top_two_scores[:, 0] - top_two_scores[:, 1]
+
+        if not torch.isfinite(score_margin).all():
+            raise RuntimeError("Score margins contain non-finite values")
+
+        sorted_margin_indices = torch.argsort(score_margin)
+        margin_buckets = torch.tensor_split(
+            sorted_margin_indices,
+            4,
+        )
+
+        margin_bucket_names = (
+            "lowest_25_percent",
+            "lower_middle_25_percent",
+            "upper_middle_25_percent",
+            "highest_25_percent",
+        )
+
+        margin_bucket_rows: list[list[int | float | str]] = []
+        total_bucket_queries = sum(bucket.numel() for bucket in margin_buckets)
+
+        for bucket_name, bucket_indices in zip(
+            margin_bucket_names,
+            margin_buckets,
+            strict=True,
+        ):
+            bucket_sketch_ap = sketch_ap[bucket_indices]
+            bucket_text_ap = predicted_text_ap[bucket_indices]
+            bucket_correct = correct_text_mask[bucket_indices]
+
+            bucket_sketch_wins = bucket_sketch_ap > bucket_text_ap
+
+            margin_bucket_rows.append(
+                [
+                    bucket_name,
+                    int(bucket_indices.numel()),
+                    score_margin[bucket_indices].double().mean().item(),
+                    score_margin[bucket_indices].double().min().item(),
+                    score_margin[bucket_indices].double().max().item(),
+                    bucket_correct.double().mean().item(),
+                    bucket_sketch_ap.double().mean().item(),
+                    bucket_text_ap.double().mean().item(),
+                    bucket_sketch_wins.double().mean().item(),
+                    (bucket_sketch_ap - bucket_text_ap).double().mean().item(),
+                ]
+            )
+        print("Score-margin bucket diagnostic:")
+        for row in margin_bucket_rows:
+            (
+                bucket_name,
+                bucket_size,
+                mean_margin,
+                min_margin,
+                max_margin,
+                text_accuracy,
+                bucket_sketch_map,
+                bucket_text_map,
+                sketch_win_rate,
+                mean_ap_difference,
+            ) = row
+
+            print(
+                f"  {bucket_name}: "
+                f"queries={bucket_size}, "
+                f"margin=[{min_margin:.6f}, {max_margin:.6f}], "
+                f"mean_margin={mean_margin:.6f}, "
+                f"text_accuracy={text_accuracy:.6f}, "
+                f"sketch_mAP={bucket_sketch_map:.6f}, "
+                f"text_mAP={bucket_text_map:.6f}, "
+                f"sketch_win_rate={sketch_win_rate:.6f}, "
+                f"mean_sketch_minus_text_AP="
+                f"{mean_ap_difference:.6f}"
+            )
+
+        experiment.log_table(
+            "score_margin_buckets",
+            columns=(
+                "bucket",
+                "num_queries",
+                "mean_margin",
+                "min_margin",
+                "max_margin",
+                "text_accuracy",
+                "sketch_map",
+                "predicted_text_map",
+                "sketch_win_rate",
+                "mean_sketch_minus_text_ap",
+            ),
+            rows=margin_bucket_rows,
+        )
+
+        if total_bucket_queries != score_margin.numel():
+            raise RuntimeError(
+                "Margin buckets do not cover every query: "
+                f"{total_bucket_queries} bucketed versus "
+                f"{score_margin.numel()} total"
+            )
+
         best_soft_evaluation: CategoryRetrievalEvaluation | None = None
         best_soft_temperature: float | None = None
         best_soft_alpha: float | None = None
