@@ -1,8 +1,9 @@
 import math
-from argparse import ArgumentParser, Namespace
 from pathlib import Path
 
+import hydra
 import torch
+from omegaconf import DictConfig
 
 from .config.data import load_data_config
 from .data.manifest import read_class_map
@@ -25,62 +26,8 @@ from .evaluation.text_bank import encode_class_text_bank
 from .models.clip import load_frozen_clip
 from .tracking.wandb import WandbExperiment
 
-
-def build_parser() -> ArgumentParser:
-    parser = ArgumentParser(
-        description="Evaluate frozen CLIP text and static fusion baselines."
-    )
-    parser.add_argument("--data-config", type=Path, required=True)
-    parser.add_argument("--embedding-dir", type=Path, required=True)
-    parser.add_argument("--split", choices=("train", "test"), default="test")
-    parser.add_argument("--model-name", default="ViT-B-32-quickgelu")
-    parser.add_argument("--pretrained", default="openai")
-    parser.add_argument("--device", default="auto")
-    parser.add_argument(
-        "--prompt-template",
-        default="a photo of a {}",
-        help="Python format string with one positional class-name placeholder.",
-    )
-    parser.add_argument(
-        "--posterior-temperatures",
-        type=float,
-        nargs="+",
-        default=(0.005, 0.01, 0.02, 0.05, 0.1),
-        help="Soft-posterior temperatures to sweep.",
-    )
-    parser.add_argument(
-        "--fusion-alphas",
-        type=float,
-        nargs="+",
-        default=tuple(index / 10 for index in range(11)),
-        help="Text weights to sweep; endpoints 0 and 1 are always included.",
-    )
-    parser.add_argument(
-        "--precision-at-k",
-        type=int,
-        nargs="+",
-        default=(1, 5, 10, 100),
-    )
-    parser.add_argument("--query-chunk-size", type=int, default=256)
-    parser.add_argument(
-        "--allow-legacy-cache",
-        action="store_true",
-        help="Allow cache files without model provenance metadata.",
-    )
-    parser.add_argument("--wandb-project", default="spica")
-    parser.add_argument("--wandb-entity")
-    parser.add_argument("--wandb-run-name")
-    parser.add_argument(
-        "--wandb-mode",
-        choices=("online", "offline", "disabled"),
-        default="disabled",
-    )
-    parser.add_argument("--seed", type=int, default=42)
-    return parser
-
-
-def parse_args(argv: list[str] | None = None) -> Namespace:
-    return build_parser().parse_args(argv)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+HYDRA_CONFIG_DIR = str(PROJECT_ROOT / "configs")
 
 
 def _resolve_device(requested_device: str) -> torch.device:
@@ -163,17 +110,24 @@ def _metric_row(
     ]
 
 
-def main(argv: list[str] | None = None) -> None:
-    args = parse_args(argv)
-    torch.manual_seed(args.seed)
+@hydra.main(
+    version_base="1.3",
+    config_path=HYDRA_CONFIG_DIR,
+    config_name="evaluate_text_fusion",
+)
+def main(args: DictConfig) -> None:
+    torch.manual_seed(int(args.seed))
+    data_config_path = Path(str(args.data_config))
+    embedding_dir = Path(str(args.embedding_dir))
 
-    device = _resolve_device(args.device)
-    config = load_data_config(args.data_config)
+    device = _resolve_device(str(args.device))
+    config = load_data_config(data_config_path)
+
     split_config = config.train if args.split == "train" else config.test
 
     class_names = read_class_map(split_config.class_map)
-    sketches = load_encoded_retrieval_set(args.embedding_dir / "sketches.pt")
-    photos = load_encoded_retrieval_set(args.embedding_dir / "photos.pt")
+    sketches = load_encoded_retrieval_set(embedding_dir / "sketches.pt")
+    photos = load_encoded_retrieval_set(embedding_dir / "photos.pt")
     _validate_cache_metadata(
         sketches,
         modality="sketch",
@@ -187,17 +141,19 @@ def main(argv: list[str] | None = None) -> None:
         photos,
         modality="photo",
         dataset_name=config.name,
-        split=args.split,
-        model_name=args.model_name,
-        pretrained=args.pretrained,
-        allow_legacy_cache=args.allow_legacy_cache,
+        split=str(args.split),
+        model_name=str(args.model_name),
+        pretrained=(None if args.pretrained is None else str(args.pretrained)),
+        allow_legacy_cache=bool(args.allow_legacy_cache),
     )
 
-    alphas = tuple(sorted(set(args.fusion_alphas) | {0.0, 1.0}))
+    alphas = tuple(sorted({float(alpha) for alpha in args.fusion_alphas} | {0.0, 1.0}))
     if any(not 0.0 <= alpha <= 1.0 for alpha in alphas):
         raise ValueError(f"All fusion alphas must be between 0 and 1: {alphas}")
 
-    temperatures = tuple(sorted(set(args.posterior_temperatures)))
+    temperatures = tuple(
+        sorted(float(temperature) for temperature in args.posterior_temperatures)
+    )
     if any(
         not math.isfinite(temperature) or temperature <= 0
         for temperature in temperatures
@@ -206,7 +162,7 @@ def main(argv: list[str] | None = None) -> None:
             "All posterior temperatures must be finite and greater "
             f"than 0: {temperatures}"
         )
-    ks = tuple(sorted(set(args.precision_at_k)))
+    ks = tuple(sorted({int(k) for k in args.precision_at_k}))
     stored_top_k = max(ks)
 
     if args.split == "test":

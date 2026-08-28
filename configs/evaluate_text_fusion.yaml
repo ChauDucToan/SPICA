@@ -1,0 +1,65 @@
+defaults:
+  - _self_
+  - optional experiments: null
+
+experiment_name: evaluate_text_fusion
+
+data_config: configs/data/sketchy_104_21.yaml
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+
+split: test
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+prompt_template: "a photo of a {}"
+
+posterior_temperatures:
+  - 0.005
+  - 0.01
+  - 0.02
+  - 0.05
+  - 0.1
+
+fusion_alphas:
+  - 0.0
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+  - 1.0
+
+precision_at_k:
+  - 1
+  - 5
+  - 10
+  - 100
+  - 200
+
+query_chunk_size: 256
+allow_legacy_cache: false
+
+wandb_project: spica
+wandb_entity: null
+wandb_run_name: null
+wandb_mode: disabled
+
+seed: 42
+
+hydra:
+  job:
+    chdir: false
+
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+
+  sweep:
+    dir: "outputs/experiments/${experiment_name}/multirun/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "${hydra.job.num}"
+
+  output_subdir: .hydra
