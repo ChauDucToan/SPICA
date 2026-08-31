@@ -11,6 +11,16 @@ from .manifest import ManifestEntry
 ImageTransform = Callable[[Image.Image], Tensor]
 
 
+def _load_rgb_image(entry: ManifestEntry) -> Image.Image:
+    try:
+        with Image.open(entry.path) as image:
+            rgb_image = image.convert("RGB")
+    except OSError as error:
+        raise OSError(f"Could not read image: {entry.path}") from error
+
+    return rgb_image
+
+
 class EvalSample(TypedDict):
     image: Tensor
     label: int
@@ -46,11 +56,7 @@ class RetrievalEvalDataset(Dataset[EvalSample]):
     def __getitem__(self, index: int) -> EvalSample:
         entry = self.entries[index]
 
-        try:
-            with Image.open(entry.path) as image:
-                rgb_image = image.convert("RGB")
-        except OSError as error:
-            raise OSError(f"Could not read image: {entry.path}") from error
+        rgb_image = _load_rgb_image(entry)
 
         return {
             "image": self.transform(rgb_image),
@@ -109,16 +115,32 @@ class RetrievalTrainDataset(Dataset[TrainSample]):
         return len(self.sketch_entries)
 
     def __getitem__(self, index: int) -> TrainSample:
-        raise NotImplementedError
+        sketch_entry = self.sketch_entries[index]
 
-    def _load_rgb_image(self, entry: ManifestEntry) -> Image.Image:
-        try:
-            with Image.open(entry.path) as image:
-                rgb_image = image.convert("RGB")
-        except OSError as error:
-            raise OSError(f"Could not read image: {entry.path}") from error
+        pos_entry = self._sample_positive(sketch_entry.label)
+        neg_entry = self._sample_negative(sketch_entry.label)
 
-        return rgb_image
+        sketch_img = _load_rgb_image(sketch_entry)
+        pos_img = _load_rgb_image(pos_entry)
+        neg_img = _load_rgb_image(neg_entry)
+
+        sketch_tensor = self.sketch_transform(sketch_img)
+        pos_tensor = self.photo_transform(pos_img)
+        neg_tensor = self.photo_transform(neg_img)
+
+        return TrainSample(
+            # Tensor
+            sketch=sketch_tensor,
+            positive_photo=pos_tensor,
+            negative_photo=neg_tensor,
+            # Label
+            label=sketch_entry.label,
+            negative_label=neg_entry.label,
+            # Path
+            sketch_path=str(sketch_entry.path),
+            positive_photo_path=str(pos_entry.path),
+            negative_photo_path=str(neg_entry.path),
+        )
 
     def _sample_positive(self, label: int) -> ManifestEntry:
         positive_photos = self._photos_by_label[label]

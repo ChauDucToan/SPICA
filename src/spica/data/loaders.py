@@ -4,7 +4,7 @@ from typing import Literal
 from torch.utils.data import DataLoader
 
 from ..config.data import DataConfig, SplitConfig
-from .datasets import ImageTransform, RetrievalEvalDataset
+from .datasets import ImageTransform, RetrievalEvalDataset, RetrievalTrainDataset
 from .manifest import read_class_map, read_manifest
 
 EvalSplit = Literal["train", "test"]
@@ -49,6 +49,21 @@ def _validate_eval_labels(
         )
 
 
+def _validate_train_labels(
+    dataset: RetrievalTrainDataset,
+    class_names: dict[int, str],
+) -> None:
+    sketch_labels = {entry.label for entry in dataset.sketch_entries}
+    photo_labels = {entry.label for entry in dataset.photo_entries}
+    known_labels = set(class_names)
+
+    unknown_labels = (sketch_labels | photo_labels) - known_labels
+    if unknown_labels:
+        raise ValueError(
+            f"Training manifest labels missing from class map: {sorted(unknown_labels)}"
+        )
+
+
 def build_retrieval_eval_loaders(
     config: DataConfig,
     transform: ImageTransform,
@@ -90,3 +105,41 @@ def build_retrieval_eval_loaders(
         photo=DataLoader(photo_dataset, **loader_options),
         class_names=class_names,
     )
+
+
+def build_retrieval_train_loader(
+    config: DataConfig,
+    sketch_transform: ImageTransform,
+    photo_transform: ImageTransform,
+    *,
+    batch_size: int = 64,
+    num_workers: int = 0,
+    pin_memory: bool = False,
+    drop_last: bool = False,
+) -> DataLoader:
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    if num_workers < 0:
+        raise ValueError(f"num_workers cannot be negative, got {num_workers}")
+
+    split_config = config.train
+    class_names = read_class_map(split_config.class_map)
+
+    dataset = RetrievalTrainDataset(
+        photo_entries=read_manifest(split_config.photo_manifest, config.root),
+        photo_transform=photo_transform,
+        sketch_entries=read_manifest(split_config.sketch_manifest, config.root),
+        sketch_transform=sketch_transform,
+    )
+
+    _validate_train_labels(dataset, class_names)
+
+    loader_options = {
+        "batch_size": batch_size,
+        "shuffle": True,
+        "num_workers": num_workers,
+        "pin_memory": pin_memory,
+        "drop_last": drop_last,
+    }
+
+    return DataLoader(dataset, **loader_options)
