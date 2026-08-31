@@ -1,0 +1,21 @@
+experiment_name: train_deterministic_smoke
+
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+embedding_dim: 512
+hidden_dim: 512
+
+batch_size: 32
+num_workers: 4
+pin_memory: true
+drop_last: false
+
+learning_rate: 0.001
+weight_decay: 0.0001
+margin: 0.2
+max_steps: 100
+log_every: 10
+seed: 42
