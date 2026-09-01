@@ -1,0 +1,69 @@
+defaults:
+  - _self_
+
+experiment_name: train_movmf_k${num_components}_stage${ablation_stage}_b32
+ablation_stage: A
+
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+embedding_dim: 512
+hidden_dim: 512
+num_components: 3
+num_positive_photos: 3
+min_concentration: 0.0001
+max_concentration: 1024.0
+initial_concentration: 64.0
+component_init_std: 0.0001
+initial_dominant_weight: null
+
+batch_size: 32
+num_workers: 4
+pin_memory: true
+drop_last: false
+
+learning_rate: 0.001
+weight_decay: 0.0001
+margin: 0.2
+nll_weight: 0.001953125  # 1 / embedding_dim
+ranking_weight: 1.0
+balance_weight: 0.0
+sharpness_weight: 0.0
+assignment_weight: 0.0
+diversity_weight: 0.0
+diversity_cosine_threshold: 0.9
+ranking_score_transform: identity
+
+gate_prior_weight: 0.0
+dominant_sketch_anchor_weight: 0.0
+dominant_photo_anchor_weight: 0.0
+semantic_consistency_weight: 0.0
+satellite_coverage_weight: 0.0
+spread_matching_weight: 0.0
+satellite_concentration_floor_weight: 0.0
+target_dominant_weight: 0.8
+consistency_temperature: 0.07
+satellite_concentration_floor: 16.0
+
+warmup_steps: 20
+gate_temperature_start: 3.0
+gate_temperature_anneal_steps: 50
+max_steps: 100
+log_every: 10
+seed: 42
+checkpoint_path: null
+
+hydra:
+  job:
+    chdir: false
+
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+
+  sweep:
+    dir: "outputs/experiments/movmf_anticollapse_ablation/multirun/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "stage${ablation_stage}"
+
+  output_subdir: .hydra

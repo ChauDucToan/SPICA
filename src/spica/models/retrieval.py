@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from math import isfinite, log
 
+import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -178,14 +179,15 @@ class MoVmfPhotoPredictor(nn.Module):
         max_concentration: float = 2048.0,
         initial_concentration: float = 512.0,
         component_init_std: float = 1e-4,
+        initial_dominant_weight: float | None = None,
     ) -> None:
         super().__init__()
         if embedding_dim <= 0:
             raise ValueError(f"embedding_dim must be positive, got {embedding_dim}")
         if hidden_dim <= 0:
             raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
-        if num_components < 2:
-            raise ValueError(f"num_components must be at least 2, got {num_components}")
+        if num_components < 1:
+            raise ValueError(f"num_components must be at least 1, got {num_components}")
         if not isfinite(min_concentration) or min_concentration < 0:
             raise ValueError(
                 "min_concentration must be finite and non-negative, "
@@ -208,6 +210,18 @@ class MoVmfPhotoPredictor(nn.Module):
                 "component_init_std must be finite and positive, "
                 f"got {component_init_std}"
             )
+        if initial_dominant_weight is not None:
+            if num_components < 2:
+                raise ValueError(
+                    "initial_dominant_weight requires at least two components"
+                )
+            if not isfinite(initial_dominant_weight) or not (
+                1.0 / num_components < initial_dominant_weight < 1.0
+            ):
+                raise ValueError(
+                    "initial_dominant_weight must be finite and strictly between "
+                    f"1 / num_components and 1, got {initial_dominant_weight}"
+                )
 
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
@@ -216,6 +230,7 @@ class MoVmfPhotoPredictor(nn.Module):
         self.max_concentration = max_concentration
         self.initial_concentration = initial_concentration
         self.component_init_std = component_init_std
+        self.initial_dominant_weight = initial_dominant_weight
 
         direction_output = nn.Linear(
             hidden_dim,
@@ -246,7 +261,17 @@ class MoVmfPhotoPredictor(nn.Module):
 
         mixture_output = nn.Linear(hidden_dim, num_components)
         nn.init.zeros_(mixture_output.weight)
-        nn.init.zeros_(mixture_output.bias)
+        if initial_dominant_weight is None:
+            nn.init.zeros_(mixture_output.bias)
+        else:
+            satellite_weight = (1.0 - initial_dominant_weight) / (num_components - 1)
+            initial_weights = mixture_output.bias.new_full(
+                (num_components,),
+                satellite_weight,
+            )
+            initial_weights[0] = initial_dominant_weight
+            with torch.no_grad():
+                mixture_output.bias.copy_(initial_weights.log())
         self.mixture_head = nn.Sequential(
             nn.LayerNorm(embedding_dim),
             nn.Linear(embedding_dim, hidden_dim),

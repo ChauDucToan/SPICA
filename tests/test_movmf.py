@@ -182,5 +182,5 @@ def test_movmf_loss_trains_all_parameter_heads() -> None:
 
 
 def test_movmf_predictor_validates_component_count() -> None:
-    with pytest.raises(ValueError, match="at least 2"):
-        MoVmfPhotoPredictor(num_components=1)
+    with pytest.raises(ValueError, match="at least 1"):
+        MoVmfPhotoPredictor(num_components=0)

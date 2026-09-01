@@ -1,0 +1,23 @@
+# @package _global_
+
+experiment_name: train_movmf_k1_m3_control_b32
+ablation_stage: A
+
+num_components: 1
+num_positive_photos: 3
+min_concentration: 0.0001
+max_concentration: 1024.0
+initial_concentration: 64.0
+initial_dominant_weight: null
+
+balance_weight: 0.0
+sharpness_weight: 0.0
+assignment_weight: 0.0
+diversity_weight: 0.0
+ranking_score_transform: identity
+
+warmup_steps: 20
+gate_temperature_start: 3.0
+gate_temperature_anneal_steps: 50
+max_steps: 100
+seed: 42

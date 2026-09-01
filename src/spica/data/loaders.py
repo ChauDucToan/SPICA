@@ -4,7 +4,12 @@ from typing import Literal
 from torch.utils.data import DataLoader
 
 from ..config.data import DataConfig, SplitConfig
-from .datasets import ImageTransform, RetrievalEvalDataset, RetrievalTrainDataset
+from .datasets import (
+    ImageTransform,
+    MultiPositiveRetrievalTrainDataset,
+    RetrievalEvalDataset,
+    RetrievalTrainDataset,
+)
 from .manifest import read_class_map, read_manifest
 
 EvalSplit = Literal["train", "test"]
@@ -143,3 +148,43 @@ def build_retrieval_train_loader(
     }
 
     return DataLoader(dataset, **loader_options)
+
+
+def build_multi_positive_retrieval_train_loader(
+    config: DataConfig,
+    sketch_transform: ImageTransform,
+    photo_transform: ImageTransform,
+    *,
+    num_positive_photos: int,
+    batch_size: int = 64,
+    num_workers: int = 0,
+    pin_memory: bool = False,
+    drop_last: bool = False,
+) -> DataLoader:
+    if num_positive_photos <= 0:
+        raise ValueError(
+            f"num_positive_photos must be positive, got {num_positive_photos}"
+        )
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+    if num_workers < 0:
+        raise ValueError(f"num_workers cannot be negative, got {num_workers}")
+
+    split_config = config.train
+    class_names = read_class_map(split_config.class_map)
+    dataset = MultiPositiveRetrievalTrainDataset(
+        photo_entries=read_manifest(split_config.photo_manifest, config.root),
+        photo_transform=photo_transform,
+        sketch_entries=read_manifest(split_config.sketch_manifest, config.root),
+        sketch_transform=sketch_transform,
+        num_positive_photos=num_positive_photos,
+    )
+    _validate_train_labels(dataset, class_names)
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=drop_last,
+    )

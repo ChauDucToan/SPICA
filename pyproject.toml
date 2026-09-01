@@ -40,6 +40,7 @@ spica-eval-movmf = "spica.evaluate_movmf:main"
 spica-train-deterministic = "spica.train_deterministic:main"
 spica-train-vmf = "spica.train_vmf:main"
 spica-train-movmf = "spica.train_movmf:main"
+spica-train-movmf-ablation = "spica.train_movmf_ablation:main"
 
 [build-system]
 requires = ["uv_build"]

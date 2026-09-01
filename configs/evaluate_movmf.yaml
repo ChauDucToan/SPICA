@@ -12,6 +12,7 @@ dataset_name: sketchy_104_21
 model_name: ViT-B-32-quickgelu
 pretrained: openai
 device: auto
+scoring_rule: density
 
 prediction_batch_size: 512
 query_chunk_size: 64

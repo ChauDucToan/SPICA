@@ -37,6 +37,10 @@ from .models.vmf import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HYDRA_CONFIG_DIR = str(PROJECT_ROOT / "configs")
 OBJECTIVE_NAME = "positive_mixture_vmf_nll_plus_normalized_density_ranking"
+SUPPORTED_OBJECTIVES = {
+    OBJECTIVE_NAME,
+    "multi_positive_mixture_vmf_anticollapse",
+}
 
 
 def _load_predictor(
@@ -84,13 +88,20 @@ def _load_predictor(
     if not isinstance(metadata, dict):
         raise TypeError("Checkpoint metadata must be a dictionary")
 
+    objective = metadata.get("objective")
+    if objective not in SUPPORTED_OBJECTIVES:
+        raise ValueError(f"Unsupported Mo-vMF objective: {objective!r}")
+    positives_per_anchor = metadata.get("positives_per_anchor_per_step")
+    if not isinstance(positives_per_anchor, int) or positives_per_anchor <= 0:
+        raise ValueError(
+            "Checkpoint positives_per_anchor_per_step must be a positive integer"
+        )
+
     expected_metadata = {
         "frozen_clip": True,
         "num_components": expected_num_components,
-        "objective": OBJECTIVE_NAME,
         "log_normalizer": LOG_NORMALIZER_VERSION,
         "score_normalization": SCORE_NORMALIZATION_VERSION,
-        "positives_per_anchor_per_step": 1,
     }
     mismatches = {
         key: (metadata.get(key), expected)
@@ -111,6 +122,11 @@ def _load_predictor(
             max_concentration=float(model_config["max_concentration"]),
             initial_concentration=float(model_config["initial_concentration"]),
             component_init_std=float(model_config["component_init_std"]),
+            initial_dominant_weight=(
+                None
+                if model_config.get("initial_dominant_weight") is None
+                else float(model_config["initial_dominant_weight"])
+            ),
         )
     except KeyError as error:
         raise ValueError(
@@ -169,10 +185,10 @@ def _predict_parameters(
     if not torch.isfinite(prediction.mixture_logits).all().item():
         raise FloatingPointError("Predictor returned non-finite mixture logits")
     if (
-        torch.any(prediction.concentrations <= predictor.min_concentration).item()
-        or torch.any(prediction.concentrations >= predictor.max_concentration).item()
+        torch.any(prediction.concentrations < predictor.min_concentration).item()
+        or torch.any(prediction.concentrations > predictor.max_concentration).item()
     ):
-        raise RuntimeError("Predicted concentration reached a configured bound")
+        raise RuntimeError("Predicted concentration escaped a configured bound")
 
     norms = prediction.mean_directions.norm(dim=-1)
     if not torch.allclose(
@@ -318,15 +334,32 @@ def _component_statistics(
     weighted_concentration = (probabilities * prediction.concentrations).sum(dim=-1)
     num_components = probabilities.shape[1]
 
-    upper_triangle = torch.triu(
-        torch.ones(num_components, num_components, dtype=torch.bool),
-        diagonal=1,
-    )
-    pairwise_cosines = torch.einsum(
-        "bkd,bjd->bkj",
-        prediction.mean_directions,
-        prediction.mean_directions,
-    )[:, upper_triangle]
+    if num_components > 1:
+        upper_triangle = torch.triu(
+            torch.ones(num_components, num_components, dtype=torch.bool),
+            diagonal=1,
+        )
+        pairwise_cosines = torch.einsum(
+            "bkd,bjd->bkj",
+            prediction.mean_directions,
+            prediction.mean_directions,
+        )[:, upper_triangle]
+        mean_pairwise_cosine = pairwise_cosines.double().mean().item()
+        min_pairwise_cosine = pairwise_cosines.min().item()
+        p05_pairwise_cosine = torch.quantile(pairwise_cosines, 0.05).item()
+        normalized_mean_entropy = entropy.double().mean().item() / math.log(
+            num_components
+        )
+        entropy_ap_correlation: float | None = _pearson_correlation(
+            _average_ranks(entropy),
+            _average_ranks(average_precision_per_query.float()),
+        )
+    else:
+        mean_pairwise_cosine = 1.0
+        min_pairwise_cosine = 1.0
+        p05_pairwise_cosine = 1.0
+        normalized_mean_entropy = 0.0
+        entropy_ap_correlation = None
     hard_assignments = probabilities.argmax(dim=-1)
     hard_fractions = (
         torch.bincount(
@@ -337,7 +370,6 @@ def _component_statistics(
     )
     query_ap = average_precision_per_query.float()
 
-    entropy_ranks = _average_ranks(entropy)
     weighted_kappa_ranks = _average_ranks(weighted_concentration)
     ap_ranks = _average_ranks(query_ap)
     return {
@@ -352,27 +384,19 @@ def _component_statistics(
         ),
         "hard_prior_assignment_fractions": hard_fractions.tolist(),
         "mean_prior_entropy": entropy.double().mean().item(),
-        "normalized_mean_prior_entropy": (
-            entropy.double().mean().item() / math.log(num_components)
-        ),
+        "normalized_mean_prior_entropy": normalized_mean_entropy,
         "mean_effective_components": effective_components.double().mean().item(),
         "mean_max_component_weight": (
             probabilities.max(dim=-1).values.double().mean().item()
         ),
-        "mean_pairwise_direction_cosine": pairwise_cosines.double().mean().item(),
-        "min_pairwise_direction_cosine": pairwise_cosines.min().item(),
-        "p05_pairwise_direction_cosine": torch.quantile(
-            pairwise_cosines,
-            0.05,
-        ).item(),
+        "mean_pairwise_direction_cosine": mean_pairwise_cosine,
+        "min_pairwise_direction_cosine": min_pairwise_cosine,
+        "p05_pairwise_direction_cosine": p05_pairwise_cosine,
         "spearman_weighted_kappa_average_precision": _pearson_correlation(
             weighted_kappa_ranks,
             ap_ranks,
         ),
-        "spearman_prior_entropy_average_precision": _pearson_correlation(
-            entropy_ranks,
-            ap_ranks,
-        ),
+        "spearman_prior_entropy_average_precision": entropy_ap_correlation,
     }
 
 
@@ -395,7 +419,10 @@ def _positive_responsibility_statistics(
     entropy_sum = 0.0
     effective_components_sum = 0.0
     max_responsibility_sum = 0.0
+    query_usage_effective_components_sum = 0.0
+    query_max_component_usage_sum = 0.0
     pair_count = 0
+    query_count = 0
 
     unique_labels = torch.unique(query_labels)
     for label in unique_labels:
@@ -432,6 +459,11 @@ def _positive_responsibility_statistics(
                 dim=1
             )
             hard = responsibilities.argmax(dim=1)
+            mean_query_responsibilities = responsibilities.mean(dim=2)
+            query_usage_entropy = -(
+                mean_query_responsibilities
+                * mean_query_responsibilities.clamp_min(1e-12).log()
+            ).sum(dim=1)
 
             responsibility_sums += responsibilities.sum(dim=(0, 2)).double().cpu()
             hard_counts += (
@@ -447,9 +479,16 @@ def _positive_responsibility_statistics(
             max_responsibility_sum += (
                 responsibilities.max(dim=1).values.double().sum().item()
             )
+            query_usage_effective_components_sum += (
+                query_usage_entropy.exp().double().sum().item()
+            )
+            query_max_component_usage_sum += (
+                mean_query_responsibilities.max(dim=1).values.double().sum().item()
+            )
             pair_count += entropy.numel()
+            query_count += mean_query_responsibilities.shape[0]
 
-    if pair_count == 0:
+    if pair_count == 0 or query_count == 0:
         raise ValueError("No positive query-gallery pairs were available")
     return {
         "uses_ground_truth_test_labels": True,
@@ -459,9 +498,15 @@ def _positive_responsibility_statistics(
         "mean_entropy": entropy_sum / pair_count,
         "normalized_mean_entropy": (
             entropy_sum / pair_count / math.log(num_components)
+            if num_components > 1
+            else 0.0
         ),
         "mean_effective_components": effective_components_sum / pair_count,
         "mean_max_responsibility": max_responsibility_sum / pair_count,
+        "mean_query_usage_effective_components": (
+            query_usage_effective_components_sum / query_count
+        ),
+        "mean_query_max_component_usage": (query_max_component_usage_sum / query_count),
     }
 
 
@@ -499,11 +544,16 @@ def main(args: DictConfig) -> None:
     data_config_path = _resolve_project_path(str(args.data_config))
     pretrained = None if args.pretrained is None else str(args.pretrained)
     num_components = int(args.num_components)
+    scoring_rule = str(args.scoring_rule)
     ks = tuple(sorted({int(k) for k in args.precision_at_k}))
-    if num_components < 2:
-        raise ValueError(f"num_components must be at least 2, got {num_components}")
+    if num_components < 1:
+        raise ValueError(f"num_components must be at least 1, got {num_components}")
     if not ks or any(k <= 0 for k in ks):
         raise ValueError(f"precision_at_k must contain positive integers, got {ks}")
+    if scoring_rule not in {"density", "semantic_barycenter", "dominant"}:
+        raise ValueError(
+            "scoring_rule must be density, semantic_barycenter, or dominant"
+        )
 
     print(
         "Warning: this unseen-test evaluation is diagnostic only; do not select "
@@ -556,15 +606,42 @@ def main(args: DictConfig) -> None:
         top_k=max(ks),
         device=device,
     )
-    movmf_evaluation = _evaluate_movmf_retrieval(
-        prediction,
-        sketches.labels,
-        photos,
-        precision_at_k=ks,
-        query_chunk_size=int(args.query_chunk_size),
-        top_k=max(ks),
-        device=device,
-    )
+    if scoring_rule == "density":
+        movmf_evaluation = _evaluate_movmf_retrieval(
+            prediction,
+            sketches.labels,
+            photos,
+            precision_at_k=ks,
+            query_chunk_size=int(args.query_chunk_size),
+            top_k=max(ks),
+            device=device,
+        )
+        ranking_semantics = "normalized_score_preserves_mixture_density_order"
+    else:
+        if scoring_rule == "semantic_barycenter":
+            probabilities = prediction.mixture_logits.softmax(dim=-1)
+            query_embeddings = F.normalize(
+                (probabilities[:, :, None] * prediction.mean_directions).sum(dim=1),
+                dim=-1,
+            )
+            ranking_semantics = "cosine_of_gate_weighted_semantic_barycenter"
+        else:
+            query_embeddings = prediction.mean_directions[:, 0]
+            ranking_semantics = "cosine_of_fixed_dominant_component"
+        scoring_queries = EncodedRetrievalSet(
+            embeddings=query_embeddings,
+            labels=sketches.labels,
+            paths=sketches.paths,
+            metadata={**sketches.metadata, "representation": scoring_rule},
+        )
+        movmf_evaluation = evaluate_category_retrieval(
+            scoring_queries,
+            photos,
+            precision_at_k=ks,
+            query_chunk_size=int(args.baseline_query_chunk_size),
+            top_k=max(ks),
+            device=device,
+        )
     component_stats = _component_statistics(
         prediction,
         movmf_evaluation.average_precision_per_query,
@@ -581,6 +658,7 @@ def main(args: DictConfig) -> None:
 
     baseline = baseline_evaluation.metrics
     movmf = movmf_evaluation.metrics
+    print(f"Scoring rule: {scoring_rule} ({ranking_semantics})")
     _print_comparison(baseline, movmf, ks, num_components=num_components)
     concentration = component_stats["concentration"]
     assert isinstance(concentration, dict)
@@ -592,7 +670,9 @@ def main(args: DictConfig) -> None:
     )
     print(
         "positive responsibilities (label-based diagnostic): "
-        f"effective_K={responsibility_stats['mean_effective_components']:.3f}, "
+        f"pair_effective_K={responsibility_stats['mean_effective_components']:.3f}, "
+        f"query_usage_K="
+        f"{responsibility_stats['mean_query_usage_effective_components']:.3f}, "
         f"max={responsibility_stats['mean_max_responsibility']:.3f}"
     )
     print(
@@ -610,9 +690,11 @@ def main(args: DictConfig) -> None:
                 "uses_test_labels_for_scoring": False,
                 "model": "mo_vmf",
                 "num_components": num_components,
-                "ranking_semantics": "normalized_score_preserves_mixture_density_order",
+                "scoring_rule": scoring_rule,
+                "ranking_semantics": ranking_semantics,
                 "checkpoint": str(checkpoint_path),
                 "checkpoint_step": int(checkpoint["step"]),
+                "training_metadata": checkpoint["metadata"],
                 "sketch_only": _metrics_dict(baseline),
                 "mo_vmf": _metrics_dict(movmf),
                 "delta_mAP": movmf.mean_average_precision

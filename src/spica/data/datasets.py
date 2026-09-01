@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import TypedDict
 
 from PIL import Image
+import torch
 from torch import Tensor
 from torch.utils.data import Dataset
 
@@ -35,6 +36,17 @@ class TrainSample(TypedDict):
     negative_label: int
     sketch_path: str
     positive_photo_path: str
+    negative_photo_path: str
+
+
+class MultiPositiveTrainSample(TypedDict):
+    sketch: Tensor  # [3, H, W]
+    positive_photos: Tensor  # [num_positives, 3, H, W]
+    negative_photo: Tensor  # [3, H, W]
+    label: int
+    negative_label: int
+    sketch_path: str
+    positive_photo_paths: tuple[str, ...]
     negative_photo_path: str
 
 
@@ -150,3 +162,59 @@ class RetrievalTrainDataset(Dataset[TrainSample]):
         negative_labels = self._negative_labels_by_label[label]
         negative_label = random.choice(negative_labels)
         return random.choice(self._photos_by_label[negative_label])
+
+
+class MultiPositiveRetrievalTrainDataset(RetrievalTrainDataset):
+    def __init__(
+        self,
+        sketch_entries: Sequence[ManifestEntry],
+        photo_entries: Sequence[ManifestEntry],
+        sketch_transform: ImageTransform,
+        photo_transform: ImageTransform,
+        *,
+        num_positive_photos: int,
+    ) -> None:
+        if num_positive_photos <= 0:
+            raise ValueError(
+                f"num_positive_photos must be positive, got {num_positive_photos}"
+            )
+        super().__init__(
+            sketch_entries=sketch_entries,
+            photo_entries=photo_entries,
+            sketch_transform=sketch_transform,
+            photo_transform=photo_transform,
+        )
+        self.num_positive_photos = num_positive_photos
+
+    def __getitem__(self, index: int) -> MultiPositiveTrainSample:
+        sketch_entry = self.sketch_entries[index]
+        positive_entries = self._sample_positives(sketch_entry.label)
+        negative_entry = self._sample_negative(sketch_entry.label)
+
+        sketch_tensor = self.sketch_transform(_load_rgb_image(sketch_entry))
+        positive_tensors = torch.stack(
+            [
+                self.photo_transform(_load_rgb_image(entry))
+                for entry in positive_entries
+            ],
+            dim=0,
+        )
+        negative_tensor = self.photo_transform(_load_rgb_image(negative_entry))
+        return MultiPositiveTrainSample(
+            sketch=sketch_tensor,
+            positive_photos=positive_tensors,
+            negative_photo=negative_tensor,
+            label=sketch_entry.label,
+            negative_label=negative_entry.label,
+            sketch_path=str(sketch_entry.path),
+            positive_photo_paths=tuple(str(entry.path) for entry in positive_entries),
+            negative_photo_path=str(negative_entry.path),
+        )
+
+    def _sample_positives(self, label: int) -> tuple[ManifestEntry, ...]:
+        positive_photos = self._photos_by_label[label]
+        if len(positive_photos) >= self.num_positive_photos:
+            return tuple(random.sample(positive_photos, self.num_positive_photos))
+        return tuple(
+            random.choice(positive_photos) for _ in range(self.num_positive_photos)
+        )
