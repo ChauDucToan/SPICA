@@ -1,0 +1,9 @@
+# @package _global_
+experiment_name: jepa_j6_partial_m3_sigreg
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+num_positive_photos: 3
+lambda_cls: 0.1
+regularizer: sigreg
+lambda_regularizer: 0.1
+train_class_scope: pseudo_train

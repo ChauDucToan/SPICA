@@ -1,0 +1,9 @@
+# @package _global_
+experiment_name: jepa_j3_partial_m3
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+num_positive_photos: 3
+lambda_cls: 0.0
+regularizer: none
+lambda_regularizer: 0.0
+train_class_scope: pseudo_train

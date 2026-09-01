@@ -38,6 +38,7 @@ spica-eval-deterministic-k3 = "spica.evaluate_deterministic_k3:main"
 spica-eval-text-fusion = "spica.evaluate_text_fusion:main"
 spica-eval-vmf = "spica.evaluate_vmf:main"
 spica-eval-movmf = "spica.evaluate_movmf:main"
+spica-eval-jepa = "spica.evaluate_jepa:main"
 spica-train-deterministic = "spica.train_deterministic:main"
 spica-train-deterministic-k3 = "spica.train_deterministic_k3:main"
 spica-train-vmf = "spica.train_vmf:main"
@@ -46,6 +47,7 @@ spica-train-movmf-ablation = "spica.train_movmf_ablation:main"
 spica-train-stageE-no-vmf = "spica.train_stageE_no_vmf:main"
 spica-train-stageE-angular = "spica.train_stageE_angular:main"
 spica-train-stageE-k1 = "spica.train_stageE_k1:main"
+spica-train-jepa = "spica.train_jepa:main"
 
 [build-system]
 requires = ["uv_build"]

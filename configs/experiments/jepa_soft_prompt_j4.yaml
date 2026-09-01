@@ -1,0 +1,12 @@
+# @package _global_
+experiment_name: jepa_soft_prompt_j4
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+num_positive_photos: 3
+lambda_cls: 0.1
+regularizer: none
+lambda_regularizer: 0.0
+soft_prompt: true
+soft_prompt_length: 4
+soft_prompt_learning_rate: 0.001
+train_class_scope: pseudo_train

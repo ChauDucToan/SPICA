@@ -1,0 +1,86 @@
+defaults:
+  - _self_
+
+experiment_name: train_jepa_${encoder_mode}_m${num_positive_photos}_${regularizer}
+model_family: cross_modal_jepa
+
+data_config: configs/data/sketchy_104_21.yaml
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+encoder_mode: partial
+# J-Partial default: the final four ViT blocks plus ln_post/projection.
+encoder_unfreeze_depth: 4
+embedding_dim: 512
+hidden_dim: 512
+
+num_positive_photos: 1
+photo_target: normalized_mean
+batch_size: 32
+num_workers: 4
+pin_memory: true
+drop_last: true
+
+auto_resume: false
+# Predictor and CLIP-context learning rates are separated so fine-tuning does
+# not erase the pretrained sketch/photo geometry in the first few updates.
+learning_rate: 0.001
+encoder_learning_rate: 0.00001
+weight_decay: 0.0001
+margin: 0.2
+lambda_pred: 1.0
+lambda_rank: 1.0
+lambda_cls: 0.0
+regularizer: none
+lambda_regularizer: 0.0
+vicreg_variance_weight: 1.0
+vicreg_covariance_weight: 0.04
+vicreg_target_std: 1.0
+sigreg_num_projections: 32
+sigreg_num_frequencies: 16
+sigreg_frequency_max: 5.0
+sigreg_seed: 0
+tau_cls: 0.07
+prompt_template: a photo of a {}
+# Optional loss-side adaptation; the text tower stays frozen and is never
+# consumed by the sketch-only predictor or inference evaluator.
+soft_prompt: false
+soft_prompt_length: 4
+soft_prompt_learning_rate: 0.001
+
+# Class-level pseudo-zero-shot validation is sampled once from the 104 seen
+# classes. Official 21-class test evaluation is diagnostic only during fitting.
+train_class_scope: pseudo_train
+pseudo_val_num_classes: 20
+pseudo_val_seed: 3407
+
+max_steps: 100
+log_every: 10
+probe_steps: [100, 500, 1000, 1800, 5400]
+run_probes: true
+eval_batch_size: 128
+prediction_batch_size: 128
+query_chunk_size: 256
+precision_at_k: [1, 5, 10, 100, 200]
+map_at_k: [200]
+map_at_k_denominator: prefix_positive
+save_optimizer: false
+seed: 42
+checkpoint_path: null
+
+wandb_project: spica
+wandb_entity: null
+wandb_run_name: null
+wandb_mode: disabled
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+  sweep:
+    dir: "outputs/experiments/jepa/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "${hydra.job.num}"
+  output_subdir: .hydra

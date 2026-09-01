@@ -1,0 +1,9 @@
+# @package _global_
+experiment_name: jepa_j2_full_m1
+encoder_mode: full
+encoder_unfreeze_depth: 0
+num_positive_photos: 1
+lambda_cls: 0.0
+regularizer: none
+lambda_regularizer: 0.0
+train_class_scope: pseudo_train
