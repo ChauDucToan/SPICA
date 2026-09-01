@@ -24,6 +24,11 @@ precision_at_k:
   - 10
   - 100
   - 200
+map_at_k:
+  - 1
+  - 5
+  - 10
+  - 100
 
 hydra:
   job:

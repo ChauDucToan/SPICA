@@ -19,6 +19,11 @@ precision_at_k:
   - 5
   - 10
   - 100
+map_at_k:
+  - 1
+  - 5
+  - 10
+  - 100
   - 200
 
 hydra:

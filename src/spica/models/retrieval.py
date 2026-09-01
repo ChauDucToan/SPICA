@@ -49,6 +49,137 @@ def pairwise_ranking_loss(
     return losses.mean()
 
 
+def _validate_multi_positive_embeddings(
+    predicted_directions: Tensor,
+    positive_embeddings: Tensor,
+    negative_embeddings: Tensor,
+) -> None:
+    if (
+        predicted_directions.ndim != 3
+        or positive_embeddings.ndim != 3
+        or negative_embeddings.ndim != 2
+    ):
+        raise ValueError(
+            "expected directions [B,K,D], positives [B,M,D], negative [B,D]"
+        )
+    if predicted_directions.shape[1] != 3:
+        raise ValueError("deterministic K3 control requires exactly three directions")
+    if positive_embeddings.shape[1] <= 0:
+        raise ValueError("positive_embeddings must contain at least one positive")
+    for name, embeddings in (
+        ("predicted_directions", predicted_directions),
+        ("positive_embeddings", positive_embeddings),
+        ("negative_embeddings", negative_embeddings),
+    ):
+        if not embeddings.is_floating_point():
+            raise TypeError(f"{name} must be floating-point, got {embeddings.dtype}")
+        if not torch.isfinite(embeddings).all().item():
+            raise ValueError(f"{name} must contain only finite values")
+    batch_size, _, embedding_dim = predicted_directions.shape
+    if (
+        positive_embeddings.shape[0] != batch_size
+        or positive_embeddings.shape[2] != embedding_dim
+    ):
+        raise ValueError("positive_embeddings dimensions must match directions")
+    if negative_embeddings.shape != (batch_size, embedding_dim):
+        raise ValueError(
+            f"negative_embeddings must have shape {(batch_size, embedding_dim)}"
+        )
+
+
+def deterministic_gate_weighted_barycenter(
+    directions: Tensor, gate_logits: Tensor
+) -> Tensor:
+    if directions.ndim != 3 or gate_logits.shape != directions.shape[:2]:
+        raise ValueError("directions must be [B,K,D] and gate_logits must be [B,K]")
+    if (
+        not torch.isfinite(directions).all().item()
+        or not torch.isfinite(gate_logits).all().item()
+    ):
+        raise ValueError("directions and gate_logits must be finite")
+    weights = gate_logits.softmax(dim=-1)
+    return F.normalize((weights[..., None] * directions).sum(dim=1), dim=-1)
+
+
+@dataclass(frozen=True, slots=True)
+class DeterministicK3Prediction:
+    directions: Tensor
+    gate_logits: Tensor
+
+    @property
+    def mean_directions(self) -> Tensor:
+        return self.directions
+
+
+def deterministic_k3_multi_positive_retrieval_loss(
+    prediction: DeterministicK3Prediction,
+    positive_embeddings: Tensor,
+    negative_embeddings: Tensor,
+    *,
+    margin: float = 0.2,
+    gate_prior_weight: float = 0.0,
+    anchor_weight: float = 0.0,
+    diversity_weight: float = 0.0,
+    sketch_embeddings: Tensor | None = None,
+) -> Tensor:
+    """Gate-weighted barycenter ranking without concentrations or vMF terms."""
+    if not isfinite(margin) or margin < 0:
+        raise ValueError("margin must be finite and non-negative")
+    for name, value in (
+        ("gate_prior_weight", gate_prior_weight),
+        ("anchor_weight", anchor_weight),
+        ("diversity_weight", diversity_weight),
+    ):
+        if not isfinite(value) or value < 0:
+            raise ValueError(f"{name} must be finite and non-negative")
+    _validate_multi_positive_embeddings(
+        prediction.directions, positive_embeddings, negative_embeddings
+    )
+    directions = F.normalize(prediction.directions, dim=-1)
+    barycenter = deterministic_gate_weighted_barycenter(
+        directions, prediction.gate_logits
+    )
+    positive_scores = torch.einsum("bd,bmd->bm", barycenter, positive_embeddings)
+    negative_scores = (barycenter * negative_embeddings).sum(dim=-1)
+    loss = F.softplus(margin - positive_scores + negative_scores[:, None]).mean()
+    if gate_prior_weight:
+        log_uniform = -log(directions.shape[1])
+        log_probs = prediction.gate_logits.log_softmax(dim=-1)
+        loss = (
+            loss
+            + gate_prior_weight
+            * (log_probs.exp() * (log_probs - log_uniform)).sum(dim=-1).mean()
+        )
+    if anchor_weight:
+        if sketch_embeddings is None or sketch_embeddings.shape != barycenter.shape:
+            raise ValueError(
+                "sketch_embeddings must have shape [B,D] when anchor_weight > 0"
+            )
+        loss = (
+            loss
+            + anchor_weight
+            * (
+                1 - (barycenter * F.normalize(sketch_embeddings, dim=-1)).sum(dim=-1)
+            ).mean()
+        )
+    if diversity_weight and directions.shape[1] > 1:
+        pairwise = torch.einsum("bkd,bjd->bkj", directions, directions)
+        off_diagonal = ~torch.eye(
+            directions.shape[1], dtype=torch.bool, device=directions.device
+        )
+        loss = loss + diversity_weight * pairwise[:, off_diagonal].pow(2).mean()
+    return loss
+
+
+# Descriptive aliases for callers that do not want the K-specific name.
+deterministic_multi_positive_retrieval_loss = (
+    deterministic_k3_multi_positive_retrieval_loss
+)
+deterministic_multi_positive_ranking_loss = (
+    deterministic_k3_multi_positive_retrieval_loss
+)
+
+
 class DeterministicPhotoPredictor(nn.Module):
     def __init__(
         self,
@@ -92,6 +223,57 @@ class DeterministicPhotoPredictor(nn.Module):
 class VmfPrediction:
     mean_direction: Tensor
     concentration: Tensor
+
+
+class DeterministicK3PhotoPredictor(nn.Module):
+    """Three normalized deterministic directions and learned gate logits."""
+
+    def __init__(self, embedding_dim: int = 512, hidden_dim: int = 512) -> None:
+        super().__init__()
+        if embedding_dim <= 0 or hidden_dim <= 0:
+            raise ValueError("embedding_dim and hidden_dim must be positive")
+        self.embedding_dim = embedding_dim
+        self.hidden_dim = hidden_dim
+        self.num_components = 3
+        direction_output = nn.Linear(hidden_dim, 3 * embedding_dim)
+        nn.init.normal_(direction_output.weight, std=1e-4)
+        nn.init.zeros_(direction_output.bias)
+        self.direction_head = nn.Sequential(
+            nn.LayerNorm(embedding_dim),
+            nn.Linear(embedding_dim, hidden_dim),
+            nn.GELU(),
+            direction_output,
+        )
+        gate_output = nn.Linear(hidden_dim, 3)
+        nn.init.zeros_(gate_output.weight)
+        nn.init.zeros_(gate_output.bias)
+        self.gate_head = nn.Sequential(
+            nn.LayerNorm(embedding_dim),
+            nn.Linear(embedding_dim, hidden_dim),
+            nn.GELU(),
+            gate_output,
+        )
+
+    def forward(self, sketch_embeddings: Tensor) -> DeterministicK3Prediction:
+        if (
+            sketch_embeddings.ndim != 2
+            or sketch_embeddings.shape[1] != self.embedding_dim
+        ):
+            raise ValueError("sketch_embeddings must have shape [B, embedding_dim]")
+        if not sketch_embeddings.is_floating_point():
+            raise TypeError("sketch_embeddings must be floating-point")
+        batch_size = sketch_embeddings.shape[0]
+        residuals = self.direction_head(sketch_embeddings).reshape(
+            batch_size, 3, self.embedding_dim
+        )
+        return DeterministicK3Prediction(
+            directions=F.normalize(sketch_embeddings[:, None, :] + residuals, dim=-1),
+            gate_logits=self.gate_head(sketch_embeddings),
+        )
+
+
+# Short name for the new control's public API.
+DeterministicK3Predictor = DeterministicK3PhotoPredictor
 
 
 class K1VmfPhotoPredictor(nn.Module):

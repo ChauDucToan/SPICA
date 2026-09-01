@@ -24,6 +24,7 @@ from .evaluation.embeddings import EncodedRetrievalSet, load_encoded_retrieval_s
 from .evaluation.metrics import (
     CategoryRetrievalEvaluation,
     CategoryRetrievalMetrics,
+    _average_precision_from_relevance,
     evaluate_category_retrieval,
 )
 from .models.retrieval import MoVmfPhotoPredictor, MoVmfPrediction
@@ -224,6 +225,7 @@ def _evaluate_movmf_retrieval(
     query_chunk_size: int,
     top_k: int,
     device: torch.device,
+    map_at_k: tuple[int, ...] = (),
 ) -> CategoryRetrievalEvaluation:
     if query_chunk_size <= 0:
         raise ValueError(f"query_chunk_size must be positive, got {query_chunk_size}")
@@ -243,6 +245,9 @@ def _evaluate_movmf_retrieval(
         raise ValueError(
             f"P@{max(ks)} requires {max(ks)} gallery items, got {num_gallery_items}"
         )
+    map_ks = tuple(sorted(set(map_at_k)))
+    if any(k <= 0 or k > num_gallery_items for k in map_ks):
+        raise ValueError(f"map_at_k values must be in [1, {num_gallery_items}]")
     if not 0 < top_k <= num_gallery_items:
         raise ValueError(
             f"top_k must be between 1 and {num_gallery_items}, got {top_k}"
@@ -258,6 +263,7 @@ def _evaluate_movmf_retrieval(
     )
     average_precision_batches: list[torch.Tensor] = []
     precision_batches: dict[int, list[torch.Tensor]] = {k: [] for k in ks}
+    map_batches: dict[int, list[torch.Tensor]] = {k: [] for k in map_ks}
     top_index_batches: list[torch.Tensor] = []
     top_score_batches: list[torch.Tensor] = []
 
@@ -289,12 +295,13 @@ def _evaluate_movmf_retrieval(
                 f"queries without positives: {query_indices}"
             )
 
-        relevant_float = relevant.float()
-        precision_at_rank = relevant_float.cumsum(dim=1) / rank_positions
-        average_precision = (precision_at_rank * relevant_float).sum(
-            dim=1
-        ) / num_positives.float()
+        average_precision, truncated = _average_precision_from_relevance(
+            relevant, rank_positions, map_ks
+        )
         average_precision_batches.append(average_precision.cpu())
+        for k, values in truncated.items():
+            map_batches[k].append(values.cpu())
+        relevant_float = relevant.float()
         for k in ks:
             precision_batches[k].append(relevant_float[:, :k].mean(dim=1).cpu())
 
@@ -314,6 +321,10 @@ def _evaluate_movmf_retrieval(
             },
             num_queries=num_queries,
             num_gallery_items=num_gallery_items,
+            mean_average_precision_at_k={
+                k: torch.cat(values).double().mean().item()
+                for k, values in map_batches.items()
+            },
         ),
         average_precision_per_query=average_precision_per_query,
         top_indices=torch.cat(top_index_batches),
@@ -546,6 +557,7 @@ def main(args: DictConfig) -> None:
     num_components = int(args.num_components)
     scoring_rule = str(args.scoring_rule)
     ks = tuple(sorted({int(k) for k in args.precision_at_k}))
+    map_ks = tuple(sorted({int(k) for k in args.map_at_k}))
     if num_components < 1:
         raise ValueError(f"num_components must be at least 1, got {num_components}")
     if not ks or any(k <= 0 for k in ks):
@@ -554,6 +566,8 @@ def main(args: DictConfig) -> None:
         raise ValueError(
             "scoring_rule must be density, semantic_barycenter, or dominant"
         )
+    if not map_ks or any(k <= 0 for k in map_ks):
+        raise ValueError(f"map_at_k must contain positive integers, got {map_ks}")
 
     print(
         "Warning: this unseen-test evaluation is diagnostic only; do not select "
@@ -602,8 +616,9 @@ def main(args: DictConfig) -> None:
         sketches,
         photos,
         precision_at_k=ks,
+        map_at_k=map_ks,
         query_chunk_size=int(args.baseline_query_chunk_size),
-        top_k=max(ks),
+        top_k=max(max(ks), *map_ks),
         device=device,
     )
     if scoring_rule == "density":
@@ -612,8 +627,9 @@ def main(args: DictConfig) -> None:
             sketches.labels,
             photos,
             precision_at_k=ks,
+            map_at_k=map_ks,
             query_chunk_size=int(args.query_chunk_size),
-            top_k=max(ks),
+            top_k=max(max(ks), *map_ks),
             device=device,
         )
         ranking_semantics = "normalized_score_preserves_mixture_density_order"
@@ -638,8 +654,9 @@ def main(args: DictConfig) -> None:
             scoring_queries,
             photos,
             precision_at_k=ks,
+            map_at_k=map_ks,
             query_chunk_size=int(args.baseline_query_chunk_size),
-            top_k=max(ks),
+            top_k=max(max(ks), *map_ks),
             device=device,
         )
     component_stats = _component_statistics(
