@@ -29,7 +29,11 @@ from .train_deterministic import HYDRA_CONFIG_DIR
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OBJECTIVE_NAME = "deterministic_k3_multi_positive_gate_barycenter_ranking"
-SUPPORTED_OBJECTIVES = {OBJECTIVE_NAME, "deterministic_k3_stageE_no_vmf"}
+SUPPORTED_OBJECTIVES = {
+    OBJECTIVE_NAME,
+    "deterministic_k3_stageE_no_vmf",
+    "deterministic_k3_stageE_angular_routing",
+}
 
 
 def _load_predictor(path: Path, device: torch.device):
@@ -182,7 +186,16 @@ def _evaluate_mode(directions, gates, sketches, photos, args, device):
                 temperature = float(args.temperature)
                 if temperature <= 0:
                     raise ValueError("temperature must be positive for logsumexp")
+                # Preserve the historical SPICA score convention.
                 chunk = torch.logsumexp(temperature * cosine, dim=1) / temperature
+            elif mode == "angular_logsumexp":
+                temperature = float(args.temperature)
+                if temperature <= 0:
+                    raise ValueError(
+                        "temperature must be positive for angular_logsumexp"
+                    )
+                # tau is the angular temperature: tau*logsumexp(cos/tau).
+                chunk = temperature * torch.logsumexp(cosine / temperature, dim=1)
             else:
                 raise ValueError("unsupported scoring_mode")
             scores.append(chunk.cpu())
@@ -212,7 +225,12 @@ def _evaluate_score_matrix(scores, query_labels, photos, args, device):
     if torch.any(num_positives == 0).item():
         raise ValueError("Every query must have at least one positive gallery item")
     positions = torch.arange(1, gallery_size + 1, device=device, dtype=torch.float32)
-    full, truncated = _average_precision_from_relevance(relevant, positions, map_ks)
+    full, truncated = _average_precision_from_relevance(
+        relevant,
+        positions,
+        map_ks,
+        map_at_k_denominator=str(args.map_at_k_denominator),
+    )
     precision = {
         k: relevant[:, :k].float().mean(dim=1).double().mean().item()
         for k in precision_ks
@@ -246,7 +264,7 @@ def main(args: DictConfig) -> None:
     predictor, checkpoint = _load_predictor(checkpoint_path, device)
     sketches = load_encoded_retrieval_set(embedding_dir / "sketches.pt")
     photos = load_encoded_retrieval_set(embedding_dir / "photos.pt")
-    _validate_zero_shot_split(
+    split_identities = _validate_zero_shot_split(
         data_path, dataset_name=str(args.dataset_name), sketches=sketches, photos=photos
     )
     _validate_provenance(
@@ -273,6 +291,7 @@ def main(args: DictConfig) -> None:
         "objective": checkpoint.get("metadata", {}).get("objective", OBJECTIVE_NAME),
         "scoring_mode": str(args.scoring_mode),
         "temperature": float(args.temperature),
+        "map_at_k_denominator": str(args.map_at_k_denominator),
         "checkpoint": str(checkpoint_path),
         "trainable_parameters": sum(
             parameter.numel() for parameter in predictor.parameters()
@@ -282,6 +301,7 @@ def main(args: DictConfig) -> None:
             "photos": photos.metadata,
         },
         "checkpoint_step": int(checkpoint["step"]),
+        "split_identities": split_identities,
         "params": {
             "K": 3,
             "M": 3,

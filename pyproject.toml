@@ -43,6 +43,9 @@ spica-train-deterministic-k3 = "spica.train_deterministic_k3:main"
 spica-train-vmf = "spica.train_vmf:main"
 spica-train-movmf = "spica.train_movmf:main"
 spica-train-movmf-ablation = "spica.train_movmf_ablation:main"
+spica-train-stageE-no-vmf = "spica.train_stageE_no_vmf:main"
+spica-train-stageE-angular = "spica.train_stageE_angular:main"
+spica-train-stageE-k1 = "spica.train_stageE_k1:main"
 
 [build-system]
 requires = ["uv_build"]

@@ -1,0 +1,14 @@
+defaults:
+  - train_stageE_no_vmf
+  - _self_
+
+experiment_name: train_stageE_angular_k3_m3_b32
+routing_mode: angular
+assignment_temperature: 0.05
+angular_assignment_weight: 1.0
+max_steps: 100
+
+hydra:
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+  output_subdir: .hydra

@@ -16,7 +16,21 @@ class CategoryRetrievalMetrics:
     num_gallery_items: int
     mean_average_precision_at_k: dict[int, float] = field(default_factory=dict)
 
-    def to_log_dict(self, prefix: str = "retrieval") -> dict[str, float | int]:
+    def to_log_dict(
+        self,
+        prefix: str = "retrieval",
+        *,
+        map_at_k_denominator: str | None = None,
+    ) -> dict[str, float | int]:
+        if map_at_k_denominator is not None and map_at_k_denominator not in {
+            "prefix_positive",
+            "all_relevant",
+            "min_relevant_k",
+        }:
+            raise ValueError(
+                "map_at_k_denominator must be one of prefix_positive, "
+                "all_relevant, or min_relevant_k"
+            )
         normalized_prefix = prefix.rstrip("/")
         metrics: dict[str, float | int] = {
             f"{normalized_prefix}/mAP": self.mean_average_precision,
@@ -35,6 +49,13 @@ class CategoryRetrievalMetrics:
                 for k, value in self.mean_average_precision_at_k.items()
             }
         )
+        if map_at_k_denominator is not None:
+            metrics.update(
+                {
+                    f"{normalized_prefix}/mAP@{k}_{map_at_k_denominator}": value
+                    for k, value in self.mean_average_precision_at_k.items()
+                }
+            )
         return metrics
 
 

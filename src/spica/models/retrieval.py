@@ -49,6 +49,49 @@ def pairwise_ranking_loss(
     return losses.mean()
 
 
+def deterministic_single_direction_multi_positive_retrieval_loss(
+    predicted_embeddings: Tensor,
+    positive_embeddings: Tensor,
+    negative_embeddings: Tensor,
+    *,
+    margin: float = 0.2,
+) -> Tensor:
+    """Pair each anchor's multi-positive set with that anchor's negative."""
+    if not isfinite(margin) or margin < 0:
+        raise ValueError("margin must be finite and non-negative")
+    if (
+        predicted_embeddings.ndim != 2
+        or positive_embeddings.ndim != 3
+        or negative_embeddings.ndim != 2
+    ):
+        raise ValueError("expected predictions [B,D], positives [B,M,D], negative [B,D]")
+    if positive_embeddings.shape[1] <= 0:
+        raise ValueError("positive_embeddings must contain at least one positive")
+    batch_size, embedding_dim = predicted_embeddings.shape
+    if (
+        positive_embeddings.shape[0] != batch_size
+        or positive_embeddings.shape[2] != embedding_dim
+        or negative_embeddings.shape != (batch_size, embedding_dim)
+    ):
+        raise ValueError("positive and negative dimensions must match predictions")
+    for name, embeddings in (
+        ("predicted_embeddings", predicted_embeddings),
+        ("positive_embeddings", positive_embeddings),
+        ("negative_embeddings", negative_embeddings),
+    ):
+        if not embeddings.is_floating_point():
+            raise TypeError(f"{name} must be floating-point, got {embeddings.dtype}")
+        if not torch.isfinite(embeddings).all().item():
+            raise ValueError(f"{name} must contain only finite values")
+    positive_scores = torch.einsum(
+        "bd,bmd->bm", predicted_embeddings, positive_embeddings
+    )
+    negative_scores = (predicted_embeddings * negative_embeddings).sum(dim=-1)
+    return F.softplus(
+        margin - positive_scores + negative_scores[:, None]
+    ).mean()
+
+
 def _validate_multi_positive_embeddings(
     predicted_directions: Tensor,
     positive_embeddings: Tensor,
@@ -304,6 +347,90 @@ class DeterministicDominantSatelliteRegularization:
     semantic_center: Tensor
 
 
+@dataclass(frozen=True, slots=True)
+class DeterministicAngularRoutingLoss:
+    """Diagnostics and objective for categorical angular positive routing."""
+
+    total: Tensor
+    assignment_responsibilities: Tensor
+    assignment_logits: Tensor
+    positive_component_cosines: Tensor
+    negative_component_cosines: Tensor
+    routed_positive_cosines: Tensor
+    routed_negative_cosines: Tensor
+    assignment_entropy: Tensor
+
+
+def deterministic_angular_positive_assignment_loss(
+    prediction: DeterministicK3Prediction,
+    positive_embeddings: Tensor,
+    negative_embeddings: Tensor,
+    *,
+    margin: float = 0.2,
+    assignment_temperature: float = 0.05,
+) -> DeterministicAngularRoutingLoss:
+    """Route each positive to a K=3 direction using only angular scores.
+
+    For positive ``m`` and component ``k`` the assignment is exactly
+
+    ``softmax_k(log pi_k + cosine(direction_k, positive_m) / tau)``.
+
+    This is deliberately a categorical/angular auxiliary ranking objective.  It
+    contains no concentration prediction, vMF normalizer, density, or vMF NLL.
+    The returned responsibilities are differentiable so the routing signal can
+    update both the direction and gate heads.
+    """
+    if not isfinite(margin) or margin < 0:
+        raise ValueError("margin must be finite and non-negative")
+    if not isfinite(assignment_temperature) or assignment_temperature <= 0:
+        raise ValueError("assignment_temperature must be finite and positive")
+    _validate_multi_positive_embeddings(
+        prediction.directions,
+        positive_embeddings,
+        negative_embeddings,
+    )
+
+    directions = F.normalize(prediction.directions, dim=-1)
+    positives = F.normalize(positive_embeddings, dim=-1)
+    negative = F.normalize(negative_embeddings, dim=-1)
+    log_probabilities = prediction.gate_logits.log_softmax(dim=-1)
+    positive_component_cosines = (
+        directions[:, None, :, :] * positives[:, :, None, :]
+    ).sum(dim=-1)
+    # Keep the prior outside the temperature scaling.  This makes tau an
+    # angular assignment temperature rather than an effective prior temperature.
+    assignment_logits = (
+        log_probabilities[:, None, :]
+        + positive_component_cosines / assignment_temperature
+    )
+    responsibilities = assignment_logits.softmax(dim=-1)
+    negative_component_cosines = (
+        directions * negative[:, None, :]
+    ).sum(dim=-1)
+    routed_positive_cosines = (
+        responsibilities * positive_component_cosines
+    ).sum(dim=-1)
+    routed_negative_cosines = (
+        responsibilities * negative_component_cosines[:, None, :]
+    ).sum(dim=-1)
+    total = F.softplus(
+        margin - routed_positive_cosines + routed_negative_cosines
+    ).mean()
+    assignment_entropy = -(
+        responsibilities * responsibilities.clamp_min(1e-12).log()
+    ).sum(dim=-1).mean()
+    return DeterministicAngularRoutingLoss(
+        total=total,
+        assignment_responsibilities=responsibilities,
+        assignment_logits=assignment_logits,
+        positive_component_cosines=positive_component_cosines,
+        negative_component_cosines=negative_component_cosines,
+        routed_positive_cosines=routed_positive_cosines,
+        routed_negative_cosines=routed_negative_cosines,
+        assignment_entropy=assignment_entropy,
+    )
+
+
 def deterministic_dominant_satellite_regularization(
     prediction: DeterministicK3Prediction,
     sketch_embeddings: Tensor,
@@ -343,8 +470,9 @@ def deterministic_dominant_satellite_regularization(
     semantic_consistency = 0.5 * (
         F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)
     )
-    # This is the deterministic angular assignment: each satellite selects its
-    # closest positive photo, rather than receiving a vMF posterior.
+    # Set coverage is component-wise: each satellite is encouraged to be close
+    # to some positive, but positives do not compete for components and no
+    # positive-to-component responsibility/routing distribution is formed here.
     satellite_cosines = (directions[:, 1:, None, :] * positives[:, None, :, :]).sum(dim=-1)
     satellite_coverage = (1.0 - satellite_cosines.max(dim=-1).values).mean()
     positive_pairs = torch.triu_indices(
@@ -544,21 +672,10 @@ class MoVmfPhotoPredictor(nn.Module):
             direction_output,
         )
 
-        if concentration_mode == "learned":
-            concentration_output = nn.Linear(hidden_dim, num_components)
-            nn.init.zeros_(concentration_output.weight)
-            initial_fraction = (initial_concentration - min_concentration) / (
-                max_concentration - min_concentration
-            )
-            initial_raw = log(initial_fraction / (1.0 - initial_fraction))
-            nn.init.constant_(concentration_output.bias, initial_raw)
-            self.concentration_head = nn.Sequential(
-                nn.LayerNorm(embedding_dim),
-                nn.Linear(embedding_dim, hidden_dim),
-                nn.GELU(),
-                concentration_output,
-            )
-
+        # Construct the shared direction and gate branches in the same order as
+        # DeterministicK3PhotoPredictor.  The optional concentration branch is
+        # constructed last so matched runs share their random initialization;
+        # its extra parameters are still reported explicitly.
         mixture_output = nn.Linear(hidden_dim, num_components)
         nn.init.zeros_(mixture_output.weight)
         if initial_dominant_weight is None:
@@ -578,6 +695,21 @@ class MoVmfPhotoPredictor(nn.Module):
             nn.GELU(),
             mixture_output,
         )
+
+        if concentration_mode == "learned":
+            concentration_output = nn.Linear(hidden_dim, num_components)
+            nn.init.zeros_(concentration_output.weight)
+            initial_fraction = (initial_concentration - min_concentration) / (
+                max_concentration - min_concentration
+            )
+            initial_raw = log(initial_fraction / (1.0 - initial_fraction))
+            nn.init.constant_(concentration_output.bias, initial_raw)
+            self.concentration_head = nn.Sequential(
+                nn.LayerNorm(embedding_dim),
+                nn.Linear(embedding_dim, hidden_dim),
+                nn.GELU(),
+                concentration_output,
+            )
 
     def forward(self, sketch_embeddings: Tensor) -> MoVmfPrediction:
         if sketch_embeddings.ndim != 2:

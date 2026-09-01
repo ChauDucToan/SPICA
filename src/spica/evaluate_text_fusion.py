@@ -6,7 +6,8 @@ import torch
 from omegaconf import DictConfig
 
 from .config.data import load_data_config
-from .data.manifest import read_class_map
+from .data.manifest import read_class_map, read_manifest
+from .evaluate_deterministic import _validate_cache_against_manifest
 from .evaluation.embeddings import (
     EncodedRetrievalSet,
     load_encoded_retrieval_set,
@@ -122,8 +123,11 @@ def main(args: DictConfig) -> None:
 
     device = _resolve_device(str(args.device))
     config = load_data_config(data_config_path)
+    split = str(args.split)
+    if split not in {"train", "test"}:
+        raise ValueError(f"split must be 'train' or 'test', got {split!r}")
 
-    split_config = config.train if args.split == "train" else config.test
+    split_config = config.train if split == "train" else config.test
 
     class_names = read_class_map(split_config.class_map)
     sketches = load_encoded_retrieval_set(embedding_dir / "sketches.pt")
@@ -132,7 +136,7 @@ def main(args: DictConfig) -> None:
         sketches,
         modality="sketch",
         dataset_name=config.name,
-        split=args.split,
+        split=split,
         model_name=args.model_name,
         pretrained=args.pretrained,
         allow_legacy_cache=args.allow_legacy_cache,
@@ -141,11 +145,27 @@ def main(args: DictConfig) -> None:
         photos,
         modality="photo",
         dataset_name=config.name,
-        split=str(args.split),
+        split=split,
         model_name=str(args.model_name),
         pretrained=(None if args.pretrained is None else str(args.pretrained)),
         allow_legacy_cache=bool(args.allow_legacy_cache),
     )
+    split_identities = {
+        "sketch_manifest_sha256": _validate_cache_against_manifest(
+            modality="sketch",
+            encoded_set=sketches,
+            manifest_entries=read_manifest(
+                split_config.sketch_manifest, config.root
+            ),
+        ),
+        "photo_manifest_sha256": _validate_cache_against_manifest(
+            modality="photo",
+            encoded_set=photos,
+            manifest_entries=read_manifest(
+                split_config.photo_manifest, config.root
+            ),
+        ),
+    }
 
     alphas = tuple(sorted({float(alpha) for alpha in args.fusion_alphas} | {0.0, 1.0}))
     if any(not 0.0 <= alpha <= 1.0 for alpha in alphas):
@@ -170,7 +190,7 @@ def main(args: DictConfig) -> None:
         raise ValueError("map_at_k must contain positive integers")
     stored_top_k = max(max(ks), *map_ks)
 
-    if args.split == "test":
+    if split == "test":
         print(
             "Warning: alpha and temperature selection on the test split "
             "is exploratory only. "
@@ -179,7 +199,7 @@ def main(args: DictConfig) -> None:
 
     run_config = {
         "dataset": config.name,
-        "split": args.split,
+        "split": split,
         "embedding_dir": str(args.embedding_dir),
         "model_name": args.model_name,
         "pretrained": args.pretrained,
@@ -192,7 +212,8 @@ def main(args: DictConfig) -> None:
         "map_at_k_denominator": str(args.map_at_k_denominator),
         "query_chunk_size": args.query_chunk_size,
         "seed": args.seed,
-        "exploratory_test_sweep": args.split == "test",
+        "exploratory_test_sweep": split == "test",
+        "split_identities": split_identities,
     }
 
     with WandbExperiment(
@@ -202,12 +223,12 @@ def main(args: DictConfig) -> None:
         config=run_config,
         tags=(
             "text-fusion-baseline",
-            "exploratory-sweep" if args.split == "test" else "model-selection",
+            "exploratory-sweep" if split == "test" else "model-selection",
             config.name,
-            args.split,
+            split,
         ),
         mode=args.wandb_mode,
-        job_type="exploratory-evaluation" if args.split == "test" else "evaluation",
+        job_type="exploratory-evaluation" if split == "test" else "evaluation",
     ) as experiment:
         print(f"Loading {args.model_name} ({args.pretrained}) on {device}...")
         clip_bundle = load_frozen_clip(
@@ -621,14 +642,29 @@ def main(args: DictConfig) -> None:
 
         experiment.log_metrics(
             {
-                **sketch_evaluation.metrics.to_log_dict("sketch"),
+                **sketch_evaluation.metrics.to_log_dict(
+                    "sketch",
+                    map_at_k_denominator=str(args.map_at_k_denominator),
+                ),
                 "text/classification_accuracy": classification.accuracy,
-                **best_oracle.metrics.to_log_dict("fusion/oracle_best"),
+                **best_oracle.metrics.to_log_dict(
+                    "fusion/oracle_best",
+                    map_at_k_denominator=str(args.map_at_k_denominator),
+                ),
                 "fusion/oracle/best_alpha": best_oracle_alpha,
-                **best_predicted.metrics.to_log_dict("fusion/predicted_best"),
+                **best_predicted.metrics.to_log_dict(
+                    "fusion/predicted_best",
+                    map_at_k_denominator=str(args.map_at_k_denominator),
+                ),
                 "fusion/predicted/best_alpha": best_predicted_alpha,
-                **oracle_text_only.metrics.to_log_dict("text/oracle"),
-                **predicted_text_only.metrics.to_log_dict("text/predicted"),
+                **oracle_text_only.metrics.to_log_dict(
+                    "text/oracle",
+                    map_at_k_denominator=str(args.map_at_k_denominator),
+                ),
+                **predicted_text_only.metrics.to_log_dict(
+                    "text/predicted",
+                    map_at_k_denominator=str(args.map_at_k_denominator),
+                ),
                 "sketch/class_macro_mAP": _class_macro_map(sketch_evaluation, sketches),
                 "fusion/oracle_best/class_macro_mAP": _class_macro_map(
                     best_oracle, sketches

@@ -25,6 +25,9 @@ def test_truncated_map_preserves_full_map_and_uses_prefix_positive_denominator()
     assert evaluation.top_indices.shape == (1, 2)
     assert "retrieval/mAP" in evaluation.metrics.to_log_dict()
     assert "retrieval/mAP@2" in evaluation.metrics.to_log_dict()
+    assert "retrieval/mAP@2_prefix_positive" in evaluation.metrics.to_log_dict(
+        map_at_k_denominator="prefix_positive"
+    )
 
 
 def test_map_denominator_variants_are_explicit():

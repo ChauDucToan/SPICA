@@ -136,7 +136,9 @@ def main(argv: list[str] | None = None) -> None:
             device=device,
         )
 
-        logged_metrics = evaluation.metrics.to_log_dict()
+        logged_metrics = evaluation.metrics.to_log_dict(
+            map_at_k_denominator=str(args.map_at_k_denominator)
+        )
         experiment.log_metrics(logged_metrics)
 
         table_rows = build_retrieval_table_rows(

@@ -12,7 +12,10 @@ dataset_name: sketchy_104_21
 model_name: ViT-B-32-quickgelu
 pretrained: openai
 device: auto
+# Stage-E commands should pass semantic_barycenter explicitly for matched
+# retrieval; density remains the historical generic evaluator default.
 scoring_rule: density
+temperature: 0.05
 
 prediction_batch_size: 512
 query_chunk_size: 64

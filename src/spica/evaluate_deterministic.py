@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 
 from .config.data import load_data_config
-from .data.manifest import read_class_map
+from .data.manifest import ManifestEntry, read_class_map, read_manifest
 from .evaluation.embeddings import EncodedRetrievalSet, load_encoded_retrieval_set
 from .evaluation.metrics import CategoryRetrievalMetrics, evaluate_category_retrieval
 from .models.retrieval import DeterministicPhotoPredictor
@@ -148,13 +149,68 @@ def _validate_provenance(
             )
 
 
+def _retrieval_set_identity(
+    paths: tuple[str, ...],
+    labels: torch.Tensor,
+) -> str:
+    if labels.ndim != 1 or len(paths) != labels.shape[0]:
+        raise ValueError("Cannot hash a retrieval set with inconsistent lengths")
+    digest = hashlib.sha256()
+    for path, label in zip(paths, labels.tolist(), strict=True):
+        canonical_path = Path(path).expanduser().resolve()
+        digest.update(str(canonical_path).encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update(str(int(label)).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def _validate_cache_against_manifest(
+    *,
+    modality: str,
+    encoded_set: EncodedRetrievalSet,
+    manifest_entries: tuple[ManifestEntry, ...],
+) -> str:
+    if len(encoded_set.paths) != len(manifest_entries):
+        raise ValueError(
+            f"{modality.capitalize()} cache length does not match its configured "
+            f"manifest: {len(encoded_set.paths)} != {len(manifest_entries)}"
+        )
+    for index, (cached_path, cached_label, entry) in enumerate(
+        zip(encoded_set.paths, encoded_set.labels.tolist(), manifest_entries, strict=True)
+    ):
+        expected_path = Path(entry.path).resolve()
+        observed_path = Path(cached_path).expanduser().resolve()
+        if observed_path != expected_path or int(cached_label) != int(entry.label):
+            raise ValueError(
+                f"{modality.capitalize()} cache does not match its configured "
+                f"manifest at index {index}: observed "
+                f"({observed_path}, {int(cached_label)}), expected "
+                f"({expected_path}, {int(entry.label)})"
+            )
+    cache_identity = _retrieval_set_identity(
+        encoded_set.paths, encoded_set.labels
+    )
+    manifest_paths = tuple(str(entry.path) for entry in manifest_entries)
+    manifest_labels = torch.tensor(
+        [int(entry.label) for entry in manifest_entries], dtype=torch.long
+    )
+    manifest_identity = _retrieval_set_identity(manifest_paths, manifest_labels)
+    if cache_identity != manifest_identity:
+        raise ValueError(
+            f"{modality.capitalize()} cache/manifest identity mismatch: "
+            f"cache={cache_identity}, manifest={manifest_identity}"
+        )
+    return manifest_identity
+
+
 def _validate_zero_shot_split(
     data_config_path: Path,
     *,
     dataset_name: str,
     sketches: EncodedRetrievalSet,
     photos: EncodedRetrievalSet,
-) -> None:
+) -> dict[str, str]:
     data_config = load_data_config(data_config_path)
     if data_config.name != dataset_name:
         raise ValueError(
@@ -178,6 +234,25 @@ def _validate_zero_shot_split(
             "Test cache labels missing from the test class map: "
             f"{sorted(unknown_labels)}"
         )
+
+    sketch_manifest = read_manifest(
+        data_config.test.sketch_manifest, data_config.root
+    )
+    photo_manifest = read_manifest(
+        data_config.test.photo_manifest, data_config.root
+    )
+    return {
+        "sketch_manifest_sha256": _validate_cache_against_manifest(
+            modality="sketch",
+            encoded_set=sketches,
+            manifest_entries=sketch_manifest,
+        ),
+        "photo_manifest_sha256": _validate_cache_against_manifest(
+            modality="photo",
+            encoded_set=photos,
+            manifest_entries=photo_manifest,
+        ),
+    }
 
 
 def _predict_photo_directions(
@@ -280,7 +355,7 @@ def main(args: DictConfig) -> None:
     photos = load_encoded_retrieval_set(embedding_dir / "photos.pt")
     if not torch.isfinite(photos.embeddings).all().item():
         raise ValueError("Photo cache contains non-finite embeddings")
-    _validate_zero_shot_split(
+    split_identities = _validate_zero_shot_split(
         data_config_path,
         dataset_name=str(args.dataset_name),
         sketches=sketches,
@@ -334,6 +409,8 @@ def main(args: DictConfig) -> None:
                 "diagnostic_test_evaluation": True,
                 "checkpoint": str(checkpoint_path),
                 "checkpoint_step": int(checkpoint["step"]),
+                "split_identities": split_identities,
+                "map_at_k_denominator": str(args.map_at_k_denominator),
                 "sketch_only": _metrics_dict(baseline),
                 "deterministic": _metrics_dict(deterministic),
                 "delta_mAP": (

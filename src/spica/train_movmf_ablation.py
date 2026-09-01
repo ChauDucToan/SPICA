@@ -4,7 +4,6 @@ from pathlib import Path
 import hydra
 import torch
 from omegaconf import DictConfig
-from torch import Tensor
 
 from .config.data import load_data_config
 from .data.loaders import build_multi_positive_retrieval_train_loader
@@ -17,6 +16,7 @@ from .models.vmf import (
     dominant_satellite_regularization,
     mo_vmf_multi_positive_retrieval_loss,
 )
+from .training_utils import encode_multi_positive_images
 from .train_deterministic import (
     HYDRA_CONFIG_DIR,
     _check_module_parameters_finite,
@@ -30,53 +30,12 @@ from .train_deterministic import (
 OBJECTIVE_NAME = "multi_positive_mixture_vmf_anticollapse"
 
 
-def _encode_multi_positive_images(
-    encoder: FrozenClipEncoder,
-    sketch_images: Tensor,
-    positive_images: Tensor,
-    negative_images: Tensor,
-) -> tuple[Tensor, Tensor, Tensor]:
-    if sketch_images.ndim != 4:
-        raise ValueError(
-            f"sketch_images must have shape [B, C, H, W], got {sketch_images.shape}"
-        )
-    if positive_images.ndim != 5:
-        raise ValueError(
-            "positive_images must have shape [B, M, C, H, W], got "
-            f"{positive_images.shape}"
-        )
-    if negative_images.shape != sketch_images.shape:
-        raise ValueError("negative_images and sketch_images shapes must match")
-    if positive_images.shape[0] != sketch_images.shape[0]:
-        raise ValueError("Positive and sketch batch sizes must match")
-    if positive_images.shape[2:] != sketch_images.shape[1:]:
-        raise ValueError("Positive and sketch image dimensions must match")
-
-    batch_size, num_positives = positive_images.shape[:2]
-    flattened_positives = positive_images.flatten(0, 1)
-    all_images = torch.cat(
-        (sketch_images, flattened_positives, negative_images),
-        dim=0,
-    )
-    with torch.no_grad():
-        all_embeddings = encoder(all_images)
-    sketch_embeddings, positive_embeddings, negative_embeddings = all_embeddings.split(
-        (batch_size, batch_size * num_positives, batch_size),
-        dim=0,
-    )
-    return (
-        sketch_embeddings,
-        positive_embeddings.reshape(batch_size, num_positives, -1),
-        negative_embeddings,
-    )
-
-
 def _scheduled_prediction(
     raw_prediction: MoVmfPrediction,
     *,
     step: int,
     warmup_steps: int,
-    initial_concentration: float,
+    warmup_concentration: float,
     gate_temperature_start: float,
     gate_temperature_anneal_steps: int,
     warmup_dominant_weight: float | None,
@@ -101,7 +60,7 @@ def _scheduled_prediction(
                 mean_directions=raw_prediction.mean_directions,
                 concentrations=torch.full_like(
                     raw_prediction.concentrations,
-                    initial_concentration,
+                    warmup_concentration,
                 ),
                 mixture_logits=warmup_logits,
             ),
@@ -155,6 +114,10 @@ def _save_checkpoint(
                 "initial_dominant_weight": predictor.initial_dominant_weight,
                 "concentration_mode": predictor.concentration_mode,
                 "fixed_concentration": predictor.fixed_concentration,
+                "trainable_parameters": sum(
+                    parameter.numel() for parameter in predictor.parameters()
+                ),
+                "initialization_scheme": "shared_direction_gate_order_v2",
             },
             "model_state_dict": predictor.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
@@ -165,6 +128,7 @@ def _save_checkpoint(
                 "pretrained": pretrained,
                 "frozen_clip": True,
                 "num_components": predictor.num_components,
+                "initialization_scheme": "shared_direction_gate_order_v2",
                 "objective": OBJECTIVE_NAME,
                 "ablation_stage": str(args.ablation_stage),
                 "log_normalizer": LOG_NORMALIZER_VERSION,
@@ -492,7 +456,7 @@ def main(args: DictConfig) -> None:
                 non_blocking=non_blocking,
             )
             sketch_embeddings, positive_embeddings, negative_embeddings = (
-                _encode_multi_positive_images(
+                encode_multi_positive_images(
                     encoder,
                     sketch_images,
                     positive_images,
@@ -506,7 +470,11 @@ def main(args: DictConfig) -> None:
                 raw_prediction,
                 step=step,
                 warmup_steps=int(args.warmup_steps),
-                initial_concentration=predictor.initial_concentration,
+                warmup_concentration=(
+                    predictor.fixed_concentration
+                    if predictor.concentration_mode == "fixed"
+                    else predictor.initial_concentration
+                ),
                 gate_temperature_start=float(args.gate_temperature_start),
                 gate_temperature_anneal_steps=int(args.gate_temperature_anneal_steps),
                 warmup_dominant_weight=(
@@ -634,8 +602,8 @@ def main(args: DictConfig) -> None:
                     name: value / window_count for name, value in window_sums.items()
                 }
                 temperature_text = (
-                    "uniform"
-                    if math.isinf(gate_temperature)
+                    "warmup_fixed_prior"
+                    if in_warmup
                     else f"{gate_temperature:.2f}"
                 )
                 print(

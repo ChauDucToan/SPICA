@@ -1,18 +1,14 @@
 defaults:
   - _self_
 
-experiment_name: train_stageE_no_vmf_k3_m3_b32
+experiment_name: train_stageE_k1_semantic_core_b32
 data_config: configs/data/sketchy_104_21.yaml
 model_name: ViT-B-32-quickgelu
 pretrained: openai
 device: auto
 embedding_dim: 512
 hidden_dim: 512
-num_components: 3
 num_positive_photos: 3
-routing_mode: none
-assignment_temperature: 0.05
-angular_assignment_weight: 0.0
 batch_size: 32
 num_workers: 4
 pin_memory: true
@@ -20,18 +16,14 @@ drop_last: false
 learning_rate: 0.001
 weight_decay: 0.0001
 margin: 0.2
-target_dominant_weight: 0.8
 consistency_temperature: 0.07
-gate_prior_weight: 0.1
 dominant_sketch_anchor_weight: 0.1
 dominant_photo_anchor_weight: 0.2
 semantic_consistency_weight: 0.05
-satellite_coverage_weight: 0.2
-spread_matching_weight: 0.1
-warmup_steps: 20
-gate_temperature: 1.0
+# K=1 has no gate or concentration to warm up; the relevant warmup is N/A.
+warmup_steps: 0
 max_steps: 100
-log_every: 10
+log_every: 100
 seed: 42
 checkpoint_path: null
 hydra:

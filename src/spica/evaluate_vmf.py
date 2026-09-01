@@ -329,7 +329,7 @@ def main(args: DictConfig) -> None:
     photos = load_encoded_retrieval_set(embedding_dir / "photos.pt")
     if not torch.isfinite(photos.embeddings).all().item():
         raise ValueError("Photo cache contains non-finite embeddings")
-    _validate_zero_shot_split(
+    split_identities = _validate_zero_shot_split(
         data_config_path,
         dataset_name=str(args.dataset_name),
         sketches=sketches,
@@ -418,6 +418,8 @@ def main(args: DictConfig) -> None:
                 "ranking_semantics": "equivalent_to_cosine_of_mean_direction",
                 "checkpoint": str(checkpoint_path),
                 "checkpoint_step": int(checkpoint["step"]),
+                "split_identities": split_identities,
+                "map_at_k_denominator": str(args.map_at_k_denominator),
                 "sketch_only": _metrics_dict(baseline),
                 "k1_vmf": _metrics_dict(vmf),
                 "delta_mAP": vmf.mean_average_precision

@@ -6,6 +6,31 @@ from spica.models.vmf import (
     dominant_satellite_regularization,
     mo_vmf_multi_positive_retrieval_loss,
 )
+from spica.train_movmf_ablation import _scheduled_prediction
+
+
+def test_fixed_kappa_warmup_uses_fixed_value():
+    raw = MoVmfPrediction(
+        mean_directions=F.normalize(torch.randn(2, 3, 8), dim=-1),
+        concentrations=torch.full((2, 3), 64.0),
+        mixture_logits=torch.zeros(2, 3),
+    )
+    scheduled, temperature, in_warmup = _scheduled_prediction(
+        raw,
+        step=0,
+        warmup_steps=20,
+        warmup_concentration=128.0,
+        gate_temperature_start=1.0,
+        gate_temperature_anneal_steps=50,
+        warmup_dominant_weight=0.8,
+    )
+    assert in_warmup
+    assert temperature == float("inf")
+    assert torch.allclose(scheduled.concentrations, torch.full((2, 3), 128.0))
+    assert torch.allclose(
+        scheduled.mixture_logits.softmax(dim=-1),
+        torch.tensor([[0.8, 0.1, 0.1]]).expand(2, -1),
+    )
 
 
 def test_multi_positive_loss_is_finite_and_trains_all_heads() -> None:

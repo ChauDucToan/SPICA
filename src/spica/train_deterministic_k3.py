@@ -21,7 +21,7 @@ from .train_deterministic import (
     _seed_everything,
     _validate_training_options,
 )
-from .train_movmf_ablation import _encode_multi_positive_images
+from .training_utils import encode_multi_positive_images
 
 OBJECTIVE_NAME = "deterministic_k3_multi_positive_gate_barycenter_ranking"
 
@@ -118,13 +118,16 @@ def main(args: DictConfig) -> None:
         weight_decay=float(args.weight_decay),
     )
     non_blocking = device.type == "cuda" and bool(args.pin_memory)
+    # Match the multi-positive controls: randomize model initialization first,
+    # then reset the RNG before creating the loader iterator/sampling stream.
+    _seed_everything(int(args.seed))
     step = 0
     predictor.train()
     while step < int(args.max_steps):
         for batch in loader:
             if torch.eq(batch["label"], batch["negative_label"]).any().item():
                 raise RuntimeError("Training batch contains a same-class negative")
-            sketch, positives, negative = _encode_multi_positive_images(
+            sketch, positives, negative = encode_multi_positive_images(
                 clip.encoder,
                 batch["sketch"].to(device, non_blocking=non_blocking),
                 batch["positive_photos"].to(device, non_blocking=non_blocking),

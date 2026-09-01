@@ -15,6 +15,7 @@ from .evaluate_deterministic import (
     _validate_provenance,
     _validate_zero_shot_split,
 )
+from .evaluate_deterministic_k3 import _evaluate_score_matrix
 from .evaluate_vmf import (
     _average_ranks,
     _concentration_statistics,
@@ -572,9 +573,32 @@ def main(args: DictConfig) -> None:
         raise ValueError(f"num_components must be at least 1, got {num_components}")
     if not ks or any(k <= 0 for k in ks):
         raise ValueError(f"precision_at_k must contain positive integers, got {ks}")
-    if scoring_rule not in {"density", "semantic_barycenter", "dominant"}:
+    supported_scoring_rules = {
+        "density",
+        "semantic_barycenter",
+        "uniform_barycenter",
+        "dominant",
+        "max_component",
+        "max_directional",
+        "gate_weighted_directional",
+        "angular_logsumexp",
+    }
+    component_rule = scoring_rule.startswith("component_")
+    if component_rule:
+        try:
+            component_index = int(scoring_rule.removeprefix("component_"))
+        except ValueError as error:
+            raise ValueError(
+                "component scoring_rule must be component_0, component_1, ..."
+            ) from error
+        if component_index < 0 or component_index >= num_components:
+            raise ValueError(
+                f"component index must be in [0, {num_components - 1}]"
+            )
+    if scoring_rule not in supported_scoring_rules and not component_rule:
         raise ValueError(
-            "scoring_rule must be density, semantic_barycenter, or dominant"
+            "unsupported scoring_rule; expected one of "
+            f"{sorted(supported_scoring_rules)} or component_i, got {scoring_rule!r}"
         )
     if not map_ks or any(k <= 0 for k in map_ks):
         raise ValueError(f"map_at_k must contain positive integers, got {map_ks}")
@@ -597,7 +621,7 @@ def main(args: DictConfig) -> None:
     photos = load_encoded_retrieval_set(embedding_dir / "photos.pt")
     if not torch.isfinite(photos.embeddings).all().item():
         raise ValueError("Photo cache contains non-finite embeddings")
-    _validate_zero_shot_split(
+    split_identities = _validate_zero_shot_split(
         data_config_path,
         dataset_name=str(args.dataset_name),
         sketches=sketches,
@@ -627,6 +651,7 @@ def main(args: DictConfig) -> None:
         photos,
         precision_at_k=ks,
         map_at_k=map_ks,
+        map_at_k_denominator=str(args.map_at_k_denominator),
         query_chunk_size=int(args.baseline_query_chunk_size),
         top_k=max(max(ks), *map_ks),
         device=device,
@@ -645,32 +670,87 @@ def main(args: DictConfig) -> None:
         )
         ranking_semantics = "normalized_score_preserves_mixture_density_order"
     else:
+        probabilities = prediction.mixture_logits.softmax(dim=-1)
+        vector_query_embeddings: torch.Tensor | None = None
         if scoring_rule == "semantic_barycenter":
-            probabilities = prediction.mixture_logits.softmax(dim=-1)
-            query_embeddings = F.normalize(
+            vector_query_embeddings = F.normalize(
                 (probabilities[:, :, None] * prediction.mean_directions).sum(dim=1),
                 dim=-1,
             )
             ranking_semantics = "cosine_of_gate_weighted_semantic_barycenter"
-        else:
-            query_embeddings = prediction.mean_directions[:, 0]
+        elif scoring_rule == "uniform_barycenter":
+            vector_query_embeddings = F.normalize(
+                prediction.mean_directions.mean(dim=1),
+                dim=-1,
+            )
+            ranking_semantics = "cosine_of_uniform_directional_barycenter"
+        elif scoring_rule == "dominant":
+            vector_query_embeddings = prediction.mean_directions[:, 0]
             ranking_semantics = "cosine_of_fixed_dominant_component"
-        scoring_queries = EncodedRetrievalSet(
-            embeddings=query_embeddings,
-            labels=sketches.labels,
-            paths=sketches.paths,
-            metadata={**sketches.metadata, "representation": scoring_rule},
-        )
-        movmf_evaluation = evaluate_category_retrieval(
-            scoring_queries,
-            photos,
-            precision_at_k=ks,
-            map_at_k=map_ks,
-            map_at_k_denominator=str(args.map_at_k_denominator),
-            query_chunk_size=int(args.baseline_query_chunk_size),
-            top_k=max(max(ks), *map_ks),
-            device=device,
-        )
+        elif scoring_rule.startswith("component_"):
+            try:
+                component = int(scoring_rule.removeprefix("component_"))
+            except ValueError as error:
+                raise ValueError(
+                    "component scoring_rule must be component_0, component_1, ..."
+                ) from error
+            if component not in range(num_components):
+                raise ValueError(
+                    f"component index must be in [0, {num_components - 1}]"
+                )
+            vector_query_embeddings = prediction.mean_directions[:, component]
+            ranking_semantics = f"cosine_of_component_{component}"
+
+        if vector_query_embeddings is not None:
+            scoring_queries = EncodedRetrievalSet(
+                embeddings=vector_query_embeddings,
+                labels=sketches.labels,
+                paths=sketches.paths,
+                metadata={**sketches.metadata, "representation": scoring_rule},
+            )
+            movmf_evaluation = evaluate_category_retrieval(
+                scoring_queries,
+                photos,
+                precision_at_k=ks,
+                map_at_k=map_ks,
+                map_at_k_denominator=str(args.map_at_k_denominator),
+                query_chunk_size=int(args.baseline_query_chunk_size),
+                top_k=max(max(ks), *map_ks),
+                device=device,
+            )
+        else:
+            gallery_embeddings = F.normalize(photos.embeddings.to(device), dim=-1)
+            score_batches: list[torch.Tensor] = []
+            temperature = float(args.temperature)
+            if scoring_rule == "angular_logsumexp" and temperature <= 0:
+                raise ValueError("temperature must be positive for angular_logsumexp")
+            for start in range(0, prediction.mean_directions.shape[0], int(args.query_chunk_size)):
+                stop = min(start + int(args.query_chunk_size), prediction.mean_directions.shape[0])
+                directions = prediction.mean_directions[start:stop].to(device)
+                cosine = torch.einsum("bkd,gd->bkg", directions, gallery_embeddings)
+                if scoring_rule in {"max_component", "max_directional"}:
+                    scores = cosine.max(dim=1).values
+                    ranking_semantics = "max_over_component_cosines"
+                elif scoring_rule == "gate_weighted_directional":
+                    weights = probabilities[start:stop].to(device)
+                    scores = (weights[:, :, None] * cosine).sum(dim=1)
+                    ranking_semantics = "gate_weighted_component_cosines"
+                elif scoring_rule == "angular_logsumexp":
+                    scores = temperature * torch.logsumexp(cosine / temperature, dim=1)
+                    ranking_semantics = "angular_logsumexp_of_component_cosines"
+                else:
+                    raise ValueError(f"unsupported non-vector scoring_rule: {scoring_rule}")
+                score_batches.append(scores.cpu())
+            score_matrix = torch.cat(score_batches, dim=0)
+            # Reuse the deterministic score-matrix evaluator; it only consumes
+            # scores and labels and does not introduce any vMF machinery.
+            movmf_evaluation = _evaluate_score_matrix(
+                score_matrix,
+                sketches.labels,
+                photos,
+                args,
+                device,
+            )
     component_stats = _component_statistics(
         prediction,
         movmf_evaluation.average_precision_per_query,
@@ -724,6 +804,7 @@ def main(args: DictConfig) -> None:
                 "map_at_k_denominator": str(args.map_at_k_denominator),
                 "checkpoint": str(checkpoint_path),
                 "checkpoint_step": int(checkpoint["step"]),
+                "split_identities": split_identities,
                 "training_metadata": checkpoint["metadata"],
                 "sketch_only": _metrics_dict(baseline),
                 "mo_vmf": _metrics_dict(movmf),
