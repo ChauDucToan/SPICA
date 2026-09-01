@@ -128,6 +128,12 @@ def _load_predictor(
                 if model_config.get("initial_dominant_weight") is None
                 else float(model_config["initial_dominant_weight"])
             ),
+            concentration_mode=str(model_config.get("concentration_mode", "learned")),
+            fixed_concentration=(
+                None
+                if model_config.get("fixed_concentration") is None
+                else float(model_config["fixed_concentration"])
+            ),
         )
     except KeyError as error:
         raise ValueError(
@@ -226,6 +232,7 @@ def _evaluate_movmf_retrieval(
     top_k: int,
     device: torch.device,
     map_at_k: tuple[int, ...] = (),
+    map_at_k_denominator: str = "prefix_positive",
 ) -> CategoryRetrievalEvaluation:
     if query_chunk_size <= 0:
         raise ValueError(f"query_chunk_size must be positive, got {query_chunk_size}")
@@ -296,7 +303,10 @@ def _evaluate_movmf_retrieval(
             )
 
         average_precision, truncated = _average_precision_from_relevance(
-            relevant, rank_positions, map_ks
+            relevant,
+            rank_positions,
+            map_ks,
+            map_at_k_denominator=map_at_k_denominator,
         )
         average_precision_batches.append(average_precision.cpu())
         for k, values in truncated.items():
@@ -628,6 +638,7 @@ def main(args: DictConfig) -> None:
             photos,
             precision_at_k=ks,
             map_at_k=map_ks,
+            map_at_k_denominator=str(args.map_at_k_denominator),
             query_chunk_size=int(args.query_chunk_size),
             top_k=max(max(ks), *map_ks),
             device=device,
@@ -655,6 +666,7 @@ def main(args: DictConfig) -> None:
             photos,
             precision_at_k=ks,
             map_at_k=map_ks,
+            map_at_k_denominator=str(args.map_at_k_denominator),
             query_chunk_size=int(args.baseline_query_chunk_size),
             top_k=max(max(ks), *map_ks),
             device=device,
@@ -709,6 +721,7 @@ def main(args: DictConfig) -> None:
                 "num_components": num_components,
                 "scoring_rule": scoring_rule,
                 "ranking_semantics": ranking_semantics,
+                "map_at_k_denominator": str(args.map_at_k_denominator),
                 "checkpoint": str(checkpoint_path),
                 "checkpoint_step": int(checkpoint["step"]),
                 "training_metadata": checkpoint["metadata"],

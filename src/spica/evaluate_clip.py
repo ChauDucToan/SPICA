@@ -65,7 +65,12 @@ def main(argv: list[str] | None = None) -> None:
     device = _resolve_device(args.device)
     config = load_data_config(args.data_config)
     precision_at_k = tuple(args.precision_at_k)
-    stored_top_k = max(max(precision_at_k), args.wandb_table_results)
+    map_at_k = tuple(args.map_at_k)
+    if not precision_at_k or any(k <= 0 for k in precision_at_k):
+        raise ValueError("precision_at_k must contain positive integers")
+    if any(k <= 0 for k in map_at_k):
+        raise ValueError("map_at_k must contain positive integers")
+    stored_top_k = max(max(precision_at_k), *map_at_k, args.wandb_table_results)
 
     run_config = {
         "dataset": config.name,
@@ -78,6 +83,8 @@ def main(argv: list[str] | None = None) -> None:
         "num_workers": args.num_workers,
         "query_chunk_size": args.query_chunk_size,
         "precision_at_k": list(precision_at_k),
+        "map_at_k": list(map_at_k),
+        "map_at_k_denominator": args.map_at_k_denominator,
         "seed": args.seed,
     }
 
@@ -122,6 +129,8 @@ def main(argv: list[str] | None = None) -> None:
             sketches,
             photos,
             precision_at_k=precision_at_k,
+            map_at_k=map_at_k,
+            map_at_k_denominator=args.map_at_k_denominator,
             query_chunk_size=args.query_chunk_size,
             top_k=stored_top_k,
             device=device,

@@ -29,6 +29,10 @@ map_at_k:
   - 5
   - 10
   - 100
+  - 200
+# Historical SPICA AP@K uses positives found in the prefix. Set to
+# all_relevant or min_relevant_k for protocol auditing.
+map_at_k_denominator: prefix_positive
 
 hydra:
   job:

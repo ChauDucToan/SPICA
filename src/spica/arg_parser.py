@@ -58,6 +58,19 @@ def build_parser() -> ArgumentParser:
         help="K values used for Precision@K.",
     )
     parser.add_argument(
+        "--map-at-k",
+        type=int,
+        nargs="+",
+        default=(),
+        help="K values used for truncated mAP@K.",
+    )
+    parser.add_argument(
+        "--map-at-k-denominator",
+        choices=("prefix_positive", "all_relevant", "min_relevant_k"),
+        default="prefix_positive",
+        help="Denominator convention for truncated mAP@K.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         help="Optional directory for cached sketch and photo embeddings.",

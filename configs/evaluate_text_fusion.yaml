@@ -40,6 +40,9 @@ precision_at_k:
   - 10
   - 100
   - 200
+map_at_k:
+  - 200
+map_at_k_denominator: prefix_positive
 
 query_chunk_size: 256
 allow_legacy_cache: false

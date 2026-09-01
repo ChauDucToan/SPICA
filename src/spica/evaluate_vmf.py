@@ -363,6 +363,7 @@ def main(args: DictConfig) -> None:
     evaluation_options = {
         "precision_at_k": ks,
         "map_at_k": tuple(int(k) for k in args.map_at_k),
+        "map_at_k_denominator": str(args.map_at_k_denominator),
         "query_chunk_size": int(args.query_chunk_size),
         "top_k": max(max(ks), *(int(k) for k in args.map_at_k)),
         "device": device,

@@ -228,13 +228,24 @@ class VmfPrediction:
 class DeterministicK3PhotoPredictor(nn.Module):
     """Three normalized deterministic directions and learned gate logits."""
 
-    def __init__(self, embedding_dim: int = 512, hidden_dim: int = 512) -> None:
+    def __init__(
+        self,
+        embedding_dim: int = 512,
+        hidden_dim: int = 512,
+        *,
+        initial_dominant_weight: float | None = None,
+    ) -> None:
         super().__init__()
         if embedding_dim <= 0 or hidden_dim <= 0:
             raise ValueError("embedding_dim and hidden_dim must be positive")
         self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.num_components = 3
+        if initial_dominant_weight is not None and not (
+            1.0 / self.num_components < initial_dominant_weight < 1.0
+        ):
+            raise ValueError("initial_dominant_weight must be in (1/3, 1)")
+        self.initial_dominant_weight = initial_dominant_weight
         direction_output = nn.Linear(hidden_dim, 3 * embedding_dim)
         nn.init.normal_(direction_output.weight, std=1e-4)
         nn.init.zeros_(direction_output.bias)
@@ -246,7 +257,13 @@ class DeterministicK3PhotoPredictor(nn.Module):
         )
         gate_output = nn.Linear(hidden_dim, 3)
         nn.init.zeros_(gate_output.weight)
-        nn.init.zeros_(gate_output.bias)
+        if initial_dominant_weight is None:
+            nn.init.zeros_(gate_output.bias)
+        else:
+            satellite_weight = (1.0 - initial_dominant_weight) / 2.0
+            nn.init.constant_(gate_output.bias, log(satellite_weight))
+            with torch.no_grad():
+                gate_output.bias[0] = log(initial_dominant_weight)
         self.gate_head = nn.Sequential(
             nn.LayerNorm(embedding_dim),
             nn.Linear(embedding_dim, hidden_dim),
@@ -274,6 +291,84 @@ class DeterministicK3PhotoPredictor(nn.Module):
 
 # Short name for the new control's public API.
 DeterministicK3Predictor = DeterministicK3PhotoPredictor
+
+
+@dataclass(frozen=True, slots=True)
+class DeterministicDominantSatelliteRegularization:
+    gate_prior: Tensor
+    dominant_sketch_anchor: Tensor
+    dominant_photo_anchor: Tensor
+    semantic_consistency: Tensor
+    satellite_coverage: Tensor
+    spread_matching: Tensor
+    semantic_center: Tensor
+
+
+def deterministic_dominant_satellite_regularization(
+    prediction: DeterministicK3Prediction,
+    sketch_embeddings: Tensor,
+    positive_embeddings: Tensor,
+    *,
+    target_dominant_weight: float = 0.8,
+    consistency_temperature: float = 0.07,
+) -> DeterministicDominantSatelliteRegularization:
+    """Stage-E dominant/satellite terms without concentrations or vMF terms."""
+    directions = F.normalize(prediction.directions, dim=-1)
+    if directions.shape[1] < 2 or positive_embeddings.ndim != 3:
+        raise ValueError("deterministic dominant/satellite inputs have invalid shapes")
+    if positive_embeddings.shape[1] < 2:
+        raise ValueError("deterministic dominant/satellite regularization requires M >= 2")
+    if sketch_embeddings.shape != directions.shape[:1] + directions.shape[2:]:
+        raise ValueError("sketch_embeddings shape must match [B, D]")
+    if not 1.0 / directions.shape[1] < target_dominant_weight < 1.0:
+        raise ValueError("target_dominant_weight must be between 1/K and 1")
+    if consistency_temperature <= 0:
+        raise ValueError("consistency_temperature must be positive")
+
+    sketch = F.normalize(sketch_embeddings, dim=-1)
+    positives = F.normalize(positive_embeddings, dim=-1)
+    log_probabilities = prediction.gate_logits.log_softmax(dim=-1)
+    probabilities = log_probabilities.exp()
+    satellites = (1.0 - target_dominant_weight) / (directions.shape[1] - 1)
+    target = probabilities.new_full((directions.shape[1],), satellites)
+    target[0] = target_dominant_weight
+    gate_prior = (target * (target.log() - log_probabilities)).sum(dim=-1).mean()
+    dominant = directions[:, 0]
+    dominant_sketch_anchor = (1.0 - (dominant * sketch).sum(dim=-1)).mean()
+    centroid = F.normalize(positives.mean(dim=1), dim=-1)
+    dominant_photo_anchor = (1.0 - (dominant * centroid).sum(dim=-1)).mean()
+    semantic_center = F.normalize((probabilities[..., None] * directions).sum(dim=1), dim=-1)
+    logits = semantic_center @ sketch.T / consistency_temperature
+    labels = torch.arange(logits.shape[0], device=logits.device)
+    semantic_consistency = 0.5 * (
+        F.cross_entropy(logits, labels) + F.cross_entropy(logits.T, labels)
+    )
+    # This is the deterministic angular assignment: each satellite selects its
+    # closest positive photo, rather than receiving a vMF posterior.
+    satellite_cosines = (directions[:, 1:, None, :] * positives[:, None, :, :]).sum(dim=-1)
+    satellite_coverage = (1.0 - satellite_cosines.max(dim=-1).values).mean()
+    positive_pairs = torch.triu_indices(
+        positives.shape[1], positives.shape[1], offset=1, device=positives.device
+    )
+    target_spread = (
+        positives[:, positive_pairs[0], :] * positives[:, positive_pairs[1], :]
+    ).sum(dim=-1).mean(dim=-1)
+    component_pairs = torch.triu_indices(
+        directions.shape[1], directions.shape[1], offset=1, device=directions.device
+    )
+    component_cosines = (
+        directions[:, component_pairs[0], :] * directions[:, component_pairs[1], :]
+    ).sum(dim=-1)
+    spread_matching = (component_cosines - target_spread[:, None]).square().mean()
+    return DeterministicDominantSatelliteRegularization(
+        gate_prior=gate_prior,
+        dominant_sketch_anchor=dominant_sketch_anchor,
+        dominant_photo_anchor=dominant_photo_anchor,
+        semantic_consistency=semantic_consistency,
+        satellite_coverage=satellite_coverage,
+        spread_matching=spread_matching,
+        semantic_center=semantic_center,
+    )
 
 
 class K1VmfPhotoPredictor(nn.Module):
@@ -362,6 +457,8 @@ class MoVmfPhotoPredictor(nn.Module):
         initial_concentration: float = 512.0,
         component_init_std: float = 1e-4,
         initial_dominant_weight: float | None = None,
+        concentration_mode: str = "learned",
+        fixed_concentration: float | None = None,
     ) -> None:
         super().__init__()
         if embedding_dim <= 0:
@@ -392,6 +489,24 @@ class MoVmfPhotoPredictor(nn.Module):
                 "component_init_std must be finite and positive, "
                 f"got {component_init_std}"
             )
+        if concentration_mode not in {"learned", "fixed"}:
+            raise ValueError(
+                "concentration_mode must be 'learned' or 'fixed', "
+                f"got {concentration_mode!r}"
+            )
+        if concentration_mode == "fixed":
+            if fixed_concentration is None or not isfinite(fixed_concentration):
+                raise ValueError(
+                    "fixed_concentration must be finite when concentration_mode='fixed'"
+                )
+            if not min_concentration < fixed_concentration <= max_concentration:
+                raise ValueError(
+                    "fixed_concentration must be within the configured concentration bounds"
+                )
+        elif fixed_concentration is not None:
+            raise ValueError(
+                "fixed_concentration is only valid when concentration_mode='fixed'"
+            )
         if initial_dominant_weight is not None:
             if num_components < 2:
                 raise ValueError(
@@ -413,6 +528,8 @@ class MoVmfPhotoPredictor(nn.Module):
         self.initial_concentration = initial_concentration
         self.component_init_std = component_init_std
         self.initial_dominant_weight = initial_dominant_weight
+        self.concentration_mode = concentration_mode
+        self.fixed_concentration = fixed_concentration
 
         direction_output = nn.Linear(
             hidden_dim,
@@ -427,19 +544,20 @@ class MoVmfPhotoPredictor(nn.Module):
             direction_output,
         )
 
-        concentration_output = nn.Linear(hidden_dim, num_components)
-        nn.init.zeros_(concentration_output.weight)
-        initial_fraction = (initial_concentration - min_concentration) / (
-            max_concentration - min_concentration
-        )
-        initial_raw = log(initial_fraction / (1.0 - initial_fraction))
-        nn.init.constant_(concentration_output.bias, initial_raw)
-        self.concentration_head = nn.Sequential(
-            nn.LayerNorm(embedding_dim),
-            nn.Linear(embedding_dim, hidden_dim),
-            nn.GELU(),
-            concentration_output,
-        )
+        if concentration_mode == "learned":
+            concentration_output = nn.Linear(hidden_dim, num_components)
+            nn.init.zeros_(concentration_output.weight)
+            initial_fraction = (initial_concentration - min_concentration) / (
+                max_concentration - min_concentration
+            )
+            initial_raw = log(initial_fraction / (1.0 - initial_fraction))
+            nn.init.constant_(concentration_output.bias, initial_raw)
+            self.concentration_head = nn.Sequential(
+                nn.LayerNorm(embedding_dim),
+                nn.Linear(embedding_dim, hidden_dim),
+                nn.GELU(),
+                concentration_output,
+            )
 
         mixture_output = nn.Linear(hidden_dim, num_components)
         nn.init.zeros_(mixture_output.weight)
@@ -482,12 +600,20 @@ class MoVmfPhotoPredictor(nn.Module):
             sketch_embeddings[:, None, :] + residuals,
             dim=-1,
         )
-        raw_concentrations = self.concentration_head(sketch_embeddings)
-        concentrations = (
-            self.min_concentration
-            + (self.max_concentration - self.min_concentration)
-            * raw_concentrations.sigmoid()
-        )
+        if self.concentration_mode == "learned":
+            raw_concentrations = self.concentration_head(sketch_embeddings)
+            concentrations = (
+                self.min_concentration
+                + (self.max_concentration - self.min_concentration)
+                * raw_concentrations.sigmoid()
+            )
+        else:
+            concentrations = torch.full(
+                (batch_size, self.num_components),
+                self.fixed_concentration,
+                dtype=sketch_embeddings.dtype,
+                device=sketch_embeddings.device,
+            )
         mixture_logits = self.mixture_head(sketch_embeddings)
         return MoVmfPrediction(
             mean_directions=mean_directions,

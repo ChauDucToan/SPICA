@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
@@ -45,17 +46,30 @@ class CategoryRetrievalEvaluation:
     top_scores: Tensor
 
 
-def _average_precision_from_relevance(
-    relevant: Tensor, rank_positions: Tensor, cutoffs: tuple[int, ...]
-) -> tuple[Tensor, dict[int, Tensor]]:
-    """Compute full AP and truncated AP using the standard retrieval convention.
+MapAtKDenominator = Literal["prefix_positive", "all_relevant", "min_relevant_k"]
 
-    Full AP divides by all relevant gallery items.  AP@K is AP on the ranked
-    prefix of length K, so its denominator is the number of relevant items in
-    that prefix (the same convention as ``average_precision_score`` applied to
-    the truncated ranking).  A query with no relevant item in the prefix gets
-    AP@K = 0 rather than NaN.
+
+def _average_precision_from_relevance(
+    relevant: Tensor,
+    rank_positions: Tensor,
+    cutoffs: tuple[int, ...],
+    *,
+    map_at_k_denominator: MapAtKDenominator = "prefix_positive",
+) -> tuple[Tensor, dict[int, Tensor]]:
+    """Compute full AP and explicitly named AP@K conventions.
+
+    ``prefix_positive`` is the historical repository metric: AP is computed
+    on the returned prefix and divided by positives found in that prefix.
+    ``all_relevant`` keeps the full-gallery number of relevant items in the
+    denominator, while ``min_relevant_k`` uses ``min(R, K)``.  The latter two
+    variants are useful for auditing benchmark protocols; the default is kept
+    for backward compatibility with existing artifacts.
     """
+    if map_at_k_denominator not in {"prefix_positive", "all_relevant", "min_relevant_k"}:
+        raise ValueError(
+            "map_at_k_denominator must be 'prefix_positive', 'all_relevant', "
+            f"or 'min_relevant_k', got {map_at_k_denominator!r}"
+        )
     relevant_float = relevant.float()
     precision_at_rank = relevant_float.cumsum(dim=1) / rank_positions
     num_positives = relevant_float.sum(dim=1)
@@ -64,10 +78,18 @@ def _average_precision_from_relevance(
     for k in cutoffs:
         prefix_relevance = relevant_float[:, :k]
         prefix_precision = precision_at_rank[:, :k]
-        prefix_positives = prefix_relevance.sum(dim=1)
+        if map_at_k_denominator == "prefix_positive":
+            denominator = prefix_relevance.sum(dim=1)
+        elif map_at_k_denominator == "all_relevant":
+            denominator = num_positives
+        else:
+            denominator = torch.minimum(
+                num_positives,
+                torch.full_like(num_positives, k),
+            )
         truncated[k] = (prefix_precision * prefix_relevance).sum(
             dim=1
-        ) / prefix_positives.clamp_min(1)
+        ) / denominator.clamp_min(1)
     return full, truncated
 
 
@@ -80,6 +102,7 @@ def evaluate_category_retrieval(
     map_at_k: tuple[int, ...] = (),
     query_chunk_size: int = 256,
     top_k: int | None = None,
+    map_at_k_denominator: MapAtKDenominator = "prefix_positive",
     device: str | torch.device = "cpu",
 ) -> CategoryRetrievalEvaluation:
     if queries.embeddings.shape[1] != gallery.embeddings.shape[1]:
@@ -146,7 +169,10 @@ def evaluate_category_retrieval(
                 f"{(local_indices + start).tolist()}"
             )
         average_precision, truncated = _average_precision_from_relevance(
-            relevant, rank_positions, map_ks
+            relevant,
+            rank_positions,
+            map_ks,
+            map_at_k_denominator=map_at_k_denominator,
         )
         average_precision_batches.append(average_precision.cpu())
         for k, values in truncated.items():

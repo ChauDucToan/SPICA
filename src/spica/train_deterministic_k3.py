@@ -66,6 +66,7 @@ def _save_checkpoint(
                 "diversity_weight": float(args.diversity_weight),
                 "seed": int(args.seed),
                 "max_steps": int(args.max_steps),
+                "map_at_k_denominator": "prefix_positive",
             },
         },
         path,

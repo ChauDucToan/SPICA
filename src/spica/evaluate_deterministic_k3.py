@@ -29,6 +29,7 @@ from .train_deterministic import HYDRA_CONFIG_DIR
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OBJECTIVE_NAME = "deterministic_k3_multi_positive_gate_barycenter_ranking"
+SUPPORTED_OBJECTIVES = {OBJECTIVE_NAME, "deterministic_k3_stageE_no_vmf"}
 
 
 def _load_predictor(path: Path, device: torch.device):
@@ -60,7 +61,7 @@ def _load_predictor(path: Path, device: torch.device):
         raise TypeError("K3 checkpoint model_config and metadata must be dictionaries")
     if config.get("num_components") != 3 or metadata.get("num_components") != 3:
         raise ValueError("Deterministic K3 checkpoint must contain three components")
-    if metadata.get("objective") != OBJECTIVE_NAME:
+    if metadata.get("objective") not in SUPPORTED_OBJECTIVES:
         raise ValueError(
             f"Unsupported deterministic K3 objective: {metadata.get('objective')!r}"
         )
@@ -139,6 +140,7 @@ def _evaluate_mode(directions, gates, sketches, photos, args, device):
             photos,
             precision_at_k=tuple(int(k) for k in args.precision_at_k),
             map_at_k=tuple(int(k) for k in args.map_at_k),
+            map_at_k_denominator=str(args.map_at_k_denominator),
             query_chunk_size=int(args.query_chunk_size),
             top_k=max(
                 max(int(k) for k in args.precision_at_k),
@@ -155,6 +157,7 @@ def _evaluate_mode(directions, gates, sketches, photos, args, device):
             photos,
             precision_at_k=tuple(int(k) for k in args.precision_at_k),
             map_at_k=tuple(int(k) for k in args.map_at_k),
+            map_at_k_denominator=str(args.map_at_k_denominator),
             query_chunk_size=int(args.query_chunk_size),
             top_k=max(
                 max(int(k) for k in args.precision_at_k),
@@ -267,7 +270,7 @@ def main(args: DictConfig) -> None:
             "test_labels_used_for_scoring": False,
         },
         "model": "deterministic_k3",
-        "objective": OBJECTIVE_NAME,
+        "objective": checkpoint.get("metadata", {}).get("objective", OBJECTIVE_NAME),
         "scoring_mode": str(args.scoring_mode),
         "temperature": float(args.temperature),
         "checkpoint": str(checkpoint_path),

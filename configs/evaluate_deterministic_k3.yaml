@@ -15,6 +15,9 @@ prediction_batch_size: 2048
 query_chunk_size: 256
 precision_at_k: [1, 5, 10, 100]
 map_at_k: [200]
+# Historical SPICA AP@K uses positives found in the prefix. Set to
+# all_relevant or min_relevant_k for protocol auditing.
+map_at_k_denominator: prefix_positive
 hydra:
   job:
     chdir: false

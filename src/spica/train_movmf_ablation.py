@@ -153,6 +153,8 @@ def _save_checkpoint(
                 "initial_concentration": predictor.initial_concentration,
                 "component_init_std": predictor.component_init_std,
                 "initial_dominant_weight": predictor.initial_dominant_weight,
+                "concentration_mode": predictor.concentration_mode,
+                "fixed_concentration": predictor.fixed_concentration,
             },
             "model_state_dict": predictor.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
@@ -407,6 +409,12 @@ def main(args: DictConfig) -> None:
             None
             if args.initial_dominant_weight is None
             else float(args.initial_dominant_weight)
+        ),
+        concentration_mode=str(args.concentration_mode),
+        fixed_concentration=(
+            None
+            if args.fixed_concentration is None
+            else float(args.fixed_concentration)
         ),
     ).to(device)
     optimizer = torch.optim.AdamW(

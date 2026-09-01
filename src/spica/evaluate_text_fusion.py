@@ -163,7 +163,12 @@ def main(args: DictConfig) -> None:
             f"than 0: {temperatures}"
         )
     ks = tuple(sorted({int(k) for k in args.precision_at_k}))
-    stored_top_k = max(ks)
+    map_ks = tuple(sorted({int(k) for k in args.map_at_k}))
+    if not ks or any(k <= 0 for k in ks):
+        raise ValueError("precision_at_k must contain positive integers")
+    if any(k <= 0 for k in map_ks):
+        raise ValueError("map_at_k must contain positive integers")
+    stored_top_k = max(max(ks), *map_ks)
 
     if args.split == "test":
         print(
@@ -183,6 +188,8 @@ def main(args: DictConfig) -> None:
         "fusion_alphas": list(alphas),
         "posterior_temperatures": list(temperatures),
         "precision_at_k": list(ks),
+        "map_at_k": list(map_ks),
+        "map_at_k_denominator": str(args.map_at_k_denominator),
         "query_chunk_size": args.query_chunk_size,
         "seed": args.seed,
         "exploratory_test_sweep": args.split == "test",
@@ -226,6 +233,8 @@ def main(args: DictConfig) -> None:
             sketches,
             photos,
             precision_at_k=ks,
+            map_at_k=map_ks,
+            map_at_k_denominator=str(args.map_at_k_denominator),
             query_chunk_size=args.query_chunk_size,
             top_k=stored_top_k,
             device=device,
@@ -263,6 +272,8 @@ def main(args: DictConfig) -> None:
                 oracle_queries,
                 photos,
                 precision_at_k=ks,
+                map_at_k=map_ks,
+                map_at_k_denominator=str(args.map_at_k_denominator),
                 query_chunk_size=args.query_chunk_size,
                 top_k=stored_top_k,
                 device=device,
@@ -287,6 +298,8 @@ def main(args: DictConfig) -> None:
                 predicted_queries,
                 photos,
                 precision_at_k=ks,
+                map_at_k=map_ks,
+                map_at_k_denominator=str(args.map_at_k_denominator),
                 query_chunk_size=args.query_chunk_size,
                 top_k=stored_top_k,
                 device=device,
@@ -560,6 +573,8 @@ def main(args: DictConfig) -> None:
                     soft_queries,
                     photos,
                     precision_at_k=ks,
+                    map_at_k=map_ks,
+                    map_at_k_denominator=str(args.map_at_k_denominator),
                     query_chunk_size=args.query_chunk_size,
                     top_k=stored_top_k,
                     device=device,

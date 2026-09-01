@@ -18,6 +18,8 @@ max_concentration: 1024.0
 initial_concentration: 64.0
 component_init_std: 0.0001
 initial_dominant_weight: null
+concentration_mode: learned
+fixed_concentration: null
 
 batch_size: 32
 num_workers: 4
