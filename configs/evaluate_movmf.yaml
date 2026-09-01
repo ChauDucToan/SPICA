@@ -1,0 +1,38 @@
+defaults:
+  - _self_
+
+experiment_name: evaluate_movmf_k${num_components}_b32
+
+checkpoint_path: ???
+num_components: ???
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+data_config: configs/data/sketchy_104_21.yaml
+
+dataset_name: sketchy_104_21
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+prediction_batch_size: 512
+query_chunk_size: 64
+baseline_query_chunk_size: 256
+responsibility_query_chunk_size: 64
+precision_at_k:
+  - 1
+  - 5
+  - 10
+  - 100
+  - 200
+
+hydra:
+  job:
+    chdir: false
+
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+
+  sweep:
+    dir: "outputs/experiments/movmf_k_sweep/evaluation/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "K${num_components}"
+
+  output_subdir: .hydra

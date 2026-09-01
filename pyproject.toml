@@ -33,7 +33,13 @@ rocm = [
 
 [project.scripts]
 spica-eval-clip = "spica.evaluate_clip:main"
+spica-eval-deterministic = "spica.evaluate_deterministic:main"
 spica-eval-text-fusion = "spica.evaluate_text_fusion:main"
+spica-eval-vmf = "spica.evaluate_vmf:main"
+spica-eval-movmf = "spica.evaluate_movmf:main"
+spica-train-deterministic = "spica.train_deterministic:main"
+spica-train-vmf = "spica.train_vmf:main"
+spica-train-movmf = "spica.train_movmf:main"
 
 [build-system]
 requires = ["uv_build"]

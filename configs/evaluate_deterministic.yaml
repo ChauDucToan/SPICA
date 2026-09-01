@@ -1,28 +1,25 @@
 defaults:
   - _self_
 
-experiment_name: train_deterministic_smoke
+experiment_name: evaluate_deterministic
 
+checkpoint_path: ???
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
 data_config: configs/data/sketchy_104_21.yaml
+
+dataset_name: sketchy_104_21
 model_name: ViT-B-32-quickgelu
 pretrained: openai
 device: auto
 
-embedding_dim: 512
-hidden_dim: 512
-
-batch_size: 32
-num_workers: 4
-pin_memory: true
-drop_last: false
-
-learning_rate: 0.001
-weight_decay: 0.0001
-margin: 0.2
-max_steps: 100
-log_every: 10
-seed: 42
-checkpoint_path: null
+prediction_batch_size: 2048
+query_chunk_size: 256
+precision_at_k:
+  - 1
+  - 5
+  - 10
+  - 100
+  - 200
 
 hydra:
   job:
