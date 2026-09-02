@@ -13,7 +13,7 @@
 
 ## 2. Repository / Artifact Audit
 - Starting commit: `73ecaea34b43947c520092de1c08f6f5073da2ee`.
-- Current repository commit: `40c9841fe1e477fc23ffb57d64ae5f148feb432e`.
+- Current repository commit: `ad78b664decd326d609ef26cb34e36c7c2337ae5`.
 - Working tree state: **clean**.
 - Summarizer Bug A fixed: best eligible mAP is selected across explicit pseudo-unseen transport runs; the endpoint=0 run is not hidden behind the historical endpoint=1 headline.
 - Summarizer Bug B fixed: K comparisons require `transport_enabled == true`, tangent transport, and matched deterministic conditions; a base-only K=1 run cannot qualify.
@@ -208,7 +208,7 @@
 
 FINAL SPICA DEEP-PROBE VERDICT
 
-Repository commit: 40c9841fe1e477fc23ffb57d64ae5f148feb432e
+Repository commit: ad78b664decd326d609ef26cb34e36c7c2337ae5
 Working tree clean: YES
 
 Broad corrected best pseudo-unseen mAP: 0.6423

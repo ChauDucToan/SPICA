@@ -12,7 +12,7 @@
 
 ## 2. Repository State
 - Starting commit: `73ecaea34b43947c520092de1c08f6f5073da2ee`
-- Current report commit: `40c9841fe1e477fc23ffb57d64ae5f148feb432e`
+- Current report commit: `ad78b664decd326d609ef26cb34e36c7c2337ae5`
 - Working tree clean: NO
 - Source-run commits are reported per artifact; missing provenance is not inferred.
 
@@ -78,7 +78,7 @@
 
 FINAL SPICA CAUSAL VERDICT
 
-Repository commit: 40c9841fe1e477fc23ffb57d64ae5f148feb432e
+Repository commit: ad78b664decd326d609ef26cb34e36c7c2337ae5
 Working tree clean: NO
 
 Best pseudo-unseen mAP: 0.6420

@@ -122789,7 +122789,7 @@
   },
   "report_date": "2026-09-02",
   "repository": {
-    "current_commit": "40c9841fe1e477fc23ffb57d64ae5f148feb432e",
+    "current_commit": "ad78b664decd326d609ef26cb34e36c7c2337ae5",
     "dirty_files": [],
     "source_run_provenance": {
       "outputs/experiments/deep_deterministic_k2/2026-09-02_14-57-35": {
