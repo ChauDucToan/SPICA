@@ -1,3 +1,4 @@
+import inspect
 import math
 
 import torch
@@ -11,11 +12,15 @@ from spica.evaluation.transport import (
     transport_probe_dict,
 )
 from spica.models.clip import FrozenVisualProjection, TrainableSketchHiddenEncoder
+from spica.train_transport import _freeze_encoder
 from spica.models.transport import (
     SpicaPredictiveTransport,
     deterministic_direction_mixture_loss,
     directional_mixture_loss,
+    fixed_origin_transport_target,
+    parallel_transport_tangent,
     photo_transport_target,
+    tangent_projection,
     transport_geometry_loss,
 )
 
@@ -72,6 +77,51 @@ def test_tangent_transport_is_unit_and_orthogonal() -> None:
     assert torch.allclose(prediction.q_hypotheses.norm(dim=-1), torch.ones(5, 2), atol=1e-5)
     tangent_cosine = (prediction.directions * prediction.z0[:, None, :]).sum(dim=-1)
     assert tangent_cosine.abs().max() < 1e-5
+
+
+def test_sphere_tangent_projection_and_parallel_transport() -> None:
+    x = F.normalize(torch.tensor([[1.0, 2.0, 3.0]]), dim=-1)
+    y = F.normalize(torch.tensor([[2.0, -1.0, 4.0]]), dim=-1)
+    v = tangent_projection(torch.tensor([[0.4, -0.2, 0.7]]), x)
+    transported = parallel_transport_tangent(v, x, y)
+    assert torch.allclose((transported * y).sum(dim=-1), torch.zeros(1), atol=1e-6)
+    assert torch.allclose(transported.norm(dim=-1), v.norm(dim=-1), atol=1e-5)
+
+
+def test_parallel_transport_identity_and_fixed_origin_diagnostic() -> None:
+    x = F.normalize(torch.randn(4, 8), dim=-1)
+    v = tangent_projection(torch.randn(4, 8), x)
+    assert torch.allclose(parallel_transport_tangent(v, x, x), v, atol=1e-6)
+    z0 = F.normalize(torch.randn(4, 8), dim=-1)
+    target = F.normalize(torch.randn(4, 8), dim=-1)
+    fixed = fixed_origin_transport_target(x, target, z0)
+    assert torch.allclose(
+        (fixed.direction * z0).sum(dim=-1), torch.zeros(4), atol=1e-5
+    )
+
+
+def test_freeze_after_warmup_disables_encoder_gradients_and_state_updates() -> None:
+    model = _model()
+    model.train()
+    _freeze_encoder(model)
+    assert not any(parameter.requires_grad for parameter in model.sketch_context_encoder.parameters())
+    assert not model.sketch_context_encoder.training
+
+
+def test_text_never_enters_predictor_signature() -> None:
+    assert list(inspect.signature(SpicaPredictiveTransport.forward).parameters) == [
+        "self", "sketch_images"
+    ]
+
+
+def test_base_query_control_is_exactly_z0_and_has_no_transport_gradients() -> None:
+    model = _model()
+    model.transport_enabled = False
+    model.transport_head.requires_grad_(False)
+    output = model(torch.randn(3, 3, 8, 8))
+    assert torch.allclose(output.q, output.z0)
+    assert torch.allclose(output.q_hypotheses[:, 0], output.z0)
+    assert not any(parameter.requires_grad for parameter in model.transport_head.parameters())
 
 
 def test_photo_transport_target_handles_zero_angle() -> None:

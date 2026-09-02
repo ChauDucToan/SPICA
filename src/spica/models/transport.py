@@ -103,6 +103,36 @@ def tangent_projection(vector: Tensor, base: Tensor) -> Tensor:
     return vector - (vector * base_expanded).sum(dim=-1, keepdim=True) * base_expanded
 
 
+def parallel_transport_tangent(
+    vector: Tensor,
+    source: Tensor,
+    destination: Tensor,
+    *,
+    eps: float = 1e-6,
+) -> Tensor:
+    """Parallel-transport a tangent vector between points on a unit sphere.
+
+    The closed form is valid away from antipodal points:
+    ``v - (v·y)/(1+x·y) * (x+y)``.  At the antipodal singularity there is no
+    unique shortest geodesic, so we use the destination tangent projection as
+    a deterministic, numerically safe fallback.
+    """
+    _validate_batch_features("vector", vector, 2)
+    _validate_batch_features("source", source, 2)
+    _validate_batch_features("destination", destination, 2)
+    if vector.shape != source.shape or source.shape != destination.shape:
+        raise ValueError("vector, source, and destination shapes must match")
+    if not math.isfinite(eps) or eps <= 0:
+        raise ValueError("eps must be finite and positive")
+    x = _safe_normalize(source)
+    y = _safe_normalize(destination)
+    v = tangent_projection(vector, x)
+    denominator = 1.0 + (x * y).sum(dim=-1, keepdim=True)
+    transported = v - ((v * y).sum(dim=-1, keepdim=True) / denominator.clamp_min(eps)) * (x + y)
+    fallback = tangent_projection(v, y)
+    return torch.where(denominator > eps, transported, fallback)
+
+
 def _stable_tangent_direction(
     vector: Tensor,
     base: Tensor,
@@ -448,6 +478,7 @@ class SpicaPredictiveTransport(nn.Module):
         max_kappa: float = 2048.0,
         initial_kappa: float = 64.0,
         direction_init_std: float = 1e-3,
+        transport_enabled: bool = True,
     ) -> None:
         super().__init__()
         if transport_mode not in {"residual", "bounded_residual", "tangent"}:
@@ -472,6 +503,7 @@ class SpicaPredictiveTransport(nn.Module):
         self.num_components = num_components
         self.shared_rho = shared_rho
         self.use_vmf = use_vmf
+        self.transport_enabled = transport_enabled
 
         if transport_mode == "residual":
             self.transport_head: nn.Module = ResidualTransportHead(
@@ -506,6 +538,8 @@ class SpicaPredictiveTransport(nn.Module):
                 initial_kappa=initial_kappa,
                 direction_init_std=direction_init_std,
             )
+        if not transport_enabled:
+            self.transport_head.requires_grad_(False)
 
     @property
     def predictor(self) -> nn.Module:
@@ -535,8 +569,19 @@ class SpicaPredictiveTransport(nn.Module):
     def forward(self, sketch_images: Tensor) -> SemanticTransportPrediction:
         h = self.sketch_context_encoder(sketch_images)
         z0 = _safe_normalize(self.photo_projection(h))
-        prediction = self.transport_head(h, z0)
-        return prediction
+        if not self.transport_enabled:
+            # Matched text/no-text base controls still use the same model
+            # wrapper and encoder, but the transport head is not part of the
+            # forward graph or optimizer objective.
+            return SemanticTransportPrediction(
+                h=h,
+                z0=z0,
+                directions=z0[:, None, :],
+                rho=z0.new_zeros((z0.shape[0],)),
+                q_hypotheses=z0[:, None, :],
+                q=z0,
+            )
+        return self.transport_head(h, z0)
 
 
 # Public descriptive aliases used by experiment scripts and downstream code.
@@ -583,6 +628,33 @@ def photo_transport_target(
         theta=theta.detach(),
         direction=direction,
         near_zero=near_zero.detach(),
+    )
+
+
+def fixed_origin_transport_target(
+    z_ref: Tensor,
+    photo_embedding: Tensor,
+    z0: Tensor,
+    *,
+    eps: float = 1e-6,
+) -> GeodesicTransportTarget:
+    """Build a diagnostic target at a frozen origin and move it to ``z0``.
+
+    ``z_ref`` is intentionally diagnostic-only: this function must never be
+    used as a model input.  The angle and cosine remain those measured at the
+    frozen origin; only the tangent direction is parallel-transported to the
+    current model origin so that its cosine with a prediction is well-defined.
+    """
+    fixed = photo_transport_target(z_ref, photo_embedding, eps=eps)
+    moved_direction = parallel_transport_tangent(
+        fixed.direction, z_ref, z0, eps=eps
+    ).detach()
+    return GeodesicTransportTarget(
+        z_photo=fixed.z_photo,
+        cosine=fixed.cosine,
+        theta=fixed.theta,
+        direction=moved_direction,
+        near_zero=fixed.near_zero,
     )
 
 

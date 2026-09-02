@@ -15,6 +15,7 @@ from ..models.transport import (
     SemanticTransportPrediction,
     SpicaPredictiveTransport,
     _relative_log_vmf_normalizer,
+    fixed_origin_transport_target,
     photo_transport_target,
     transport_gallery_scores,
 )
@@ -269,6 +270,46 @@ def evaluate_transport_features(
     return results
 
 
+def evaluate_base_queries(
+    features: TransportFeatureSet,
+    gallery: EncodedRetrievalSet,
+    *,
+    temperature: float = 0.07,
+    precision_at_k: tuple[int, ...] = (1, 5, 10, 100, 200),
+    map_at_k: tuple[int, ...] = (200,),
+    map_at_k_denominator: str = "prefix_positive",
+    query_chunk_size: int = 256,
+    device: torch.device = torch.device("cpu"),
+) -> CategoryRetrievalEvaluation:
+    """Evaluate the untransported ``z0`` on exactly the same gallery.
+
+    This is deliberately a feature-level control rather than a second model
+    forward pass.  It makes ``mAP(q) - mAP(z0)`` an apples-to-apples causal
+    transport gain at every checkpoint.
+    """
+    base = TransportFeatureSet(
+        h=features.h,
+        z0=features.z0,
+        directions=features.z0[:, None, :],
+        rho=features.z0.new_zeros(features.z0.shape[0]),
+        q_hypotheses=features.z0[:, None, :],
+        q=features.z0,
+        labels=features.labels,
+        paths=features.paths,
+    )
+    return _evaluate_score_chunks(
+        base,
+        gallery,
+        mode="barycentric",
+        temperature=temperature,
+        precision_at_k=precision_at_k,
+        map_at_k=map_at_k,
+        map_at_k_denominator=map_at_k_denominator,
+        query_chunk_size=query_chunk_size,
+        device=device,
+    )
+
+
 def _class_centroid_targets(
     features: TransportFeatureSet,
     gallery: EncodedRetrievalSet,
@@ -300,6 +341,111 @@ def _rho_summary(rho: Tensor) -> dict[str, float]:
         "p50_rho_degrees": degree_quantiles[1].item(),
         "p95_rho_degrees": degree_quantiles[2].item(),
     }
+
+
+def _angle_summary(theta: Tensor) -> dict[str, float]:
+    degrees = theta.detach().float() * (180.0 / math.pi)
+    quantiles = torch.quantile(degrees, torch.tensor([0.05, 0.25, 0.50, 0.75, 0.95]))
+    return {
+        "mean_degrees": degrees.mean().item(),
+        "std_degrees": degrees.std(unbiased=False).item(),
+        "p05_degrees": quantiles[0].item(),
+        "p25_degrees": quantiles[1].item(),
+        "p50_degrees": quantiles[2].item(),
+        "p75_degrees": quantiles[3].item(),
+        "p95_degrees": quantiles[4].item(),
+    }
+
+
+def _target_angle_probe(
+    features: TransportFeatureSet,
+    target: Tensor,
+    frozen_reference: Tensor | None,
+) -> dict[str, object]:
+    moving = photo_transport_target(features.z0, target)
+    rho = features.rho if features.rho.ndim == 1 else features.rho.mean(dim=-1)
+    valid_ratio = rho[moving.theta > 1e-6] / moving.theta[moving.theta > 1e-6]
+    result: dict[str, object] = {
+        "moving": _angle_summary(moving.theta),
+        "rho_over_moving_theta": float(valid_ratio.median().item()) if valid_ratio.numel() else None,
+        "rho_over_moving_theta_mean": float(valid_ratio.mean().item()) if valid_ratio.numel() else None,
+        "moving_fraction_beyond_cap": {
+            str(cap): float((moving.theta * (180.0 / math.pi) > cap).float().mean().item())
+            for cap in (5, 10, 15, 20, 30, 45)
+        },
+    }
+    if frozen_reference is None:
+        return result
+    if frozen_reference.shape != features.z0.shape:
+        raise ValueError("frozen_reference must match [N,D] transport features")
+    fixed = fixed_origin_transport_target(frozen_reference, target, features.z0)
+    result["fixed"] = _angle_summary(fixed.theta)
+    result["fixed_fraction_beyond_cap"] = {
+        str(cap): float((fixed.theta * (180.0 / math.pi) > cap).float().mean().item())
+        for cap in (5, 10, 15, 20, 30, 45)
+    }
+    moving_directions = F.normalize(features.directions, dim=-1)
+    fixed_alignment = (moving_directions * fixed.direction[:, None, :]).sum(dim=-1)
+    moving_alignment = (moving_directions * moving.direction[:, None, :]).sum(dim=-1)
+    frame_agreement = (moving.direction * fixed.direction).sum(dim=-1)
+    result["moving_target_alignment"] = float(moving_alignment.mean().item())
+    result["fixed_target_alignment"] = float(fixed_alignment.mean().item())
+    result["target_frame_agreement"] = float(frame_agreement.mean().item())
+    result["fixed_tangent_destination_max_abs_dot"] = float(
+        (fixed.direction * F.normalize(features.z0, dim=-1)).sum(dim=-1).abs().max().item()
+    )
+    return result
+
+
+def component_direction_alignment(
+    features: TransportFeatureSet,
+    instance_targets: Tensor,
+    class_targets: Tensor,
+) -> dict[str, object]:
+    """Compare K directions with instance and class-semantic tangent targets.
+
+    Both targets are built at the same current ``z0``.  Callers are
+    responsible for constructing ``class_targets`` from training photos only;
+    this function never reads labels or gallery data to create a prototype.
+    """
+    if instance_targets.shape != class_targets.shape or instance_targets.shape != features.z0.shape:
+        raise ValueError("instance/class targets must match feature shape [N,D]")
+    instance = photo_transport_target(features.z0, instance_targets)
+    semantic = photo_transport_target(features.z0, class_targets)
+    directions = F.normalize(features.directions, dim=-1)
+    instance_cos = (directions * instance.direction[:, None, :]).sum(dim=-1)
+    class_cos = (directions * semantic.direction[:, None, :]).sum(dim=-1)
+    weights = features.probabilities
+    result: dict[str, object] = {
+        "instance_alignment_by_component": instance_cos.mean(dim=0).tolist(),
+        "class_alignment_by_component": class_cos.mean(dim=0).tolist(),
+        "instance_alignment_max": instance_cos.max(dim=-1).values.mean().item(),
+        "class_alignment_max": class_cos.max(dim=-1).values.mean().item(),
+        "instance_alignment_gate_weighted": (weights * instance_cos).sum(dim=-1).mean().item(),
+        "class_alignment_gate_weighted": (weights * class_cos).sum(dim=-1).mean().item(),
+    }
+    if features.concentrations is not None:
+        # The vMF posterior is a useful responsibility-selected diagnostic,
+        # but is computed from the supplied targets and never fed to training.
+        log_pi = weights.clamp_min(1e-12).log()
+        posterior = (
+            log_pi + features.concentrations * instance_cos
+        ).softmax(dim=-1)
+        result["instance_alignment_responsibility_selected"] = (posterior * instance_cos).sum(dim=-1).mean().item()
+        result["class_alignment_responsibility_selected"] = (posterior * class_cos).sum(dim=-1).mean().item()
+    return result
+
+
+def train_photo_class_prototypes(
+    encoded_photos: EncodedRetrievalSet,
+) -> tuple[Tensor, Tensor]:
+    """Return normalized class prototypes from an explicitly train-only set."""
+    labels = torch.unique(encoded_photos.labels, sorted=True)
+    prototypes = torch.stack([
+        F.normalize(encoded_photos.embeddings[encoded_photos.labels == label].mean(dim=0), dim=-1)
+        for label in labels
+    ])
+    return labels, prototypes
 
 
 def transport_probe_dict(
@@ -347,6 +493,7 @@ def transport_probe_dict(
     photo_alignment = photo_target_alignment_diagnostics(jepa_features, gallery)
     query_geometry = feature_geometry(features.q).to_dict()
     base_geometry = feature_geometry(features.z0).to_dict()
+    target_angles = _target_angle_probe(features, target, frozen_reference)
     result: dict[str, object] = {
         "h": feature_geometry(features.h).to_dict(),
         "z0": base_geometry,
@@ -364,6 +511,7 @@ def transport_probe_dict(
                 - target_transport.theta
             ).abs().mean().item(),
             "near_zero_target_fraction": target_transport.near_zero.float().mean().item(),
+            "target_angles": target_angles,
         },
         "mixture": {
             "num_components": features.num_components,
