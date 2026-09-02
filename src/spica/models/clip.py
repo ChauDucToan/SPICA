@@ -294,3 +294,285 @@ def load_trainable_sketch_encoder(
         model_name=model_name,
         pretrained=pretrained,
     )
+
+
+def _visual_projection_parameters(
+    visual: nn.Module,
+) -> tuple[Tensor, Tensor | None]:
+    """Return CLIP's visual projection as an ``[hidden, embedding]`` matrix.
+
+    OpenCLIP ViT checkpoints store the projection as a parameter used by
+    ``pooled @ proj``.  A few compatible models expose it as ``nn.Linear``
+    instead, so the conversion is kept in one place for the transport model.
+    """
+    projection = getattr(visual, "proj", None)
+    if projection is None:
+        raise ValueError("The selected CLIP visual tower has no projection matrix")
+    if isinstance(projection, nn.Linear):
+        matrix = projection.weight.detach().T
+        bias = None if projection.bias is None else projection.bias.detach()
+    elif isinstance(projection, Tensor):
+        if projection.ndim != 2:
+            raise ValueError(
+                "CLIP visual projection must be a two-dimensional matrix, got "
+                f"{tuple(projection.shape)}"
+            )
+        matrix = projection.detach()
+        bias = None
+    else:
+        raise TypeError(
+            "Unsupported CLIP visual projection type: "
+            f"{type(projection).__name__}"
+        )
+    return matrix.float(), None if bias is None else bias.float()
+
+
+class FrozenVisualProjection(nn.Module):
+    """The fixed photo-CLIP map from a visual hidden state to CLIP space."""
+
+    def __init__(self, matrix: Tensor, bias: Tensor | None = None) -> None:
+        super().__init__()
+        if matrix.ndim != 2 or matrix.shape[0] <= 0 or matrix.shape[1] <= 0:
+            raise ValueError(
+                "matrix must have shape [hidden_dim, embedding_dim], got "
+                f"{tuple(matrix.shape)}"
+            )
+        if not matrix.is_floating_point() or not torch.isfinite(matrix).all().item():
+            raise ValueError("matrix must be finite floating-point values")
+        if bias is not None:
+            if bias.shape != (matrix.shape[1],):
+                raise ValueError(
+                    "bias must have one value per projected dimension, got "
+                    f"{tuple(bias.shape)}"
+                )
+            if not bias.is_floating_point() or not torch.isfinite(bias).all().item():
+                raise ValueError("bias must be finite floating-point values")
+        self.register_buffer("matrix", matrix.detach().clone().float())
+        if bias is None:
+            self.register_buffer("bias", None)
+        else:
+            self.register_buffer("bias", bias.detach().clone().float())
+        self.requires_grad_(False)
+
+    @classmethod
+    def from_visual(cls, visual: nn.Module) -> "FrozenVisualProjection":
+        matrix, bias = _visual_projection_parameters(visual)
+        return cls(matrix, bias)
+
+    @property
+    def hidden_dim(self) -> int:
+        return int(self.matrix.shape[0])
+
+    @property
+    def embedding_dim(self) -> int:
+        return int(self.matrix.shape[1])
+
+    def forward(self, hidden: Tensor) -> Tensor:
+        if hidden.ndim != 2 or hidden.shape[1] != self.hidden_dim:
+            raise ValueError(
+                "hidden must have shape [batch, hidden_dim], expected hidden_dim "
+                f"{self.hidden_dim}, got {tuple(hidden.shape)}"
+            )
+        if not hidden.is_floating_point():
+            raise TypeError("hidden must be floating-point")
+        projected = hidden @ self.matrix.to(device=hidden.device, dtype=hidden.dtype)
+        if self.bias is not None:
+            projected = projected + self.bias.to(device=hidden.device, dtype=hidden.dtype)
+        return projected
+
+
+def visual_pre_projection(visual: nn.Module, images: Tensor) -> Tensor:
+    """Run an OpenCLIP visual tower up to, but excluding, ``visual.proj``.
+
+    ``VisionTransformer.forward`` applies the projection after ``_pool``.  The
+    transport formulation needs the pooled hidden state before that operation,
+    so calling ``visual(images)`` here would silently violate the semantic
+    coordinate-system contract.
+    """
+    embeds = getattr(visual, "_embeds", None)
+    pool = getattr(visual, "_pool", None)
+    transformer = getattr(visual, "transformer", None)
+    if callable(embeds) and callable(pool) and transformer is not None:
+        values = transformer(embeds(images))
+        pooled = pool(values)
+        if not isinstance(pooled, tuple) or not pooled:
+            raise RuntimeError("CLIP visual _pool did not return a pooled tuple")
+        hidden = pooled[0]
+    elif getattr(visual, "proj", None) is None:
+        # Projection-free CLIP-compatible towers already return the hidden
+        # coordinate system.  This fallback keeps the wrapper useful for such
+        # backbones while the standard ViT path above remains explicit.
+        hidden = visual(images)
+    else:
+        raise ValueError(
+            "Cannot obtain a pre-projection hidden state from this visual tower; "
+            "expected OpenCLIP _embeds/_pool methods"
+        )
+    if not isinstance(hidden, Tensor) or hidden.ndim != 2:
+        raise RuntimeError(
+            "The CLIP visual tower must return a pooled [batch, hidden_dim] state, "
+            f"got {getattr(hidden, 'shape', type(hidden))}"
+        )
+    return hidden
+
+
+class TrainableSketchHiddenEncoder(nn.Module):
+    """CLIP-initialized sketch encoder exposing the hidden state before proj."""
+
+    MODES = {"frozen", "partial", "full"}
+
+    def __init__(
+        self,
+        visual: nn.Module,
+        *,
+        hidden_dim: int,
+        mode: str,
+        unfreeze_depth: int = 0,
+    ) -> None:
+        super().__init__()
+        if hidden_dim <= 0:
+            raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
+        if mode not in self.MODES:
+            raise ValueError(
+                f"mode must be one of {sorted(self.MODES)}, got {mode!r}"
+            )
+        if unfreeze_depth < 0:
+            raise ValueError("unfreeze_depth must be non-negative")
+        self.visual = visual
+        self.hidden_dim = hidden_dim
+        self.mode = mode
+        self.unfreeze_depth = unfreeze_depth
+        self._trainable_modules: tuple[nn.Module, ...] = ()
+        self._configure_trainability()
+
+    def _freeze_visual_projection(self) -> None:
+        projection = getattr(self.visual, "proj", None)
+        if isinstance(projection, nn.Module):
+            projection.requires_grad_(False)
+        elif isinstance(projection, Tensor):
+            projection.requires_grad_(False)
+
+    def _configure_trainability(self) -> None:
+        self.visual.requires_grad_(False)
+        self._freeze_visual_projection()
+        if self.mode == "frozen":
+            self._trainable_modules = ()
+            return
+        if self.mode == "full":
+            self.visual.requires_grad_(True)
+            self._freeze_visual_projection()
+            self._trainable_modules = (self.visual,)
+            return
+
+        blocks = getattr(getattr(self.visual, "transformer", None), "resblocks", None)
+        if blocks is None:
+            raise ValueError(
+                "partial sketch encoder mode requires a visual transformer with "
+                "a resblocks collection"
+            )
+        if self.unfreeze_depth <= 0 or self.unfreeze_depth > len(blocks):
+            raise ValueError(
+                "unfreeze_depth must be between 1 and the number of visual "
+                f"transformer blocks ({len(blocks)}), got {self.unfreeze_depth}"
+            )
+        trainable_modules: list[nn.Module] = []
+        for block in blocks[len(blocks) - self.unfreeze_depth :]:
+            block.requires_grad_(True)
+            trainable_modules.append(block)
+        ln_post = getattr(self.visual, "ln_post", None)
+        if ln_post is not None:
+            ln_post.requires_grad_(True)
+            trainable_modules.append(ln_post)
+        self._freeze_visual_projection()
+        self._trainable_modules = tuple(trainable_modules)
+
+    @property
+    def trainable_parameter_count(self) -> int:
+        return sum(
+            parameter.numel()
+            for parameter in self.parameters()
+            if parameter.requires_grad
+        )
+
+    @property
+    def total_parameter_count(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
+
+    def train(self, mode: bool = True) -> Self:
+        super().train(mode)
+        self.visual.eval()
+        if self.mode in {"partial", "full"}:
+            for module in self._trainable_modules:
+                module.train(mode)
+        self._freeze_visual_projection()
+        return self
+
+    def forward(self, images: Tensor) -> Tensor:
+        if images.ndim != 4:
+            raise ValueError(
+                "Sketch images must have shape [batch, channels, height, width], "
+                f"got {tuple(images.shape)}"
+            )
+        if images.shape[1] != 3:
+            raise ValueError(
+                f"Sketch encoder expects three RGB channels, got {images.shape[1]}"
+            )
+        if not images.is_floating_point():
+            raise TypeError("Sketch encoder expects floating-point images")
+        hidden = visual_pre_projection(self.visual, images)
+        if hidden.shape[0] != images.shape[0] or hidden.shape[1] != self.hidden_dim:
+            raise RuntimeError(
+                "Unexpected pre-projection sketch context shape: expected "
+                f"[{images.shape[0]}, {self.hidden_dim}], got {tuple(hidden.shape)}"
+            )
+        return hidden
+
+
+@dataclass(frozen=True, slots=True)
+class SketchHiddenContextBundle:
+    encoder: TrainableSketchHiddenEncoder
+    transform: ImageTransform
+    model_name: str
+    pretrained: str | None
+    projection: FrozenVisualProjection
+
+
+def load_trainable_sketch_hidden_encoder(
+    *,
+    model_name: str = "ViT-B-32-quickgelu",
+    pretrained: str | None = "openai",
+    device: str | torch.device = "cpu",
+    cache_dir: Path | None = None,
+    mode: str = "full",
+    unfreeze_depth: int = 0,
+) -> SketchHiddenContextBundle:
+    """Load a raw-sketch encoder whose output is the pre-projection CLIP state."""
+    model, _, eval_transform = open_clip.create_model_and_transforms(
+        model_name=model_name,
+        pretrained=pretrained,
+        precision="fp32",
+        device=device,
+        cache_dir=str(cache_dir) if cache_dir is not None else None,
+    )
+    visual = model.visual
+    projection = FrozenVisualProjection.from_visual(visual)
+    encoder = TrainableSketchHiddenEncoder(
+        visual,
+        hidden_dim=projection.hidden_dim,
+        mode=mode,
+        unfreeze_depth=unfreeze_depth,
+    )
+    del model
+    encoder.train(mode != "frozen")
+    return SketchHiddenContextBundle(
+        encoder=encoder,
+        transform=eval_transform,
+        model_name=model_name,
+        pretrained=pretrained,
+        projection=projection,
+    )
+
+
+def frozen_visual_projection(encoder: FrozenClipEncoder) -> FrozenVisualProjection:
+    """Extract the frozen photo CLIP projection used by semantic transport."""
+    return FrozenVisualProjection.from_visual(encoder.model.visual)

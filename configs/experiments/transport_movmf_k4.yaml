@@ -1,0 +1,17 @@
+# @package _global_
+experiment_name: transport_movmf_k4
+transport_mode: tangent
+K: 4
+rho_mode: shared
+use_vmf: true
+lambda_vmf: 0.001
+lambda_dir: 0.0
+lambda_dist: 1.0
+lambda_endpoint: 1.0
+lambda_rank: 1.0
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+num_positive_photos: 1
+inference_score_mode: angular_logsumexp
+rho_max_degrees: 30.0
+train_class_scope: pseudo_train

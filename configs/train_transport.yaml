@@ -1,0 +1,99 @@
+defaults:
+  - _self_
+
+experiment_name: transport_tangent_k1_${encoder_mode}_rho${rho_max_degrees}
+model_family: predictive_semantic_transport
+
+data_config: configs/data/sketchy_104_21.yaml
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+# The hidden state is the pooled visual state before CLIP's visual projection.
+# The photo encoder supplies the frozen projection matrix used to make z0.
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+predictor_hidden_dim: 512
+use_z0: false
+
+transport_mode: tangent
+K: 1
+rho_mode: shared
+rho_max_degrees: 45.0
+# A tiny non-zero warm start avoids a sigmoid-at-zero gradient stall while
+# remaining effectively at z0 for step-0 retrieval.
+initial_rho_degrees: 0.5
+# Residual controls use these values; tangent runs ignore alpha.
+alpha: 1.0
+alpha_max: 0.5
+initial_alpha: 0.0
+
+# K>1 vMF is a distribution over tangent directions only.
+use_vmf: false
+min_kappa: 0.0001
+max_kappa: 2048.0
+initial_kappa: 64.0
+
+num_positive_photos: 1
+# instance is the primary target. class_prototype is a train-photo-only control.
+photo_target: instance
+batch_size: 32
+num_workers: 4
+pin_memory: true
+drop_last: true
+
+predictor_learning_rate: 0.0001
+encoder_learning_rate: 0.00001
+weight_decay: 0.0001
+margin: 0.2
+loss_profile: transport
+lambda_dir: 1.0
+lambda_dist: 1.0
+lambda_endpoint: 1.0
+lambda_rank: 1.0
+lambda_cls: 0.0
+lambda_vmf: 0.0
+lambda_geom: 0.0
+use_geometry_loss: false
+
+tau_cls: 0.07
+prompt_template: a photo of a {}
+assignment_temperature: 0.05
+score_temperature: 0.07
+inference_score_mode: barycentric
+
+# Pseudo-unseen model selection: 84 training classes / 20 validation classes.
+train_class_scope: pseudo_train
+pseudo_val_num_classes: 20
+pseudo_val_seed: 3407
+
+max_steps: 100
+log_every: 10
+probe_steps: [100, 500, 1000, 1800, 5400]
+run_probes: true
+eval_batch_size: 128
+prediction_batch_size: 128
+query_chunk_size: 256
+precision_at_k: [1, 5, 10, 100, 200]
+map_at_k: [200]
+map_at_k_denominator: prefix_positive
+save_optimizer: false
+seed: 42
+checkpoint_path: null
+
+wandb_project: spica
+wandb_entity: null
+wandb_group: spica-transport
+wandb_run_name: null
+wandb_mode: disabled
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+  sweep:
+    dir: "outputs/experiments/transport/${now:%Y-%m-%d_%H-%M-%S}"
+    subdir: "${hydra.job.num}"
+  output_subdir: .hydra

@@ -48,6 +48,8 @@ spica-train-stageE-no-vmf = "spica.train_stageE_no_vmf:main"
 spica-train-stageE-angular = "spica.train_stageE_angular:main"
 spica-train-stageE-k1 = "spica.train_stageE_k1:main"
 spica-train-jepa = "spica.train_jepa:main"
+spica-eval-transport = "spica.evaluate_transport:main"
+spica-train-transport = "spica.train_transport:main"
 
 [build-system]
 requires = ["uv_build"]

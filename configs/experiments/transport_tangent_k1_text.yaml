@@ -1,0 +1,20 @@
+# @package _global_
+experiment_name: transport_tangent_k1_text
+transport_mode: tangent
+K: 1
+rho_mode: shared
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+num_positive_photos: 1
+lambda_cls: 0.1
+loss_profile: transport
+lambda_dir: 1.0
+lambda_dist: 1.0
+lambda_endpoint: 1.0
+lambda_rank: 1.0
+lambda_vmf: 0.0
+lambda_geom: 0.0
+use_geometry_loss: false
+rho_max_degrees: 30.0
+inference_score_mode: barycentric
+train_class_scope: pseudo_train

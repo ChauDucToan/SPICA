@@ -697,6 +697,11 @@ def run(args: DictConfig) -> None:
         "pseudo_train_classes": len(split.train_class_ids),
         "pseudo_validation_classes": len(split.validation_class_ids),
         "text_conditioning": False,
+        "wandb_project": str(args.wandb_project),
+        "wandb_group": None
+        if args.wandb_group is None
+        else str(args.wandb_group),
+        "wandb_mode": str(args.wandb_mode),
     }
 
     history: list[dict[str, object]] = []
@@ -709,6 +714,7 @@ def run(args: DictConfig) -> None:
     with WandbExperiment(
         project=str(args.wandb_project),
         entity=None if args.wandb_entity is None else str(args.wandb_entity),
+        group=None if args.wandb_group is None else str(args.wandb_group),
         name=None if args.wandb_run_name is None else str(args.wandb_run_name),
         config=run_config,
         tags=("cross-modal-jepa", str(args.encoder_mode), f"M{args.num_positive_photos}"),
@@ -721,6 +727,8 @@ def run(args: DictConfig) -> None:
             f"M={args.num_positive_photos}, classes={len(text_class_ids)}, "
             f"steps={args.max_steps}, trainable={parameter_counts['trainable_parameters']}"
         )
+        if experiment_mode != "disabled":
+            print(f"W&B run: {experiment.run_url}")
         if text_bank is not None:
             print("Text enters predictor: NO (classification bank is loss-only).")
 
@@ -1033,6 +1041,15 @@ def run(args: DictConfig) -> None:
                 "photo_required": False,
                 "positive_set_required": False,
                 "oracle_class_required": False,
+            },
+            "wandb": {
+                "mode": experiment_mode,
+                "project": str(args.wandb_project),
+                "group": None
+                if args.wandb_group is None
+                else str(args.wandb_group),
+                "run_id": experiment.run_id,
+                "run_url": experiment.run_url,
             },
         }
         (output_dir / "run_result.json").write_text(

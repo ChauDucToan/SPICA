@@ -373,3 +373,14 @@ def classification_accuracy(
 # Descriptive aliases used by experiment scripts and downstream callers.
 CrossModalJepaRetriever = SketchPhotoJepa
 SketchPhotoJepaPredictor = SpicaJepaPredictor
+
+# Transport-family exports live in their own module so the previous full-vector
+# JEPA implementation remains an untouched T0 control.  These aliases make the
+# new public family discoverable from the historical model module as well.
+from .transport import (  # noqa: E402, F401  (intentional compatibility exports)
+    PredictiveSemanticTransport,
+    SketchPhotoTransport,
+    SketchPhotoTransportPredictor,
+    SpicaPredictiveTransport,
+    SpicaSemanticTransport,
+)

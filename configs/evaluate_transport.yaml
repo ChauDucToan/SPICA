@@ -1,0 +1,27 @@
+defaults:
+  - _self_
+
+experiment_name: evaluate_transport
+checkpoint_path: ???
+embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+data_config: configs/data/sketchy_104_21.yaml
+dataset_name: sketchy_104_21
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+prediction_batch_size: 128
+num_workers: 4
+pin_memory: true
+query_chunk_size: 256
+precision_at_k: [1, 5, 10, 100, 200]
+map_at_k: [200]
+map_at_k_denominator: prefix_positive
+score_temperature: 0.07
+inference_score_mode: barycentric
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "outputs/experiments/${experiment_name}/${now:%Y-%m-%d_%H-%M-%S}"
+  output_subdir: .hydra

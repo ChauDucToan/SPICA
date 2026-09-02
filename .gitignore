@@ -7,6 +7,17 @@ datasets/
 # outputs folder
 output/
 outputs/
+# Versioned transport reports/plots are intentionally retained while the
+# timestamped checkpoints and other experiment artifacts remain ignored.
+!outputs/
+outputs/*
+!outputs/research_summary_transport_*.md
+!outputs/research_summary_transport_*.json
+!outputs/transport_learning_curve.png
+!outputs/transport_radius_vs_map.png
+!outputs/transport_direction_alignment.png
+!outputs/transport_semantic_drift.png
+!outputs/transport_K_ablation.png
 
 # ckeckpoint
 *.pth

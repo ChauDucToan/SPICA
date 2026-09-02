@@ -72,8 +72,11 @@ checkpoint_path: null
 
 wandb_project: spica
 wandb_entity: null
+wandb_group: spica-jepa
 wandb_run_name: null
-wandb_mode: disabled
+# Training metrics/probes are sent to W&B by default; use
+# wandb_mode=disabled for an intentionally local-only run.
+wandb_mode: online
 
 hydra:
   job:
