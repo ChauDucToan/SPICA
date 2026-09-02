@@ -8,12 +8,53 @@ field is *unknown*, not ``True``.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import subprocess
 from typing import Any, Callable, Iterable
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class ArtifactIntegrityError(ValueError):
+    """Raised when artifacts cannot support the requested causal contrast."""
+
+
+MATCHED_FIELDS = (
+    "seed",
+    "train_class_scope",
+    "pseudo_validation_seed",
+    "model_name",
+    "pretrained",
+    "encoder_mode",
+    "encoder_unfreeze_depth",
+    "use_z0",
+    "lambda_cls",
+    "text_loss_location",
+    "tau_cls",
+    "prompt_template",
+    "lambda_rank",
+    "margin",
+    "predictor_learning_rate",
+    "encoder_learning_rate",
+    "weight_decay",
+    "scheduler",
+    "steps",
+    "batch_size",
+    "num_positive_photos",
+    "probe_steps",
+    "inference_score_mode",
+    "score_temperature",
+    "map_at_k_denominator",
+)
+
+FREEZE_BRANCHES = {
+    "freeze_optimizer_A": (False, False),
+    "freeze_optimizer_B": (True, False),
+    "freeze_optimizer_C": (False, True),
+    "freeze_optimizer_D": (True, True),
+}
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -213,3 +254,120 @@ def matched_base_predicate(*, text: bool) -> Callable[[dict[str, Any]], bool]:
             and config.get("num_positive_photos", 1) == 1
         )
     return predicate
+
+
+def select_unique_role(
+    records: Iterable[tuple[Path, dict[str, Any]]], role: str
+) -> tuple[Path, dict[str, Any]]:
+    """Select exactly one run by structured role metadata, never by its name."""
+    candidates = [
+        record
+        for record in records
+        if config_of(record[1]).get("experiment_role") == role
+    ]
+    if not candidates:
+        raise ArtifactIntegrityError(f"missing raw run with experiment_role={role!r}")
+    if len(candidates) != 1:
+        paths = ", ".join(str(path) for path, _ in candidates)
+        raise ArtifactIntegrityError(
+            f"ambiguous experiment_role={role!r}: {len(candidates)} raw runs ({paths})"
+        )
+    return candidates[0]
+
+
+def _same(left: Any, right: Any) -> bool:
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return math.isclose(float(left), float(right), rel_tol=0.0, abs_tol=1e-12)
+    return left == right
+
+
+def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None:
+    """Validate the matched base+text versus transport+text causal control."""
+    base_config = config_of(base)
+    transport_config = config_of(transport)
+    if base_config.get("transport_enabled") is not False:
+        raise ArtifactIntegrityError("z0_B must have transport_enabled=false")
+    if transport_config.get("transport_enabled") is not True:
+        raise ArtifactIntegrityError("z0_T/q_T must have transport_enabled=true")
+    for label, config in (("base", base_config), ("transport", transport_config)):
+        if not config.get("use_text_cls") or float(config.get("lambda_cls", 0.0)) <= 0:
+            raise ArtifactIntegrityError(f"{label} run is not a text-supervised run")
+        if float(config.get("lambda_endpoint", 1.0)) != 0.0:
+            raise ArtifactIntegrityError(f"{label} run does not use endpoint=0")
+    mismatches = []
+    for field in MATCHED_FIELDS:
+        if field not in base_config or field not in transport_config:
+            mismatches.append(f"{field}: missing")
+        elif not _same(base_config[field], transport_config[field]):
+            mismatches.append(
+                f"{field}: {base_config[field]!r} != {transport_config[field]!r}"
+            )
+    base_split = base.get("data_split_identity") or base.get("pseudo_split")
+    transport_split = transport.get("data_split_identity") or transport.get(
+        "pseudo_split"
+    )
+    if not isinstance(base_split, dict) or not isinstance(transport_split, dict):
+        mismatches.append("data split identity: missing")
+    elif base_split.get("sha256") and transport_split.get("sha256"):
+        if base_split["sha256"] != transport_split["sha256"]:
+            mismatches.append("data split identity hash differs")
+    elif base_split != transport_split:
+        mismatches.append("data split identity differs")
+    if mismatches:
+        raise ArtifactIntegrityError(
+            "causal runs are not matched: " + "; ".join(mismatches)
+        )
+
+
+def factorial_effects(cells: dict[str, float]) -> dict[str, float]:
+    missing = {"A", "B", "C", "D"} - cells.keys()
+    if missing:
+        raise ArtifactIntegrityError(f"factorial cells missing: {sorted(missing)}")
+    if not all(math.isfinite(float(cells[name])) for name in ("A", "B", "C", "D")):
+        raise ArtifactIntegrityError("factorial values must be finite")
+    a, b, c, d = (float(cells[name]) for name in ("A", "B", "C", "D"))
+    return {
+        "text_effect_without_transport": b - a,
+        "text_effect_with_transport": d - c,
+        "transport_effect_without_text": c - a,
+        "transport_effect_with_text": d - b,
+        "interaction": d - c - b + a,
+    }
+
+
+def validate_freeze_optimizer_role(config: dict[str, Any]) -> dict[str, bool]:
+    """Resolve and validate one branch of the step-73 freeze × reset factorial."""
+    role = config.get("experiment_role")
+    if role == "optimizer_reset_only":
+        if config.get("freeze_encoder_at_step") is not None:
+            raise ArtifactIntegrityError(
+                "optimizer_reset_only must keep the encoder trainable; observed freeze_encoder_at_step"
+            )
+        role = "freeze_optimizer_C"
+    if role not in FREEZE_BRANCHES:
+        raise ArtifactIntegrityError(f"unknown freeze/optimizer branch role: {role!r}")
+    expected_freeze, expected_reset = FREEZE_BRANCHES[role]
+    observed_freeze = config.get("freeze_encoder_at_step") == 73
+    observed_reset = bool(config.get("reset_optimizer_on_resume"))
+    if observed_freeze != expected_freeze or observed_reset != expected_reset:
+        raise ArtifactIntegrityError(
+            f"{role} requires freeze={expected_freeze}, reset={expected_reset}; "
+            f"observed freeze={observed_freeze}, reset={observed_reset}"
+        )
+    if not config.get("resume_checkpoint_path"):
+        raise ArtifactIntegrityError(
+            f"{role} requires the common step-73 resume checkpoint"
+        )
+    return {"freeze": expected_freeze, "reset": expected_reset}
+
+
+def missing_result(reason: str) -> dict[str, str]:
+    return {"status": "not_run", "reason": reason}
+
+
+def write_new(path: Path, content: str | bytes) -> None:
+    """Create a generated artifact without overwriting historical evidence."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "xb" if isinstance(content, bytes) else "x"
+    with path.open(mode) as handle:
+        handle.write(content)

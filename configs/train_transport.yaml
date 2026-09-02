@@ -3,6 +3,10 @@ defaults:
 
 experiment_name: transport_tangent_k1_${encoder_mode}_rho${rho_max_degrees}
 model_family: predictive_semantic_transport
+# Structured semantic role used by integrity-aware summarizers; never inferred
+# from experiment_name.
+experiment_role: null
+experiment_campaign: null
 
 data_config: configs/data/sketchy_104_21.yaml
 embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
@@ -95,8 +99,10 @@ map_at_k_denominator: prefix_positive
 save_optimizer: false
 # Optional exact-checkpoint continuation used by freeze-after-warmup controls.
 resume_checkpoint_path: null
-# A controlled optimizer-reset continuation (P8 branch C).
+# Continuation controls. reset scope can isolate encoder/head optimizer state.
 reset_optimizer_on_resume: false
+optimizer_reset_scope: none
+reset_transport_head_on_resume: false
 freeze_encoder_at_step: null
 # Gradient conflict is intentionally sparse; these are not per-iteration logs.
 gradient_conflict_steps: [15, 73, 500]

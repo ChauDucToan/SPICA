@@ -11,12 +11,12 @@ import json
 import math
 from pathlib import Path
 import random
-import subprocess
+import sys
 from typing import Any
 
 import hydra
 from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -63,6 +63,12 @@ from .models.jepa import (
     jepa_text_classification_loss,
     photo_semantic_target,
 )
+from .provenance import (
+    capture_provenance,
+    capture_rng_state,
+    hash_json,
+    restore_rng_state,
+)
 from .tracking.wandb import WandbExperiment
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -71,35 +77,15 @@ OBJECTIVE_NAME = "predictive_semantic_transport"
 PSEUDO_SPLIT_SEED = 3407
 
 
-def _git_provenance() -> dict[str, object]:
-    """Capture repository provenance at run creation, never from a report date."""
-    try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=PROJECT_ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.splitlines()
-    except (OSError, subprocess.CalledProcessError) as error:
-        return {
-            "commit": None,
-            "working_tree_state": "unavailable",
-            "dirty_files": [],
-            "error": str(error),
-        }
-    return {
-        "commit": commit,
-        "working_tree_state": "clean" if not status else "dirty",
-        "dirty_files": status,
-    }
+def _git_provenance(
+    resolved_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Capture exact source/environment provenance, including dirty content."""
+    return capture_provenance(
+        PROJECT_ROOT,
+        resolved_config=resolved_config,
+        command=[sys.executable, "-m", "spica.train_transport", *sys.argv[1:]],
+    )
 
 
 def _angle_values(
@@ -143,23 +129,33 @@ def _gradient_pair_cosine(first: Tensor, second: Tensor) -> float | None:
     return float((first_flat * second_flat).sum().div(first_norm * second_norm).item())
 
 
+def _cosine_matrix(vectors: dict[str, Tensor]) -> list[list[float | None]]:
+    names = list(vectors)
+    return [
+        [_gradient_pair_cosine(vectors[left], vectors[right]) for right in names]
+        for left in names
+    ]
+
+
 def _representation_gradient_conflicts(
     losses: dict[str, Tensor],
     prediction: SemanticTransportPrediction,
-) -> dict[str, dict[str, float | None]]:
-    """Pairwise loss-gradient cosines in q and z0 representation spaces."""
-    result: dict[str, dict[str, float | None]] = {}
-    for representation_name, representation in (("q", prediction.q), ("z0", prediction.z0)):
+) -> dict[str, dict[str, object]]:
+    """Keep query and base representation gradients in explicit namespaces."""
+    result: dict[str, dict[str, object]] = {}
+    for key, name, representation in (
+        ("query", "dL/dq", prediction.q),
+        ("base", "dL/dz0", prediction.z0),
+    ):
         gradients = {
-            name: _gradient_wrt(loss, representation)
-            for name, loss in losses.items()
+            loss_name: _gradient_wrt(loss, representation)
+            for loss_name, loss in losses.items()
         }
-        pairs: dict[str, float | None] = {}
-        for left, right in (("endpoint", "cls"), ("endpoint", "rank"), ("cls", "rank"), ("dir", "cls")):
-            pairs[f"{left}_{right}"] = _gradient_pair_cosine(
-                gradients[left], gradients[right]
-            )
-        result[representation_name] = pairs
+        result[key] = {
+            "space": name,
+            "loss_names": list(losses),
+            "cosine_matrix": _cosine_matrix(gradients),
+        }
     return result
 
 
@@ -319,6 +315,76 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("training_angle_diagnostic_max must be positive")
     if not isinstance(args.reset_optimizer_on_resume, bool):
         raise ValueError("reset_optimizer_on_resume must be boolean")
+    if str(args.optimizer_reset_scope) not in {"none", "all", "encoder", "head"}:
+        raise ValueError("optimizer_reset_scope must be none, all, encoder, or head")
+    expected_scope = "all" if bool(args.reset_optimizer_on_resume) else "none"
+    if str(args.optimizer_reset_scope) not in {expected_scope, "encoder", "head"}:
+        raise ValueError("reset_optimizer_on_resume and optimizer_reset_scope disagree")
+    if not isinstance(args.reset_transport_head_on_resume, bool):
+        raise ValueError("reset_transport_head_on_resume must be boolean")
+    role = None if args.experiment_role is None else str(args.experiment_role)
+    branches = {
+        "freeze_optimizer_A": (False, False),
+        "freeze_optimizer_B": (True, False),
+        "freeze_optimizer_C": (False, True),
+        "freeze_optimizer_D": (True, True),
+    }
+    if role == "optimizer_reset_only" and args.freeze_encoder_at_step is not None:
+        raise ValueError("optimizer_reset_only cannot freeze the encoder")
+    if role in branches:
+        expected_freeze, expected_reset = branches[role]
+        observed_freeze = (
+            args.freeze_encoder_at_step is not None
+            and int(args.freeze_encoder_at_step) == 73
+        )
+        if (
+            observed_freeze != expected_freeze
+            or bool(args.reset_optimizer_on_resume) != expected_reset
+        ):
+            raise ValueError(
+                f"{role} requires freeze={expected_freeze}, reset={expected_reset}"
+            )
+        if args.resume_checkpoint_path is None:
+            raise ValueError(f"{role} requires a common step-73 resume checkpoint")
+    if role == "freeze_optimizer_source" and (
+        int(args.max_steps) != 73
+        or not bool(args.save_optimizer)
+        or args.resume_checkpoint_path is not None
+    ):
+        raise ValueError(
+            "freeze_optimizer_source must be a fresh optimizer-bearing step-73 run"
+        )
+    if role == "two_stage_stage1" and not (
+        args.transport_enabled is False
+        and str(args.text_loss_location) == "z0"
+        and float(args.lambda_endpoint) == 0.0
+        and float(args.lambda_dist) == 0.0
+        and int(args.max_steps) in {44, 73}
+        and str(args.train_class_scope) == "pseudo_train"
+    ):
+        raise ValueError("two_stage_stage1 must train rank(z0)+CE(z0) on pseudo-train")
+    if role in {
+        "two_stage_S1",
+        "two_stage_S2",
+        "two_stage_S3",
+        "two_stage_S4",
+    } and not (
+        bool(args.transport_enabled)
+        and int(args.K) == 1
+        and not bool(args.use_vmf)
+        and str(args.rho_strategy) == "fixed"
+        and float(args.fixed_rho_degrees) == 15.0
+        and float(args.lambda_endpoint) == 0.0
+        and float(args.lambda_dist) == 0.0
+        and args.freeze_encoder_at_step is not None
+        and int(args.freeze_encoder_at_step) == 73
+        and bool(args.reset_transport_head_on_resume)
+        and args.resume_checkpoint_path is not None
+        and str(args.train_class_scope) == "pseudo_train"
+    ):
+        raise ValueError(
+            "two-stage transport must use a fresh K=1 fixed-15 head and frozen step-73 origin"
+        )
     if str(args.wandb_mode) not in {"online", "offline", "disabled"}:
         raise ValueError("wandb_mode must be online, offline, or disabled")
 
@@ -493,7 +559,7 @@ def _cpu_state_dict(model: SpicaPredictiveTransport) -> dict[str, Tensor]:
 def _gradient_vector(loss: Tensor, parameters: list[torch.nn.Parameter]) -> Tensor:
     """Flatten a loss gradient, using zeros for parameters it does not touch."""
     if not loss.requires_grad:
-        return torch.zeros(1, device=loss.device, dtype=loss.dtype)
+        return loss.new_zeros(sum(parameter.numel() for parameter in parameters))
     gradients = torch.autograd.grad(
         loss,
         parameters,
@@ -507,14 +573,53 @@ def _gradient_vector(loss: Tensor, parameters: list[torch.nn.Parameter]) -> Tens
     return torch.cat(values) if values else loss.new_zeros(1)
 
 
-def _gradient_cosine(loss_a: Tensor, loss_b: Tensor, parameters: list[torch.nn.Parameter]) -> float | None:
-    vector_a = _gradient_vector(loss_a, parameters)
-    vector_b = _gradient_vector(loss_b, parameters)
-    norm_a = vector_a.norm()
-    norm_b = vector_b.norm()
-    if norm_a <= 1e-12 or norm_b <= 1e-12:
-        return None
-    return float((vector_a * vector_b).sum().div(norm_a * norm_b).item())
+def _parameter_gradient_space(
+    losses: dict[str, Tensor], parameters: list[torch.nn.Parameter]
+) -> dict[str, object]:
+    vectors = {
+        name: _gradient_vector(loss, parameters) for name, loss in losses.items()
+    }
+    return {
+        "space": "dL/dtheta",
+        "loss_names": list(losses),
+        "cosine_matrix": _cosine_matrix(vectors),
+    }
+
+
+def _restore_training_state(
+    payload: dict[str, Any],
+    *,
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: Any = None,
+    restore_optimizer: bool = True,
+    restore_rng: bool = True,
+    generator: torch.Generator | None = None,
+) -> int:
+    """Restore all saved continuation state or fail instead of partial-resuming."""
+    model.load_state_dict(payload["model_state_dict"], strict=True)
+    if restore_optimizer:
+        state = payload.get("optimizer_state_dict")
+        if state is None:
+            raise ValueError(
+                "resume requested optimizer restoration but checkpoint has no optimizer state"
+            )
+        optimizer.load_state_dict(state)
+    if scheduler is not None:
+        state = payload.get("scheduler_state_dict")
+        if state is None:
+            raise ValueError(
+                "resume requested scheduler restoration but checkpoint has no scheduler state"
+            )
+        scheduler.load_state_dict(state)
+    if restore_rng:
+        state = payload.get("rng_state")
+        if not isinstance(state, dict):
+            raise ValueError(
+                "resume requested RNG restoration but checkpoint has no RNG state"
+            )
+        restore_rng_state(state, generator)
+    return int(payload["step"])
 
 
 def _freeze_encoder(model: SpicaPredictiveTransport) -> None:
@@ -554,6 +659,10 @@ def _save_checkpoint(
     args: DictConfig,
     split: ClasswiseRetrievalSplit,
     parameter_counts: dict[str, int],
+    provenance: dict[str, Any],
+    resolved_config: dict[str, Any],
+    data_split_identity: dict[str, Any],
+    generator: torch.Generator | None,
     include_optimizer: bool = False,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -586,11 +695,18 @@ def _save_checkpoint(
             "encoder_mode": str(args.encoder_mode),
             "encoder_unfreeze_depth": int(args.encoder_unfreeze_depth),
             "encoder_model_name": str(args.model_name),
-            "encoder_pretrained": None if args.pretrained is None else str(args.pretrained),
+            "encoder_pretrained": None
+            if args.pretrained is None
+            else str(args.pretrained),
             "parameter_counts": parameter_counts,
         },
         "model_state_dict": _cpu_state_dict(model),
         "optimizer_state_dict": optimizer.state_dict() if include_optimizer else None,
+        "scheduler_state_dict": None,
+        "rng_state": capture_rng_state(generator),
+        "global_step": int(step),
+        "resolved_config": resolved_config,
+        "data_split_identity": data_split_identity,
         "metadata": {
             "dataset": data_name,
             "split": "train",
@@ -636,7 +752,16 @@ def _save_checkpoint(
             "pseudo_validation_class_ids": list(split.validation_class_ids),
             "pseudo_train_class_ids": list(split.train_class_ids),
             "checkpoint_contains_optimizer": include_optimizer,
-            "provenance": _git_provenance(),
+            "checkpoint_contains_scheduler": False,
+            "checkpoint_contains_rng": True,
+            "data_split_identity": data_split_identity,
+            "experiment_role": None
+            if args.experiment_role is None
+            else str(args.experiment_role),
+            "experiment_campaign": None
+            if args.experiment_campaign is None
+            else str(args.experiment_campaign),
+            "provenance": provenance,
         },
     }
     torch.save(payload, path)
@@ -885,6 +1010,24 @@ def run(args: DictConfig) -> None:
         num_validation_classes=int(args.pseudo_val_num_classes),
         seed=int(args.pseudo_val_seed),
     )
+    resolved_config_value = OmegaConf.to_container(args, resolve=True)
+    if not isinstance(resolved_config_value, dict):
+        raise TypeError("resolved Hydra config must be a dictionary")
+    resolved_config = resolved_config_value
+    data_split_payload = {
+        "dataset": data.name,
+        "pseudo_validation_seed": split.seed,
+        "train_class_ids": list(split.train_class_ids),
+        "validation_class_ids": list(split.validation_class_ids),
+        "train_sketches": len(split.train_sketch_entries),
+        "train_photos": len(split.train_photo_entries),
+        "validation_sketches": len(split.validation_sketch_entries),
+        "validation_photos": len(split.validation_photo_entries),
+    }
+    data_split_identity = {
+        **data_split_payload,
+        "sha256": hash_json(data_split_payload),
+    }
     if str(args.train_class_scope) == "pseudo_train":
         train_sketch_entries = split.train_sketch_entries
         train_photo_entries = split.train_photo_entries
@@ -945,6 +1088,7 @@ def run(args: DictConfig) -> None:
     print("Encoding pseudo-unseen validation gallery with frozen photo CLIP...")
     val_gallery = encode_retrieval_loader(photo_clip.encoder, val_photo_loader)
     test_gallery = load_encoded_retrieval_set(_resolve_project_path(args.embedding_dir) / "photos.pt")
+
     # Reference features are encoded in loader order once, only for probes and
     # geometry-loss targets; they are never passed to the model.
     def encode_reference_loader(loader: DataLoader) -> Tensor:
@@ -1010,19 +1154,55 @@ def run(args: DictConfig) -> None:
         parameter_groups.append({"params": encoder_parameters, "lr": float(args.encoder_learning_rate)})
     optimizer = torch.optim.AdamW(parameter_groups, weight_decay=float(args.weight_decay))
     resume_step = 0
+    payload: dict[str, Any] | None = None
     resume_path = None if args.resume_checkpoint_path is None else _resolve_project_path(args.resume_checkpoint_path)
     if resume_path is not None:
-        payload = torch.load(resume_path, map_location="cpu", weights_only=True)
-        if not isinstance(payload, dict) or not isinstance(payload.get("model_state_dict"), dict):
+        loaded = torch.load(resume_path, map_location="cpu", weights_only=True)
+        if not isinstance(loaded, dict) or not isinstance(
+            loaded.get("model_state_dict"), dict
+        ):
             raise ValueError("resume checkpoint is not a predictive transport checkpoint")
-        model.load_state_dict(payload["model_state_dict"], strict=True)
-        resume_step = int(payload.get("step", 0))
-        optimizer_state = payload.get("optimizer_state_dict")
-        if optimizer_state is not None and not bool(args.reset_optimizer_on_resume):
-            optimizer.load_state_dict(optimizer_state)
+        payload = loaded
+        if (
+            str(args.experiment_role)
+            in {
+                "freeze_optimizer_A",
+                "freeze_optimizer_B",
+                "freeze_optimizer_C",
+                "freeze_optimizer_D",
+            }
+            and int(payload.get("step", -1)) != 73
+        ):
+            raise ValueError(
+                "freeze × optimizer branches must fork the same step-73 checkpoint"
+            )
+        fresh_head = (
+            _cpu_state_dict(model.transport_head)
+            if bool(args.reset_transport_head_on_resume)
+            else None
+        )
+        scope = str(args.optimizer_reset_scope)
+        restore_optimizer = scope != "all" and not bool(args.reset_optimizer_on_resume)
+        resume_step = _restore_training_state(
+            payload,
+            model=model,
+            optimizer=optimizer,
+            restore_optimizer=restore_optimizer,
+            restore_rng=True,
+            generator=train_loader.generator,
+        )
+        if fresh_head is not None:
+            model.transport_head.load_state_dict(fresh_head, strict=True)
+        if restore_optimizer and scope in {"encoder", "head"}:
+            reset_parameters = (
+                model.sketch_context_encoder.parameters()
+                if scope == "encoder"
+                else model.transport_head.parameters()
+            )
+            for parameter in reset_parameters:
+                optimizer.state.pop(parameter, None)
         print(
-            f"Resumed transport checkpoint at step {resume_step}: {resume_path}"
-            + (" (optimizer reset)" if bool(args.reset_optimizer_on_resume) else "")
+            f"Resumed transport checkpoint at step {resume_step}: {resume_path} (optimizer reset scope={scope})"
         )
     freeze_step = None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step)
     if freeze_step is not None and resume_step >= freeze_step:
@@ -1034,19 +1214,35 @@ def run(args: DictConfig) -> None:
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     equivalent_epochs_per_step = int(args.batch_size) / len(train_loader.dataset)
-    provenance = _git_provenance()
+    provenance = _git_provenance(resolved_config)
     run_config: dict[str, Any] = {
+        "experiment_role": None
+        if args.experiment_role is None
+        else str(args.experiment_role),
+        "experiment_campaign": None
+        if args.experiment_campaign is None
+        else str(args.experiment_campaign),
+        "model_name": str(args.model_name),
+        "pretrained": None if args.pretrained is None else str(args.pretrained),
+        "data_config": str(args.data_config),
         "model_family": "predictive_semantic_transport",
         "objective": OBJECTIVE_NAME,
         "transport_mode": str(args.transport_mode),
         "transport_enabled": bool(args.transport_enabled),
         "encoder_mode": str(args.encoder_mode),
         "encoder_unfreeze_depth": int(args.encoder_unfreeze_depth),
-        "unfrozen_block_count": int(args.encoder_unfreeze_depth) if str(args.encoder_mode) == "partial" else (0 if str(args.encoder_mode) == "frozen" else "all"),
+        "use_z0": bool(args.use_z0),
+        "unfrozen_block_count": int(args.encoder_unfreeze_depth)
+        if str(args.encoder_mode) == "partial"
+        else (0 if str(args.encoder_mode) == "frozen" else "all"),
         "batch_size": int(args.batch_size),
         "eval_batch_size": int(args.eval_batch_size),
+        "drop_last": bool(args.drop_last),
         "tau_cls": float(args.tau_cls),
+        "prompt_template": str(args.prompt_template),
         "scheduler": "none",
+        "weight_decay": float(args.weight_decay),
+        "margin": float(args.margin),
         "K": int(args.K),
         "shared_or_component_rho": str(args.rho_mode),
         "rho_strategy": str(args.rho_strategy),
@@ -1054,7 +1250,8 @@ def run(args: DictConfig) -> None:
         "fixed_rho_degrees": float(args.fixed_rho_degrees),
         "rho_warmup_steps": int(args.rho_warmup_steps),
         "use_vmf": bool(args.use_vmf),
-        "use_text_cls": float(args.lambda_cls) > 0 and str(args.text_loss_location) != "none",
+        "use_text_cls": float(args.lambda_cls) > 0
+        and str(args.text_loss_location) != "none",
         "text_loss_location": str(args.text_loss_location),
         "direction_target": str(args.direction_target),
         "use_geometry_loss": bool(args.use_geometry_loss),
@@ -1071,10 +1268,18 @@ def run(args: DictConfig) -> None:
         "encoder_lr": float(args.encoder_learning_rate),
         "predictor_learning_rate": float(args.predictor_learning_rate),
         "encoder_learning_rate": float(args.encoder_learning_rate),
-        "resume_checkpoint_path": None if args.resume_checkpoint_path is None else str(args.resume_checkpoint_path),
+        "resume_checkpoint_path": None
+        if args.resume_checkpoint_path is None
+        else str(args.resume_checkpoint_path),
         "reset_optimizer_on_resume": bool(args.reset_optimizer_on_resume),
-        "freeze_encoder_at_step": None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step),
-        "gradient_conflict_steps": [int(value) for value in args.gradient_conflict_steps],
+        "optimizer_reset_scope": str(args.optimizer_reset_scope),
+        "reset_transport_head_on_resume": bool(args.reset_transport_head_on_resume),
+        "freeze_encoder_at_step": None
+        if args.freeze_encoder_at_step is None
+        else int(args.freeze_encoder_at_step),
+        "gradient_conflict_steps": [
+            int(value) for value in args.gradient_conflict_steps
+        ],
         "seed": seed,
         "steps": int(args.max_steps),
         "equivalent_epochs": int(args.max_steps) * equivalent_epochs_per_step,
@@ -1086,6 +1291,8 @@ def run(args: DictConfig) -> None:
         "pseudo_validation_seed": split.seed,
         "pseudo_train_classes": len(split.train_class_ids),
         "pseudo_validation_classes": len(split.validation_class_ids),
+        "probe_steps": [int(value) for value in args.probe_steps],
+        "map_at_k_denominator": str(args.map_at_k_denominator),
         "text_conditioning": False,
         "text_enters_predictor": False,
         **parameter_counts,
@@ -1110,7 +1317,12 @@ def run(args: DictConfig) -> None:
         group=None if args.wandb_group is None else str(args.wandb_group),
         name=None if args.wandb_run_name is None else str(args.wandb_run_name),
         config=run_config,
-        tags=("spica", "predictive-semantic-transport", str(args.transport_mode), f"K{args.K}"),
+        tags=(
+            "spica",
+            "predictive-semantic-transport",
+            str(args.transport_mode),
+            f"K{args.K}",
+        ),
         mode=experiment_mode,
         job_type="transport-training",
         directory=output_dir,
@@ -1369,25 +1581,62 @@ def run(args: DictConfig) -> None:
                 gradient_conflict: dict[str, object] | None = None
                 if step + 1 in gradient_conflict_steps and bool(args.transport_enabled):
                     conflict_parameters = [
-                        parameter for parameter in model.transport_head.parameters()
+                        parameter
+                        for parameter in model.parameters()
                         if parameter.requires_grad
                     ]
                     diagnostic_losses = {
-                        "endpoint": loss_endpoint,
-                        "cls": loss_cls,
-                        "rank": loss_rank,
-                        "dir": loss_dir,
+                        "L_cls": loss_cls,
+                        "L_rank": loss_rank,
+                        "L_dir": loss_dir,
+                        "L_endpoint": loss_endpoint,
+                    }
+                    batch_identity = {
+                        "sketch_paths": [
+                            str(value) for value in batch.get("sketch_path", ())
+                        ],
+                        "positive_photo_paths": [
+                            [str(path) for path in values]
+                            for values in batch.get("positive_photo_paths", ())
+                        ],
+                        "negative_photo_paths": [
+                            str(value) for value in batch.get("negative_photo_path", ())
+                        ],
+                        "labels": labels.detach().cpu().tolist(),
                     }
                     gradient_conflict = {
+                        "checkpoint": step + 1,
                         "step": step + 1,
-                        "parameter_space": {
-                            "endpoint_cls": _gradient_cosine(loss_endpoint, loss_cls, conflict_parameters),
-                            "endpoint_rank": _gradient_cosine(loss_endpoint, loss_rank, conflict_parameters),
-                            "cls_rank": _gradient_cosine(loss_cls, loss_rank, conflict_parameters),
+                        "seed": seed,
+                        "batch_identity": {
+                            **batch_identity,
+                            "sha256": hash_json(batch_identity),
                         },
-                        "representation_space": _representation_gradient_conflicts(
-                            diagnostic_losses, prediction
-                        ),
+                        "loss_names": list(diagnostic_losses),
+                        "spaces": {
+                            **_representation_gradient_conflicts(
+                                diagnostic_losses, prediction
+                            ),
+                            "parameter": _parameter_gradient_space(
+                                diagnostic_losses, conflict_parameters
+                            ),
+                        },
+                        "optimizer_application": {
+                            "L_cls": float(args.lambda_cls),
+                            "L_rank": float(args.lambda_rank),
+                            "L_dir": dir_weight,
+                            "L_endpoint": float(args.lambda_endpoint),
+                        },
+                        "diagnostic_only": [
+                            name
+                            for name, weight in {
+                                "L_cls": float(args.lambda_cls),
+                                "L_rank": float(args.lambda_rank),
+                                "L_dir": dir_weight,
+                                "L_endpoint": float(args.lambda_endpoint),
+                            }.items()
+                            if weight == 0.0
+                        ],
                     }
                 loss_total = (
                     dir_weight * loss_dir
@@ -1465,7 +1714,21 @@ def run(args: DictConfig) -> None:
                     window_count = 0
                 if bool(args.run_probes) and step in probe_steps:
                     checkpoint_path = output_dir / "checkpoints" / f"transport_step{step}.pt"
-                    _save_checkpoint(path=checkpoint_path, model=model, optimizer=optimizer, step=step, data_name=data.name, args=args, split=split, parameter_counts=parameter_counts, include_optimizer=bool(args.save_optimizer))
+                    _save_checkpoint(
+                        path=checkpoint_path,
+                        model=model,
+                        optimizer=optimizer,
+                        step=step,
+                        data_name=data.name,
+                        args=args,
+                        split=split,
+                        parameter_counts=parameter_counts,
+                        provenance=provenance,
+                        resolved_config=resolved_config,
+                        data_split_identity=data_split_identity,
+                        generator=train_loader.generator,
+                        include_optimizer=bool(args.save_optimizer),
+                    )
                     model.set_schedule_step(step)
                     probe, _, _ = _probe(model=model, val_loader=val_loader, val_gallery=val_gallery, test_loader=test_loader, test_gallery=test_gallery, val_reference=val_reference, test_reference=test_reference, val_hidden_reference=val_hidden_reference, test_hidden_reference=test_hidden_reference, initial_val=initial_val, initial_test=initial_test, device=device, args=args)
                     probe.update({"step": step, "equivalent_epochs": step * equivalent_epochs_per_step, "checkpoint": str(checkpoint_path), "parameter_drift": _parameter_drift(model, initial_parameters), "training_losses_at_checkpoint": current})
@@ -1479,44 +1742,110 @@ def run(args: DictConfig) -> None:
                     break
 
         final_path = _resolve_checkpoint_path(args.checkpoint_path)
-        _save_checkpoint(path=final_path, model=model, optimizer=optimizer, step=step, data_name=data.name, args=args, split=split, parameter_counts=parameter_counts, include_optimizer=bool(args.save_optimizer))
+        _save_checkpoint(
+            path=final_path,
+            model=model,
+            optimizer=optimizer,
+            step=step,
+            data_name=data.name,
+            args=args,
+            split=split,
+            parameter_counts=parameter_counts,
+            provenance=provenance,
+            resolved_config=resolved_config,
+            data_split_identity=data_split_identity,
+            generator=train_loader.generator,
+            include_optimizer=bool(args.save_optimizer),
+        )
         report = {
             "config": run_config,
             "checkpoint": str(final_path),
             "step": step,
             "equivalent_epochs": step * equivalent_epochs_per_step,
             "parameter_counts": parameter_counts,
-            "pseudo_split": {"seed": split.seed, "train_class_ids": list(split.train_class_ids), "validation_class_ids": list(split.validation_class_ids), "train_sketches": len(split.train_sketch_entries), "train_photos": len(split.train_photo_entries), "validation_sketches": len(split.validation_sketch_entries), "validation_photos": len(split.validation_photo_entries)},
+            "resolved_config": resolved_config,
+            "data_split_identity": data_split_identity,
+            "pseudo_split": {
+                "seed": split.seed,
+                "train_class_ids": list(split.train_class_ids),
+                "validation_class_ids": list(split.validation_class_ids),
+                "train_sketches": len(split.train_sketch_entries),
+                "train_photos": len(split.train_photo_entries),
+                "validation_sketches": len(split.validation_sketch_entries),
+                "validation_photos": len(split.validation_photo_entries),
+            },
             "training_history": training_history,
             "probe_history": history,
             "gradient_conflicts": gradient_conflicts,
             "training_target_angles": {
                 "theta_train": {
                     **training_angle_summary(torch.tensor(training_angle_values)),
-                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_values],
+                    "values_degrees": [
+                        value * (180.0 / math.pi) for value in training_angle_values
+                    ],
                 },
                 "theta_train_fixed": {
                     **training_angle_summary(torch.tensor(training_angle_fixed_values)),
-                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_fixed_values],
+                    "values_degrees": [
+                        value * (180.0 / math.pi)
+                        for value in training_angle_fixed_values
+                    ],
                 },
                 "origin_definitions": {
                     "theta_train": "acos(clamp(z0 · z_positive_instance))",
                     "theta_train_fixed": "acos(clamp(z_ref · z_positive_instance))",
                     "positive_pairs": "actual sampled training sketch/photo pairs",
                 },
-            } if training_angle_values and training_angle_fixed_values else {},
+            }
+            if training_angle_values and training_angle_fixed_values
+            else {},
             "provenance": provenance,
             "resume": {
                 "checkpoint": None if resume_path is None else str(resume_path),
                 "starting_step": resume_step,
                 "freeze_encoder_at_step": freeze_step,
-                "optimizer_state_restored": (resume_path is not None and payload.get("optimizer_state_dict") is not None and not bool(args.reset_optimizer_on_resume)) if resume_path is not None else False,
+                "optimizer_state_restored": bool(
+                    resume_path is not None
+                    and payload is not None
+                    and payload.get("optimizer_state_dict") is not None
+                    and str(args.optimizer_reset_scope) != "all"
+                    and not bool(args.reset_optimizer_on_resume)
+                ),
                 "optimizer_state_reset": bool(args.reset_optimizer_on_resume),
+                "optimizer_reset_scope": str(args.optimizer_reset_scope),
+                "scheduler_state_restored": False,
+                "rng_state_restored": resume_path is not None,
+                "transport_head_reinitialized": bool(
+                    args.reset_transport_head_on_resume
+                ),
             },
-            "photo_sampling": {"num_positive_photos_per_step": int(args.num_positive_photos), "unique_positive_photo_paths_seen": len(positive_paths_seen), "same_sketch_can_see_new_photo_each_epoch": True},
-            "inference_contract": {"required_inputs": ["raw_sketch_image"], "text_required": False, "photo_required": False, "positive_set_required": False, "oracle_class_required": False},
-            "text_contract": {"enters_predictor": False, "enters_gate": False, "enters_distance_head": False, "enters_vmf": False, "loss_location": str(args.text_loss_location), "used_only_for_seen_classification": text_bank is not None},
-            "wandb": {"mode": experiment_mode, "project": str(args.wandb_project), "group": None if args.wandb_group is None else str(args.wandb_group), "run_id": experiment.run_id, "run_url": experiment.run_url},
+            "photo_sampling": {
+                "num_positive_photos_per_step": int(args.num_positive_photos),
+                "unique_positive_photo_paths_seen": len(positive_paths_seen),
+                "same_sketch_can_see_new_photo_each_epoch": True,
+            },
+            "inference_contract": {
+                "required_inputs": ["raw_sketch_image"],
+                "text_required": False,
+                "photo_required": False,
+                "positive_set_required": False,
+                "oracle_class_required": False,
+            },
+            "text_contract": {
+                "enters_predictor": False,
+                "enters_gate": False,
+                "enters_distance_head": False,
+                "enters_vmf": False,
+                "loss_location": str(args.text_loss_location),
+                "used_only_for_seen_classification": text_bank is not None,
+            },
+            "wandb": {
+                "mode": experiment_mode,
+                "project": str(args.wandb_project),
+                "group": None if args.wandb_group is None else str(args.wandb_group),
+                "run_id": experiment.run_id,
+                "run_url": experiment.run_url,
+            },
         }
         (output_dir / "training_history.json").write_text(json.dumps(training_history, indent=2, sort_keys=True) + "\n")
         (output_dir / "run_result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
@@ -1525,7 +1854,9 @@ def run(args: DictConfig) -> None:
         print("Text required at inference: NO")
 
 
-@hydra.main(version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="train_transport")
+@hydra.main(
+    version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="train_transport"
+)
 def main(args: DictConfig) -> None:
     run(args)
 

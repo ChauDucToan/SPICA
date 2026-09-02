@@ -1,0 +1,2711 @@
+diff --git a/.gitignore b/.gitignore
+index 7984f0c..95302d5 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -32,6 +32,24 @@ outputs/*
+ !outputs/stability_retention.png
+ !outputs/seed_replication_controls.png
+ !outputs/transport_multi_photo_probe_*.json
++!outputs/research_summary_transport_corrected_*.md
++!outputs/research_summary_transport_corrected_*.json
++!outputs/experiment_manifest_transport_corrected_*.json
++!outputs/corrected_causal_decomposition.png
++!outputs/corrected_causal_decomposition.json
++!outputs/corrected_endpoint0_factorial.png
++!outputs/corrected_endpoint0_factorial.json
++!outputs/freeze_optimizer_factorial.png
++!outputs/freeze_optimizer_factorial.json
++!outputs/two_stage_transport.png
++!outputs/two_stage_transport.json
++!outputs/projection_refit_control.png
++!outputs/projection_refit_control.json
++!outputs/frozen_origin_direction_ablation.png
++!outputs/frozen_origin_direction_ablation.json
++!outputs/stability_retention_corrected.png
++!outputs/stability_retention_corrected.json
++!outputs/transport_corrected_*.patch
+ 
+ # ckeckpoint
+ *.pth
+diff --git a/configs/experiments/transport_factorial_base_no_text.yaml b/configs/experiments/transport_factorial_base_no_text.yaml
+index 46b8abe..f1d4053 100644
+--- a/configs/experiments/transport_factorial_base_no_text.yaml
++++ b/configs/experiments/transport_factorial_base_no_text.yaml
+@@ -1,12 +1,15 @@
+ # @package _global_
+ # P1 A: matched base-query control, q=z0, no text classifier.
+ experiment_name: transport_factorial_base_no_text
++experiment_role: endpoint0_factorial_A
++experiment_campaign: transport_corrected_2026-09-02_v2
+ transport_enabled: false
+ transport_mode: tangent
+ K: 1
+ encoder_mode: partial
+ encoder_unfreeze_depth: 4
+ lambda_cls: 0.0
++text_loss_location: none
+ lambda_dir: 0.0
+ lambda_dist: 0.0
+ lambda_endpoint: 0.0
+diff --git a/configs/experiments/transport_factorial_base_text.yaml b/configs/experiments/transport_factorial_base_text.yaml
+index 44b5f90..46b9770 100644
+--- a/configs/experiments/transport_factorial_base_text.yaml
++++ b/configs/experiments/transport_factorial_base_text.yaml
+@@ -1,12 +1,15 @@
+ # @package _global_
+ # P1 B: matched base-query plus frozen seen-class CLIPText CE.
+ experiment_name: transport_factorial_base_text
++experiment_role: endpoint0_factorial_B
++experiment_campaign: transport_corrected_2026-09-02_v2
+ transport_enabled: false
+ transport_mode: tangent
+ K: 1
+ encoder_mode: partial
+ encoder_unfreeze_depth: 4
+ lambda_cls: 1.0
++text_loss_location: q
+ lambda_dir: 0.0
+ lambda_dist: 0.0
+ lambda_endpoint: 0.0
+diff --git a/configs/experiments/transport_factorial_transport_no_text.yaml b/configs/experiments/transport_factorial_transport_no_text.yaml
+index bfca355..13e158e 100644
+--- a/configs/experiments/transport_factorial_transport_no_text.yaml
++++ b/configs/experiments/transport_factorial_transport_no_text.yaml
+@@ -1,6 +1,8 @@
+ # @package _global_
+ # P1 C: matched K=1 tangent transport without text CE.
+ experiment_name: transport_factorial_transport_no_text
++experiment_role: endpoint0_factorial_C
++experiment_campaign: transport_corrected_2026-09-02_v2
+ transport_enabled: true
+ text_loss_location: none
+ direction_target: moving
+diff --git a/configs/experiments/transport_factorial_transport_text.yaml b/configs/experiments/transport_factorial_transport_text.yaml
+index 692c671..939955b 100644
+--- a/configs/experiments/transport_factorial_transport_text.yaml
++++ b/configs/experiments/transport_factorial_transport_text.yaml
+@@ -1,6 +1,8 @@
+ # @package _global_
+ # P1 D: matched K=1 tangent transport plus frozen seen-class CLIPText CE.
+ experiment_name: transport_factorial_transport_text
++experiment_role: endpoint0_factorial_D
++experiment_campaign: transport_corrected_2026-09-02_v2
+ transport_enabled: true
+ text_loss_location: q
+ direction_target: moving
+diff --git a/configs/train_transport.yaml b/configs/train_transport.yaml
+index 03e9941..c84d95b 100644
+--- a/configs/train_transport.yaml
++++ b/configs/train_transport.yaml
+@@ -3,6 +3,10 @@ defaults:
+ 
+ experiment_name: transport_tangent_k1_${encoder_mode}_rho${rho_max_degrees}
+ model_family: predictive_semantic_transport
++# Structured semantic role used by integrity-aware summarizers; never inferred
++# from experiment_name.
++experiment_role: null
++experiment_campaign: null
+ 
+ data_config: configs/data/sketchy_104_21.yaml
+ embedding_dir: outputs/sketchy_104_21/clip_openai_quickgelu
+@@ -95,8 +99,10 @@ map_at_k_denominator: prefix_positive
+ save_optimizer: false
+ # Optional exact-checkpoint continuation used by freeze-after-warmup controls.
+ resume_checkpoint_path: null
+-# A controlled optimizer-reset continuation (P8 branch C).
++# Continuation controls. reset scope can isolate encoder/head optimizer state.
+ reset_optimizer_on_resume: false
++optimizer_reset_scope: none
++reset_transport_head_on_resume: false
+ freeze_encoder_at_step: null
+ # Gradient conflict is intentionally sparse; these are not per-iteration logs.
+ gradient_conflict_steps: [15, 73, 500]
+diff --git a/scripts/transport_artifact_utils.py b/scripts/transport_artifact_utils.py
+index ccccbff..5aa481c 100644
+--- a/scripts/transport_artifact_utils.py
++++ b/scripts/transport_artifact_utils.py
+@@ -8,6 +8,7 @@ field is *unknown*, not ``True``.
+ from __future__ import annotations
+ 
+ import json
++import math
+ from pathlib import Path
+ import subprocess
+ from typing import Any, Callable, Iterable
+@@ -16,6 +17,46 @@ from typing import Any, Callable, Iterable
+ ROOT = Path(__file__).resolve().parents[1]
+ 
+ 
++class ArtifactIntegrityError(ValueError):
++    """Raised when artifacts cannot support the requested causal contrast."""
++
++
++MATCHED_FIELDS = (
++    "seed",
++    "train_class_scope",
++    "pseudo_validation_seed",
++    "model_name",
++    "pretrained",
++    "encoder_mode",
++    "encoder_unfreeze_depth",
++    "use_z0",
++    "lambda_cls",
++    "text_loss_location",
++    "tau_cls",
++    "prompt_template",
++    "lambda_rank",
++    "margin",
++    "predictor_learning_rate",
++    "encoder_learning_rate",
++    "weight_decay",
++    "scheduler",
++    "steps",
++    "batch_size",
++    "num_positive_photos",
++    "probe_steps",
++    "inference_score_mode",
++    "score_temperature",
++    "map_at_k_denominator",
++)
++
++FREEZE_BRANCHES = {
++    "freeze_optimizer_A": (False, False),
++    "freeze_optimizer_B": (True, False),
++    "freeze_optimizer_C": (False, True),
++    "freeze_optimizer_D": (True, True),
++}
++
++
+ def load_json(path: Path) -> dict[str, Any]:
+     value = json.loads(path.read_text())
+     if not isinstance(value, dict):
+@@ -213,3 +254,120 @@ def matched_base_predicate(*, text: bool) -> Callable[[dict[str, Any]], bool]:
+             and config.get("num_positive_photos", 1) == 1
+         )
+     return predicate
++
++
++def select_unique_role(
++    records: Iterable[tuple[Path, dict[str, Any]]], role: str
++) -> tuple[Path, dict[str, Any]]:
++    """Select exactly one run by structured role metadata, never by its name."""
++    candidates = [
++        record
++        for record in records
++        if config_of(record[1]).get("experiment_role") == role
++    ]
++    if not candidates:
++        raise ArtifactIntegrityError(f"missing raw run with experiment_role={role!r}")
++    if len(candidates) != 1:
++        paths = ", ".join(str(path) for path, _ in candidates)
++        raise ArtifactIntegrityError(
++            f"ambiguous experiment_role={role!r}: {len(candidates)} raw runs ({paths})"
++        )
++    return candidates[0]
++
++
++def _same(left: Any, right: Any) -> bool:
++    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
++        return math.isclose(float(left), float(right), rel_tol=0.0, abs_tol=1e-12)
++    return left == right
++
++
++def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None:
++    """Validate the matched base+text versus transport+text causal control."""
++    base_config = config_of(base)
++    transport_config = config_of(transport)
++    if base_config.get("transport_enabled") is not False:
++        raise ArtifactIntegrityError("z0_B must have transport_enabled=false")
++    if transport_config.get("transport_enabled") is not True:
++        raise ArtifactIntegrityError("z0_T/q_T must have transport_enabled=true")
++    for label, config in (("base", base_config), ("transport", transport_config)):
++        if not config.get("use_text_cls") or float(config.get("lambda_cls", 0.0)) <= 0:
++            raise ArtifactIntegrityError(f"{label} run is not a text-supervised run")
++        if float(config.get("lambda_endpoint", 1.0)) != 0.0:
++            raise ArtifactIntegrityError(f"{label} run does not use endpoint=0")
++    mismatches = []
++    for field in MATCHED_FIELDS:
++        if field not in base_config or field not in transport_config:
++            mismatches.append(f"{field}: missing")
++        elif not _same(base_config[field], transport_config[field]):
++            mismatches.append(
++                f"{field}: {base_config[field]!r} != {transport_config[field]!r}"
++            )
++    base_split = base.get("data_split_identity") or base.get("pseudo_split")
++    transport_split = transport.get("data_split_identity") or transport.get(
++        "pseudo_split"
++    )
++    if not isinstance(base_split, dict) or not isinstance(transport_split, dict):
++        mismatches.append("data split identity: missing")
++    elif base_split.get("sha256") and transport_split.get("sha256"):
++        if base_split["sha256"] != transport_split["sha256"]:
++            mismatches.append("data split identity hash differs")
++    elif base_split != transport_split:
++        mismatches.append("data split identity differs")
++    if mismatches:
++        raise ArtifactIntegrityError(
++            "causal runs are not matched: " + "; ".join(mismatches)
++        )
++
++
++def factorial_effects(cells: dict[str, float]) -> dict[str, float]:
++    missing = {"A", "B", "C", "D"} - cells.keys()
++    if missing:
++        raise ArtifactIntegrityError(f"factorial cells missing: {sorted(missing)}")
++    if not all(math.isfinite(float(cells[name])) for name in ("A", "B", "C", "D")):
++        raise ArtifactIntegrityError("factorial values must be finite")
++    a, b, c, d = (float(cells[name]) for name in ("A", "B", "C", "D"))
++    return {
++        "text_effect_without_transport": b - a,
++        "text_effect_with_transport": d - c,
++        "transport_effect_without_text": c - a,
++        "transport_effect_with_text": d - b,
++        "interaction": d - c - b + a,
++    }
++
++
++def validate_freeze_optimizer_role(config: dict[str, Any]) -> dict[str, bool]:
++    """Resolve and validate one branch of the step-73 freeze × reset factorial."""
++    role = config.get("experiment_role")
++    if role == "optimizer_reset_only":
++        if config.get("freeze_encoder_at_step") is not None:
++            raise ArtifactIntegrityError(
++                "optimizer_reset_only must keep the encoder trainable; observed freeze_encoder_at_step"
++            )
++        role = "freeze_optimizer_C"
++    if role not in FREEZE_BRANCHES:
++        raise ArtifactIntegrityError(f"unknown freeze/optimizer branch role: {role!r}")
++    expected_freeze, expected_reset = FREEZE_BRANCHES[role]
++    observed_freeze = config.get("freeze_encoder_at_step") == 73
++    observed_reset = bool(config.get("reset_optimizer_on_resume"))
++    if observed_freeze != expected_freeze or observed_reset != expected_reset:
++        raise ArtifactIntegrityError(
++            f"{role} requires freeze={expected_freeze}, reset={expected_reset}; "
++            f"observed freeze={observed_freeze}, reset={observed_reset}"
++        )
++    if not config.get("resume_checkpoint_path"):
++        raise ArtifactIntegrityError(
++            f"{role} requires the common step-73 resume checkpoint"
++        )
++    return {"freeze": expected_freeze, "reset": expected_reset}
++
++
++def missing_result(reason: str) -> dict[str, str]:
++    return {"status": "not_run", "reason": reason}
++
++
++def write_new(path: Path, content: str | bytes) -> None:
++    """Create a generated artifact without overwriting historical evidence."""
++    path.parent.mkdir(parents=True, exist_ok=True)
++    mode = "xb" if isinstance(content, bytes) else "x"
++    with path.open(mode) as handle:
++        handle.write(content)
+diff --git a/src/spica/train_transport.py b/src/spica/train_transport.py
+index a2c688f..3069b23 100644
+--- a/src/spica/train_transport.py
++++ b/src/spica/train_transport.py
+@@ -11,12 +11,12 @@ import json
+ import math
+ from pathlib import Path
+ import random
+-import subprocess
++import sys
+ from typing import Any
+ 
+ import hydra
+ from hydra.core.hydra_config import HydraConfig
+-from omegaconf import DictConfig
++from omegaconf import DictConfig, OmegaConf
+ import torch
+ import torch.nn.functional as F
+ from torch import Tensor
+@@ -63,6 +63,12 @@ from .models.jepa import (
+     jepa_text_classification_loss,
+     photo_semantic_target,
+ )
++from .provenance import (
++    capture_provenance,
++    capture_rng_state,
++    hash_json,
++    restore_rng_state,
++)
+ from .tracking.wandb import WandbExperiment
+ 
+ PROJECT_ROOT = Path(__file__).resolve().parents[2]
+@@ -71,35 +77,15 @@ OBJECTIVE_NAME = "predictive_semantic_transport"
+ PSEUDO_SPLIT_SEED = 3407
+ 
+ 
+-def _git_provenance() -> dict[str, object]:
+-    """Capture repository provenance at run creation, never from a report date."""
+-    try:
+-        commit = subprocess.run(
+-            ["git", "rev-parse", "HEAD"],
+-            cwd=PROJECT_ROOT,
+-            check=True,
+-            capture_output=True,
+-            text=True,
+-        ).stdout.strip()
+-        status = subprocess.run(
+-            ["git", "status", "--porcelain"],
+-            cwd=PROJECT_ROOT,
+-            check=True,
+-            capture_output=True,
+-            text=True,
+-        ).stdout.splitlines()
+-    except (OSError, subprocess.CalledProcessError) as error:
+-        return {
+-            "commit": None,
+-            "working_tree_state": "unavailable",
+-            "dirty_files": [],
+-            "error": str(error),
+-        }
+-    return {
+-        "commit": commit,
+-        "working_tree_state": "clean" if not status else "dirty",
+-        "dirty_files": status,
+-    }
++def _git_provenance(
++    resolved_config: dict[str, Any] | None = None,
++) -> dict[str, Any]:
++    """Capture exact source/environment provenance, including dirty content."""
++    return capture_provenance(
++        PROJECT_ROOT,
++        resolved_config=resolved_config,
++        command=[sys.executable, "-m", "spica.train_transport", *sys.argv[1:]],
++    )
+ 
+ 
+ def _angle_values(
+@@ -143,23 +129,33 @@ def _gradient_pair_cosine(first: Tensor, second: Tensor) -> float | None:
+     return float((first_flat * second_flat).sum().div(first_norm * second_norm).item())
+ 
+ 
++def _cosine_matrix(vectors: dict[str, Tensor]) -> list[list[float | None]]:
++    names = list(vectors)
++    return [
++        [_gradient_pair_cosine(vectors[left], vectors[right]) for right in names]
++        for left in names
++    ]
++
++
+ def _representation_gradient_conflicts(
+     losses: dict[str, Tensor],
+     prediction: SemanticTransportPrediction,
+-) -> dict[str, dict[str, float | None]]:
+-    """Pairwise loss-gradient cosines in q and z0 representation spaces."""
+-    result: dict[str, dict[str, float | None]] = {}
+-    for representation_name, representation in (("q", prediction.q), ("z0", prediction.z0)):
++) -> dict[str, dict[str, object]]:
++    """Keep query and base representation gradients in explicit namespaces."""
++    result: dict[str, dict[str, object]] = {}
++    for key, name, representation in (
++        ("query", "dL/dq", prediction.q),
++        ("base", "dL/dz0", prediction.z0),
++    ):
+         gradients = {
+-            name: _gradient_wrt(loss, representation)
+-            for name, loss in losses.items()
++            loss_name: _gradient_wrt(loss, representation)
++            for loss_name, loss in losses.items()
++        }
++        result[key] = {
++            "space": name,
++            "loss_names": list(losses),
++            "cosine_matrix": _cosine_matrix(gradients),
+         }
+-        pairs: dict[str, float | None] = {}
+-        for left, right in (("endpoint", "cls"), ("endpoint", "rank"), ("cls", "rank"), ("dir", "cls")):
+-            pairs[f"{left}_{right}"] = _gradient_pair_cosine(
+-                gradients[left], gradients[right]
+-            )
+-        result[representation_name] = pairs
+     return result
+ 
+ 
+@@ -319,6 +315,76 @@ def _validate_options(args: DictConfig) -> None:
+         raise ValueError("training_angle_diagnostic_max must be positive")
+     if not isinstance(args.reset_optimizer_on_resume, bool):
+         raise ValueError("reset_optimizer_on_resume must be boolean")
++    if str(args.optimizer_reset_scope) not in {"none", "all", "encoder", "head"}:
++        raise ValueError("optimizer_reset_scope must be none, all, encoder, or head")
++    expected_scope = "all" if bool(args.reset_optimizer_on_resume) else "none"
++    if str(args.optimizer_reset_scope) not in {expected_scope, "encoder", "head"}:
++        raise ValueError("reset_optimizer_on_resume and optimizer_reset_scope disagree")
++    if not isinstance(args.reset_transport_head_on_resume, bool):
++        raise ValueError("reset_transport_head_on_resume must be boolean")
++    role = None if args.experiment_role is None else str(args.experiment_role)
++    branches = {
++        "freeze_optimizer_A": (False, False),
++        "freeze_optimizer_B": (True, False),
++        "freeze_optimizer_C": (False, True),
++        "freeze_optimizer_D": (True, True),
++    }
++    if role == "optimizer_reset_only" and args.freeze_encoder_at_step is not None:
++        raise ValueError("optimizer_reset_only cannot freeze the encoder")
++    if role in branches:
++        expected_freeze, expected_reset = branches[role]
++        observed_freeze = (
++            args.freeze_encoder_at_step is not None
++            and int(args.freeze_encoder_at_step) == 73
++        )
++        if (
++            observed_freeze != expected_freeze
++            or bool(args.reset_optimizer_on_resume) != expected_reset
++        ):
++            raise ValueError(
++                f"{role} requires freeze={expected_freeze}, reset={expected_reset}"
++            )
++        if args.resume_checkpoint_path is None:
++            raise ValueError(f"{role} requires a common step-73 resume checkpoint")
++    if role == "freeze_optimizer_source" and (
++        int(args.max_steps) != 73
++        or not bool(args.save_optimizer)
++        or args.resume_checkpoint_path is not None
++    ):
++        raise ValueError(
++            "freeze_optimizer_source must be a fresh optimizer-bearing step-73 run"
++        )
++    if role == "two_stage_stage1" and not (
++        args.transport_enabled is False
++        and str(args.text_loss_location) == "z0"
++        and float(args.lambda_endpoint) == 0.0
++        and float(args.lambda_dist) == 0.0
++        and int(args.max_steps) in {44, 73}
++        and str(args.train_class_scope) == "pseudo_train"
++    ):
++        raise ValueError("two_stage_stage1 must train rank(z0)+CE(z0) on pseudo-train")
++    if role in {
++        "two_stage_S1",
++        "two_stage_S2",
++        "two_stage_S3",
++        "two_stage_S4",
++    } and not (
++        bool(args.transport_enabled)
++        and int(args.K) == 1
++        and not bool(args.use_vmf)
++        and str(args.rho_strategy) == "fixed"
++        and float(args.fixed_rho_degrees) == 15.0
++        and float(args.lambda_endpoint) == 0.0
++        and float(args.lambda_dist) == 0.0
++        and args.freeze_encoder_at_step is not None
++        and int(args.freeze_encoder_at_step) == 73
++        and bool(args.reset_transport_head_on_resume)
++        and args.resume_checkpoint_path is not None
++        and str(args.train_class_scope) == "pseudo_train"
++    ):
++        raise ValueError(
++            "two-stage transport must use a fresh K=1 fixed-15 head and frozen step-73 origin"
++        )
+     if str(args.wandb_mode) not in {"online", "offline", "disabled"}:
+         raise ValueError("wandb_mode must be online, offline, or disabled")
+ 
+@@ -493,7 +559,7 @@ def _cpu_state_dict(model: SpicaPredictiveTransport) -> dict[str, Tensor]:
+ def _gradient_vector(loss: Tensor, parameters: list[torch.nn.Parameter]) -> Tensor:
+     """Flatten a loss gradient, using zeros for parameters it does not touch."""
+     if not loss.requires_grad:
+-        return torch.zeros(1, device=loss.device, dtype=loss.dtype)
++        return loss.new_zeros(sum(parameter.numel() for parameter in parameters))
+     gradients = torch.autograd.grad(
+         loss,
+         parameters,
+@@ -507,14 +573,53 @@ def _gradient_vector(loss: Tensor, parameters: list[torch.nn.Parameter]) -> Tens
+     return torch.cat(values) if values else loss.new_zeros(1)
+ 
+ 
+-def _gradient_cosine(loss_a: Tensor, loss_b: Tensor, parameters: list[torch.nn.Parameter]) -> float | None:
+-    vector_a = _gradient_vector(loss_a, parameters)
+-    vector_b = _gradient_vector(loss_b, parameters)
+-    norm_a = vector_a.norm()
+-    norm_b = vector_b.norm()
+-    if norm_a <= 1e-12 or norm_b <= 1e-12:
+-        return None
+-    return float((vector_a * vector_b).sum().div(norm_a * norm_b).item())
++def _parameter_gradient_space(
++    losses: dict[str, Tensor], parameters: list[torch.nn.Parameter]
++) -> dict[str, object]:
++    vectors = {
++        name: _gradient_vector(loss, parameters) for name, loss in losses.items()
++    }
++    return {
++        "space": "dL/dtheta",
++        "loss_names": list(losses),
++        "cosine_matrix": _cosine_matrix(vectors),
++    }
++
++
++def _restore_training_state(
++    payload: dict[str, Any],
++    *,
++    model: torch.nn.Module,
++    optimizer: torch.optim.Optimizer,
++    scheduler: Any = None,
++    restore_optimizer: bool = True,
++    restore_rng: bool = True,
++    generator: torch.Generator | None = None,
++) -> int:
++    """Restore all saved continuation state or fail instead of partial-resuming."""
++    model.load_state_dict(payload["model_state_dict"], strict=True)
++    if restore_optimizer:
++        state = payload.get("optimizer_state_dict")
++        if state is None:
++            raise ValueError(
++                "resume requested optimizer restoration but checkpoint has no optimizer state"
++            )
++        optimizer.load_state_dict(state)
++    if scheduler is not None:
++        state = payload.get("scheduler_state_dict")
++        if state is None:
++            raise ValueError(
++                "resume requested scheduler restoration but checkpoint has no scheduler state"
++            )
++        scheduler.load_state_dict(state)
++    if restore_rng:
++        state = payload.get("rng_state")
++        if not isinstance(state, dict):
++            raise ValueError(
++                "resume requested RNG restoration but checkpoint has no RNG state"
++            )
++        restore_rng_state(state, generator)
++    return int(payload["step"])
+ 
+ 
+ def _freeze_encoder(model: SpicaPredictiveTransport) -> None:
+@@ -554,6 +659,10 @@ def _save_checkpoint(
+     args: DictConfig,
+     split: ClasswiseRetrievalSplit,
+     parameter_counts: dict[str, int],
++    provenance: dict[str, Any],
++    resolved_config: dict[str, Any],
++    data_split_identity: dict[str, Any],
++    generator: torch.Generator | None,
+     include_optimizer: bool = False,
+ ) -> None:
+     path.parent.mkdir(parents=True, exist_ok=True)
+@@ -586,11 +695,18 @@ def _save_checkpoint(
+             "encoder_mode": str(args.encoder_mode),
+             "encoder_unfreeze_depth": int(args.encoder_unfreeze_depth),
+             "encoder_model_name": str(args.model_name),
+-            "encoder_pretrained": None if args.pretrained is None else str(args.pretrained),
++            "encoder_pretrained": None
++            if args.pretrained is None
++            else str(args.pretrained),
+             "parameter_counts": parameter_counts,
+         },
+         "model_state_dict": _cpu_state_dict(model),
+         "optimizer_state_dict": optimizer.state_dict() if include_optimizer else None,
++        "scheduler_state_dict": None,
++        "rng_state": capture_rng_state(generator),
++        "global_step": int(step),
++        "resolved_config": resolved_config,
++        "data_split_identity": data_split_identity,
+         "metadata": {
+             "dataset": data_name,
+             "split": "train",
+@@ -636,7 +752,16 @@ def _save_checkpoint(
+             "pseudo_validation_class_ids": list(split.validation_class_ids),
+             "pseudo_train_class_ids": list(split.train_class_ids),
+             "checkpoint_contains_optimizer": include_optimizer,
+-            "provenance": _git_provenance(),
++            "checkpoint_contains_scheduler": False,
++            "checkpoint_contains_rng": True,
++            "data_split_identity": data_split_identity,
++            "experiment_role": None
++            if args.experiment_role is None
++            else str(args.experiment_role),
++            "experiment_campaign": None
++            if args.experiment_campaign is None
++            else str(args.experiment_campaign),
++            "provenance": provenance,
+         },
+     }
+     torch.save(payload, path)
+@@ -885,6 +1010,24 @@ def run(args: DictConfig) -> None:
+         num_validation_classes=int(args.pseudo_val_num_classes),
+         seed=int(args.pseudo_val_seed),
+     )
++    resolved_config_value = OmegaConf.to_container(args, resolve=True)
++    if not isinstance(resolved_config_value, dict):
++        raise TypeError("resolved Hydra config must be a dictionary")
++    resolved_config = resolved_config_value
++    data_split_payload = {
++        "dataset": data.name,
++        "pseudo_validation_seed": split.seed,
++        "train_class_ids": list(split.train_class_ids),
++        "validation_class_ids": list(split.validation_class_ids),
++        "train_sketches": len(split.train_sketch_entries),
++        "train_photos": len(split.train_photo_entries),
++        "validation_sketches": len(split.validation_sketch_entries),
++        "validation_photos": len(split.validation_photo_entries),
++    }
++    data_split_identity = {
++        **data_split_payload,
++        "sha256": hash_json(data_split_payload),
++    }
+     if str(args.train_class_scope) == "pseudo_train":
+         train_sketch_entries = split.train_sketch_entries
+         train_photo_entries = split.train_photo_entries
+@@ -945,6 +1088,7 @@ def run(args: DictConfig) -> None:
+     print("Encoding pseudo-unseen validation gallery with frozen photo CLIP...")
+     val_gallery = encode_retrieval_loader(photo_clip.encoder, val_photo_loader)
+     test_gallery = load_encoded_retrieval_set(_resolve_project_path(args.embedding_dir) / "photos.pt")
++
+     # Reference features are encoded in loader order once, only for probes and
+     # geometry-loss targets; they are never passed to the model.
+     def encode_reference_loader(loader: DataLoader) -> Tensor:
+@@ -1010,19 +1154,55 @@ def run(args: DictConfig) -> None:
+         parameter_groups.append({"params": encoder_parameters, "lr": float(args.encoder_learning_rate)})
+     optimizer = torch.optim.AdamW(parameter_groups, weight_decay=float(args.weight_decay))
+     resume_step = 0
++    payload: dict[str, Any] | None = None
+     resume_path = None if args.resume_checkpoint_path is None else _resolve_project_path(args.resume_checkpoint_path)
+     if resume_path is not None:
+-        payload = torch.load(resume_path, map_location="cpu", weights_only=True)
+-        if not isinstance(payload, dict) or not isinstance(payload.get("model_state_dict"), dict):
++        loaded = torch.load(resume_path, map_location="cpu", weights_only=True)
++        if not isinstance(loaded, dict) or not isinstance(
++            loaded.get("model_state_dict"), dict
++        ):
+             raise ValueError("resume checkpoint is not a predictive transport checkpoint")
+-        model.load_state_dict(payload["model_state_dict"], strict=True)
+-        resume_step = int(payload.get("step", 0))
+-        optimizer_state = payload.get("optimizer_state_dict")
+-        if optimizer_state is not None and not bool(args.reset_optimizer_on_resume):
+-            optimizer.load_state_dict(optimizer_state)
++        payload = loaded
++        if (
++            str(args.experiment_role)
++            in {
++                "freeze_optimizer_A",
++                "freeze_optimizer_B",
++                "freeze_optimizer_C",
++                "freeze_optimizer_D",
++            }
++            and int(payload.get("step", -1)) != 73
++        ):
++            raise ValueError(
++                "freeze × optimizer branches must fork the same step-73 checkpoint"
++            )
++        fresh_head = (
++            _cpu_state_dict(model.transport_head)
++            if bool(args.reset_transport_head_on_resume)
++            else None
++        )
++        scope = str(args.optimizer_reset_scope)
++        restore_optimizer = scope != "all" and not bool(args.reset_optimizer_on_resume)
++        resume_step = _restore_training_state(
++            payload,
++            model=model,
++            optimizer=optimizer,
++            restore_optimizer=restore_optimizer,
++            restore_rng=True,
++            generator=train_loader.generator,
++        )
++        if fresh_head is not None:
++            model.transport_head.load_state_dict(fresh_head, strict=True)
++        if restore_optimizer and scope in {"encoder", "head"}:
++            reset_parameters = (
++                model.sketch_context_encoder.parameters()
++                if scope == "encoder"
++                else model.transport_head.parameters()
++            )
++            for parameter in reset_parameters:
++                optimizer.state.pop(parameter, None)
+         print(
+-            f"Resumed transport checkpoint at step {resume_step}: {resume_path}"
+-            + (" (optimizer reset)" if bool(args.reset_optimizer_on_resume) else "")
++            f"Resumed transport checkpoint at step {resume_step}: {resume_path} (optimizer reset scope={scope})"
+         )
+     freeze_step = None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step)
+     if freeze_step is not None and resume_step >= freeze_step:
+@@ -1034,19 +1214,35 @@ def run(args: DictConfig) -> None:
+     output_dir = Path(HydraConfig.get().runtime.output_dir)
+     output_dir.mkdir(parents=True, exist_ok=True)
+     equivalent_epochs_per_step = int(args.batch_size) / len(train_loader.dataset)
+-    provenance = _git_provenance()
++    provenance = _git_provenance(resolved_config)
+     run_config: dict[str, Any] = {
++        "experiment_role": None
++        if args.experiment_role is None
++        else str(args.experiment_role),
++        "experiment_campaign": None
++        if args.experiment_campaign is None
++        else str(args.experiment_campaign),
++        "model_name": str(args.model_name),
++        "pretrained": None if args.pretrained is None else str(args.pretrained),
++        "data_config": str(args.data_config),
+         "model_family": "predictive_semantic_transport",
+         "objective": OBJECTIVE_NAME,
+         "transport_mode": str(args.transport_mode),
+         "transport_enabled": bool(args.transport_enabled),
+         "encoder_mode": str(args.encoder_mode),
+         "encoder_unfreeze_depth": int(args.encoder_unfreeze_depth),
+-        "unfrozen_block_count": int(args.encoder_unfreeze_depth) if str(args.encoder_mode) == "partial" else (0 if str(args.encoder_mode) == "frozen" else "all"),
++        "use_z0": bool(args.use_z0),
++        "unfrozen_block_count": int(args.encoder_unfreeze_depth)
++        if str(args.encoder_mode) == "partial"
++        else (0 if str(args.encoder_mode) == "frozen" else "all"),
+         "batch_size": int(args.batch_size),
+         "eval_batch_size": int(args.eval_batch_size),
++        "drop_last": bool(args.drop_last),
+         "tau_cls": float(args.tau_cls),
++        "prompt_template": str(args.prompt_template),
+         "scheduler": "none",
++        "weight_decay": float(args.weight_decay),
++        "margin": float(args.margin),
+         "K": int(args.K),
+         "shared_or_component_rho": str(args.rho_mode),
+         "rho_strategy": str(args.rho_strategy),
+@@ -1054,7 +1250,8 @@ def run(args: DictConfig) -> None:
+         "fixed_rho_degrees": float(args.fixed_rho_degrees),
+         "rho_warmup_steps": int(args.rho_warmup_steps),
+         "use_vmf": bool(args.use_vmf),
+-        "use_text_cls": float(args.lambda_cls) > 0 and str(args.text_loss_location) != "none",
++        "use_text_cls": float(args.lambda_cls) > 0
++        and str(args.text_loss_location) != "none",
+         "text_loss_location": str(args.text_loss_location),
+         "direction_target": str(args.direction_target),
+         "use_geometry_loss": bool(args.use_geometry_loss),
+@@ -1071,10 +1268,18 @@ def run(args: DictConfig) -> None:
+         "encoder_lr": float(args.encoder_learning_rate),
+         "predictor_learning_rate": float(args.predictor_learning_rate),
+         "encoder_learning_rate": float(args.encoder_learning_rate),
+-        "resume_checkpoint_path": None if args.resume_checkpoint_path is None else str(args.resume_checkpoint_path),
++        "resume_checkpoint_path": None
++        if args.resume_checkpoint_path is None
++        else str(args.resume_checkpoint_path),
+         "reset_optimizer_on_resume": bool(args.reset_optimizer_on_resume),
+-        "freeze_encoder_at_step": None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step),
+-        "gradient_conflict_steps": [int(value) for value in args.gradient_conflict_steps],
++        "optimizer_reset_scope": str(args.optimizer_reset_scope),
++        "reset_transport_head_on_resume": bool(args.reset_transport_head_on_resume),
++        "freeze_encoder_at_step": None
++        if args.freeze_encoder_at_step is None
++        else int(args.freeze_encoder_at_step),
++        "gradient_conflict_steps": [
++            int(value) for value in args.gradient_conflict_steps
++        ],
+         "seed": seed,
+         "steps": int(args.max_steps),
+         "equivalent_epochs": int(args.max_steps) * equivalent_epochs_per_step,
+@@ -1086,6 +1291,8 @@ def run(args: DictConfig) -> None:
+         "pseudo_validation_seed": split.seed,
+         "pseudo_train_classes": len(split.train_class_ids),
+         "pseudo_validation_classes": len(split.validation_class_ids),
++        "probe_steps": [int(value) for value in args.probe_steps],
++        "map_at_k_denominator": str(args.map_at_k_denominator),
+         "text_conditioning": False,
+         "text_enters_predictor": False,
+         **parameter_counts,
+@@ -1110,7 +1317,12 @@ def run(args: DictConfig) -> None:
+         group=None if args.wandb_group is None else str(args.wandb_group),
+         name=None if args.wandb_run_name is None else str(args.wandb_run_name),
+         config=run_config,
+-        tags=("spica", "predictive-semantic-transport", str(args.transport_mode), f"K{args.K}"),
++        tags=(
++            "spica",
++            "predictive-semantic-transport",
++            str(args.transport_mode),
++            f"K{args.K}",
++        ),
+         mode=experiment_mode,
+         job_type="transport-training",
+         directory=output_dir,
+@@ -1369,25 +1581,62 @@ def run(args: DictConfig) -> None:
+                 gradient_conflict: dict[str, object] | None = None
+                 if step + 1 in gradient_conflict_steps and bool(args.transport_enabled):
+                     conflict_parameters = [
+-                        parameter for parameter in model.transport_head.parameters()
++                        parameter
++                        for parameter in model.parameters()
+                         if parameter.requires_grad
+                     ]
+                     diagnostic_losses = {
+-                        "endpoint": loss_endpoint,
+-                        "cls": loss_cls,
+-                        "rank": loss_rank,
+-                        "dir": loss_dir,
++                        "L_cls": loss_cls,
++                        "L_rank": loss_rank,
++                        "L_dir": loss_dir,
++                        "L_endpoint": loss_endpoint,
++                    }
++                    batch_identity = {
++                        "sketch_paths": [
++                            str(value) for value in batch.get("sketch_path", ())
++                        ],
++                        "positive_photo_paths": [
++                            [str(path) for path in values]
++                            for values in batch.get("positive_photo_paths", ())
++                        ],
++                        "negative_photo_paths": [
++                            str(value) for value in batch.get("negative_photo_path", ())
++                        ],
++                        "labels": labels.detach().cpu().tolist(),
+                     }
+                     gradient_conflict = {
++                        "checkpoint": step + 1,
+                         "step": step + 1,
+-                        "parameter_space": {
+-                            "endpoint_cls": _gradient_cosine(loss_endpoint, loss_cls, conflict_parameters),
+-                            "endpoint_rank": _gradient_cosine(loss_endpoint, loss_rank, conflict_parameters),
+-                            "cls_rank": _gradient_cosine(loss_cls, loss_rank, conflict_parameters),
++                        "seed": seed,
++                        "batch_identity": {
++                            **batch_identity,
++                            "sha256": hash_json(batch_identity),
++                        },
++                        "loss_names": list(diagnostic_losses),
++                        "spaces": {
++                            **_representation_gradient_conflicts(
++                                diagnostic_losses, prediction
++                            ),
++                            "parameter": _parameter_gradient_space(
++                                diagnostic_losses, conflict_parameters
++                            ),
+                         },
+-                        "representation_space": _representation_gradient_conflicts(
+-                            diagnostic_losses, prediction
+-                        ),
++                        "optimizer_application": {
++                            "L_cls": float(args.lambda_cls),
++                            "L_rank": float(args.lambda_rank),
++                            "L_dir": dir_weight,
++                            "L_endpoint": float(args.lambda_endpoint),
++                        },
++                        "diagnostic_only": [
++                            name
++                            for name, weight in {
++                                "L_cls": float(args.lambda_cls),
++                                "L_rank": float(args.lambda_rank),
++                                "L_dir": dir_weight,
++                                "L_endpoint": float(args.lambda_endpoint),
++                            }.items()
++                            if weight == 0.0
++                        ],
+                     }
+                 loss_total = (
+                     dir_weight * loss_dir
+@@ -1465,7 +1714,21 @@ def run(args: DictConfig) -> None:
+                     window_count = 0
+                 if bool(args.run_probes) and step in probe_steps:
+                     checkpoint_path = output_dir / "checkpoints" / f"transport_step{step}.pt"
+-                    _save_checkpoint(path=checkpoint_path, model=model, optimizer=optimizer, step=step, data_name=data.name, args=args, split=split, parameter_counts=parameter_counts, include_optimizer=bool(args.save_optimizer))
++                    _save_checkpoint(
++                        path=checkpoint_path,
++                        model=model,
++                        optimizer=optimizer,
++                        step=step,
++                        data_name=data.name,
++                        args=args,
++                        split=split,
++                        parameter_counts=parameter_counts,
++                        provenance=provenance,
++                        resolved_config=resolved_config,
++                        data_split_identity=data_split_identity,
++                        generator=train_loader.generator,
++                        include_optimizer=bool(args.save_optimizer),
++                    )
+                     model.set_schedule_step(step)
+                     probe, _, _ = _probe(model=model, val_loader=val_loader, val_gallery=val_gallery, test_loader=test_loader, test_gallery=test_gallery, val_reference=val_reference, test_reference=test_reference, val_hidden_reference=val_hidden_reference, test_hidden_reference=test_hidden_reference, initial_val=initial_val, initial_test=initial_test, device=device, args=args)
+                     probe.update({"step": step, "equivalent_epochs": step * equivalent_epochs_per_step, "checkpoint": str(checkpoint_path), "parameter_drift": _parameter_drift(model, initial_parameters), "training_losses_at_checkpoint": current})
+@@ -1479,44 +1742,110 @@ def run(args: DictConfig) -> None:
+                     break
+ 
+         final_path = _resolve_checkpoint_path(args.checkpoint_path)
+-        _save_checkpoint(path=final_path, model=model, optimizer=optimizer, step=step, data_name=data.name, args=args, split=split, parameter_counts=parameter_counts, include_optimizer=bool(args.save_optimizer))
++        _save_checkpoint(
++            path=final_path,
++            model=model,
++            optimizer=optimizer,
++            step=step,
++            data_name=data.name,
++            args=args,
++            split=split,
++            parameter_counts=parameter_counts,
++            provenance=provenance,
++            resolved_config=resolved_config,
++            data_split_identity=data_split_identity,
++            generator=train_loader.generator,
++            include_optimizer=bool(args.save_optimizer),
++        )
+         report = {
+             "config": run_config,
+             "checkpoint": str(final_path),
+             "step": step,
+             "equivalent_epochs": step * equivalent_epochs_per_step,
+             "parameter_counts": parameter_counts,
+-            "pseudo_split": {"seed": split.seed, "train_class_ids": list(split.train_class_ids), "validation_class_ids": list(split.validation_class_ids), "train_sketches": len(split.train_sketch_entries), "train_photos": len(split.train_photo_entries), "validation_sketches": len(split.validation_sketch_entries), "validation_photos": len(split.validation_photo_entries)},
++            "resolved_config": resolved_config,
++            "data_split_identity": data_split_identity,
++            "pseudo_split": {
++                "seed": split.seed,
++                "train_class_ids": list(split.train_class_ids),
++                "validation_class_ids": list(split.validation_class_ids),
++                "train_sketches": len(split.train_sketch_entries),
++                "train_photos": len(split.train_photo_entries),
++                "validation_sketches": len(split.validation_sketch_entries),
++                "validation_photos": len(split.validation_photo_entries),
++            },
+             "training_history": training_history,
+             "probe_history": history,
+             "gradient_conflicts": gradient_conflicts,
+             "training_target_angles": {
+                 "theta_train": {
+                     **training_angle_summary(torch.tensor(training_angle_values)),
+-                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_values],
++                    "values_degrees": [
++                        value * (180.0 / math.pi) for value in training_angle_values
++                    ],
+                 },
+                 "theta_train_fixed": {
+                     **training_angle_summary(torch.tensor(training_angle_fixed_values)),
+-                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_fixed_values],
++                    "values_degrees": [
++                        value * (180.0 / math.pi)
++                        for value in training_angle_fixed_values
++                    ],
+                 },
+                 "origin_definitions": {
+                     "theta_train": "acos(clamp(z0 · z_positive_instance))",
+                     "theta_train_fixed": "acos(clamp(z_ref · z_positive_instance))",
+                     "positive_pairs": "actual sampled training sketch/photo pairs",
+                 },
+-            } if training_angle_values and training_angle_fixed_values else {},
++            }
++            if training_angle_values and training_angle_fixed_values
++            else {},
+             "provenance": provenance,
+             "resume": {
+                 "checkpoint": None if resume_path is None else str(resume_path),
+                 "starting_step": resume_step,
+                 "freeze_encoder_at_step": freeze_step,
+-                "optimizer_state_restored": (resume_path is not None and payload.get("optimizer_state_dict") is not None and not bool(args.reset_optimizer_on_resume)) if resume_path is not None else False,
++                "optimizer_state_restored": bool(
++                    resume_path is not None
++                    and payload is not None
++                    and payload.get("optimizer_state_dict") is not None
++                    and str(args.optimizer_reset_scope) != "all"
++                    and not bool(args.reset_optimizer_on_resume)
++                ),
+                 "optimizer_state_reset": bool(args.reset_optimizer_on_resume),
++                "optimizer_reset_scope": str(args.optimizer_reset_scope),
++                "scheduler_state_restored": False,
++                "rng_state_restored": resume_path is not None,
++                "transport_head_reinitialized": bool(
++                    args.reset_transport_head_on_resume
++                ),
++            },
++            "photo_sampling": {
++                "num_positive_photos_per_step": int(args.num_positive_photos),
++                "unique_positive_photo_paths_seen": len(positive_paths_seen),
++                "same_sketch_can_see_new_photo_each_epoch": True,
++            },
++            "inference_contract": {
++                "required_inputs": ["raw_sketch_image"],
++                "text_required": False,
++                "photo_required": False,
++                "positive_set_required": False,
++                "oracle_class_required": False,
++            },
++            "text_contract": {
++                "enters_predictor": False,
++                "enters_gate": False,
++                "enters_distance_head": False,
++                "enters_vmf": False,
++                "loss_location": str(args.text_loss_location),
++                "used_only_for_seen_classification": text_bank is not None,
++            },
++            "wandb": {
++                "mode": experiment_mode,
++                "project": str(args.wandb_project),
++                "group": None if args.wandb_group is None else str(args.wandb_group),
++                "run_id": experiment.run_id,
++                "run_url": experiment.run_url,
+             },
+-            "photo_sampling": {"num_positive_photos_per_step": int(args.num_positive_photos), "unique_positive_photo_paths_seen": len(positive_paths_seen), "same_sketch_can_see_new_photo_each_epoch": True},
+-            "inference_contract": {"required_inputs": ["raw_sketch_image"], "text_required": False, "photo_required": False, "positive_set_required": False, "oracle_class_required": False},
+-            "text_contract": {"enters_predictor": False, "enters_gate": False, "enters_distance_head": False, "enters_vmf": False, "loss_location": str(args.text_loss_location), "used_only_for_seen_classification": text_bank is not None},
+-            "wandb": {"mode": experiment_mode, "project": str(args.wandb_project), "group": None if args.wandb_group is None else str(args.wandb_group), "run_id": experiment.run_id, "run_url": experiment.run_url},
+         }
+         (output_dir / "training_history.json").write_text(json.dumps(training_history, indent=2, sort_keys=True) + "\n")
+         (output_dir / "run_result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+@@ -1525,7 +1854,9 @@ def run(args: DictConfig) -> None:
+         print("Text required at inference: NO")
+ 
+ 
+-@hydra.main(version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="train_transport")
++@hydra.main(
++    version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="train_transport"
++)
+ def main(args: DictConfig) -> None:
+     run(args)
+ 
+diff --git a/configs/experiments/transport_corrected_p1_A_trainable_restored.yaml b/configs/experiments/transport_corrected_p1_A_trainable_restored.yaml
+new file mode 100644
+index 0000000..d6c7eb2
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p1_A_trainable_restored.yaml
+@@ -0,0 +1,30 @@
++# @package _global_
++experiment_name: corrected_p1_A_trainable_restored
++experiment_role: freeze_optimizer_A
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++resume_checkpoint_path: null
++freeze_encoder_at_step: null
++reset_optimizer_on_resume: false
++optimizer_reset_scope: none
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p1_B_frozen_restored.yaml b/configs/experiments/transport_corrected_p1_B_frozen_restored.yaml
+new file mode 100644
+index 0000000..c253b7c
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p1_B_frozen_restored.yaml
+@@ -0,0 +1,30 @@
++# @package _global_
++experiment_name: corrected_p1_B_frozen_restored
++experiment_role: freeze_optimizer_B
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: false
++optimizer_reset_scope: none
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p1_C_trainable_reset.yaml b/configs/experiments/transport_corrected_p1_C_trainable_reset.yaml
+new file mode 100644
+index 0000000..b1c7c48
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p1_C_trainable_reset.yaml
+@@ -0,0 +1,30 @@
++# @package _global_
++experiment_name: corrected_p1_C_trainable_reset
++experiment_role: freeze_optimizer_C
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++resume_checkpoint_path: null
++freeze_encoder_at_step: null
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p1_D_frozen_reset.yaml b/configs/experiments/transport_corrected_p1_D_frozen_reset.yaml
+new file mode 100644
+index 0000000..f2972f9
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p1_D_frozen_reset.yaml
+@@ -0,0 +1,30 @@
++# @package _global_
++experiment_name: corrected_p1_D_frozen_reset
++experiment_role: freeze_optimizer_D
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p1_source73.yaml b/configs/experiments/transport_corrected_p1_source73.yaml
+new file mode 100644
+index 0000000..0e600a3
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p1_source73.yaml
+@@ -0,0 +1,27 @@
++# @package _global_
++# P1 common source: endpoint=0 + CE(q), full state retained at exactly step 73.
++experiment_name: corrected_p1_source73
++experiment_role: freeze_optimizer_source
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++save_optimizer: true
++max_steps: 73
++probe_steps: [15, 44, 73]
++gradient_conflict_steps: [15, 73]
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p2_S1_no_direction.yaml b/configs/experiments/transport_corrected_p2_S1_no_direction.yaml
+new file mode 100644
+index 0000000..f605e00
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p2_S1_no_direction.yaml
+@@ -0,0 +1,31 @@
++# @package _global_
++experiment_name: corrected_p2_S1_no_direction
++experiment_role: two_stage_S1
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 0.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: none
++use_vmf: false
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++reset_transport_head_on_resume: true
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p2_S2_class_centroid.yaml b/configs/experiments/transport_corrected_p2_S2_class_centroid.yaml
+new file mode 100644
+index 0000000..e5b25d7
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p2_S2_class_centroid.yaml
+@@ -0,0 +1,32 @@
++# @package _global_
++experiment_name: corrected_p2_S2_class_centroid
++experiment_role: two_stage_S2
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: class_centroid
++photo_target: instance
++use_vmf: false
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++reset_transport_head_on_resume: true
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p2_S3_moving.yaml b/configs/experiments/transport_corrected_p2_S3_moving.yaml
+new file mode 100644
+index 0000000..ed5d839
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p2_S3_moving.yaml
+@@ -0,0 +1,31 @@
++# @package _global_
++experiment_name: corrected_p2_S3_moving
++experiment_role: two_stage_S3
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: moving
++use_vmf: false
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++reset_transport_head_on_resume: true
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p2_S4_fixed_reference.yaml b/configs/experiments/transport_corrected_p2_S4_fixed_reference.yaml
+new file mode 100644
+index 0000000..dc21e99
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p2_S4_fixed_reference.yaml
+@@ -0,0 +1,31 @@
++# @package _global_
++experiment_name: corrected_p2_S4_fixed_reference
++experiment_role: two_stage_S4
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: true
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 1.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: q
++direction_target: fixed_reference
++use_vmf: false
++resume_checkpoint_path: null
++freeze_encoder_at_step: 73
++reset_optimizer_on_resume: true
++optimizer_reset_scope: all
++reset_transport_head_on_resume: true
++save_optimizer: true
++max_steps: 5400
++probe_steps: [500, 1800, 5400]
++gradient_conflict_steps: [500]
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/configs/experiments/transport_corrected_p2_stage1.yaml b/configs/experiments/transport_corrected_p2_stage1.yaml
+new file mode 100644
+index 0000000..ff28808
+--- /dev/null
++++ b/configs/experiments/transport_corrected_p2_stage1.yaml
+@@ -0,0 +1,27 @@
++# @package _global_
++# Stage 1: semantic origin only, selected on pseudo-unseen validation.
++experiment_name: corrected_p2_stage1_semantic_origin
++experiment_role: two_stage_stage1
++experiment_campaign: transport_corrected_2026-09-02_v2
++transport_enabled: false
++transport_mode: tangent
++K: 1
++encoder_mode: partial
++encoder_unfreeze_depth: 4
++rho_strategy: fixed
++rho_max_degrees: 15.0
++fixed_rho_degrees: 15.0
++lambda_dir: 0.0
++lambda_dist: 0.0
++lambda_endpoint: 0.0
++lambda_rank: 1.0
++lambda_cls: 1.0
++text_loss_location: z0
++direction_target: none
++use_vmf: false
++save_optimizer: true
++max_steps: 73
++probe_steps: [15, 44, 73]
++gradient_conflict_steps: []
++seed: 42
++train_class_scope: pseudo_train
+diff --git a/scripts/probe_projection_refit.py b/scripts/probe_projection_refit.py
+new file mode 100644
+index 0000000..3f4fc57
+--- /dev/null
++++ b/scripts/probe_projection_refit.py
+@@ -0,0 +1,189 @@
++"""P3: fit W_CLIP compatibility controls on pseudo-train, evaluate pseudo-unseen."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++
++import torch
++import torch.nn.functional as F
++from torch.utils.data import DataLoader
++
++from spica.config.data import load_data_config
++from spica.data.datasets import RetrievalEvalDataset
++from spica.evaluation.embeddings import EncodedRetrievalSet, encode_retrieval_loader
++from spica.evaluation.metrics import evaluate_category_retrieval
++from spica.evaluation.transport import hidden_space_compatibility
++from spica.evaluate_transport import _load_model
++from spica.models.clip import load_frozen_clip, visual_pre_projection
++from spica.provenance import capture_provenance
++from spica.train_transport import PROJECT_ROOT, _build_split
++
++
++def _loader(entries, transform, batch_size: int) -> DataLoader:
++    return DataLoader(
++        RetrievalEvalDataset(entries, transform),
++        batch_size=batch_size,
++        shuffle=False,
++        num_workers=0,
++    )
++
++
++@torch.inference_mode()
++def _hidden(loader: DataLoader, model, reference_visual, device: torch.device):
++    adapted, reference, labels, paths = [], [], [], []
++    for batch in loader:
++        images = batch["image"].to(device)
++        adapted.append(model.sketch_context_encoder(images).float().cpu())
++        reference.append(visual_pre_projection(reference_visual, images).float().cpu())
++        labels.append(batch["label"].long())
++        paths.extend(str(path) for path in batch["path"])
++    return torch.cat(adapted), torch.cat(reference), torch.cat(labels), tuple(paths)
++
++
++def _effective_rank(values: torch.Tensor) -> float:
++    singular = torch.linalg.svdvals(
++        values.float() - values.float().mean(0, keepdim=True)
++    )
++    energy = singular.square()
++    return float(energy.sum().square().div(energy.square().sum().clamp_min(1e-12)))
++
++
++def _evaluate(
++    embeddings: torch.Tensor,
++    labels: torch.Tensor,
++    paths: tuple[str, ...],
++    gallery: EncodedRetrievalSet,
++    device: torch.device,
++) -> dict[str, object]:
++    evaluation = evaluate_category_retrieval(
++        EncodedRetrievalSet(
++            embeddings=F.normalize(embeddings, dim=-1), labels=labels, paths=paths
++        ),
++        gallery,
++        precision_at_k=(1, 5, 10, 100, 200),
++        map_at_k=(200,),
++        map_at_k_denominator="prefix_positive",
++        top_k=200,
++        device=device,
++    )
++    return {
++        "mAP": evaluation.metrics.mean_average_precision,
++        "mAP_at_k": evaluation.metrics.mean_average_precision_at_k,
++        "precision_at_k": evaluation.metrics.precision_at_k,
++        "per_query_AP": evaluation.average_precision_per_query.tolist(),
++        "effective_rank": _effective_rank(embeddings),
++    }
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("checkpoints", nargs="+", type=Path)
++    parser.add_argument(
++        "--data-config", type=Path, default=Path("configs/data/sketchy_104_21.yaml")
++    )
++    parser.add_argument("--batch-size", type=int, default=128)
++    parser.add_argument("--ridge", type=float, default=1e-3)
++    parser.add_argument(
++        "--device", default="cuda" if torch.cuda.is_available() else "cpu"
++    )
++    parser.add_argument("--output", type=Path, required=True)
++    args = parser.parse_args()
++    if args.output.exists():
++        raise FileExistsError(f"refusing to overwrite {args.output}")
++    device = torch.device(args.device)
++    data_path = (
++        args.data_config
++        if args.data_config.is_absolute()
++        else PROJECT_ROOT / args.data_config
++    )
++    data = load_data_config(data_path)
++    split, _ = _build_split(data, num_validation_classes=20, seed=3407)
++    photo_clip = load_frozen_clip(
++        model_name="ViT-B-32-quickgelu", pretrained="openai", device=device
++    )
++    gallery = encode_retrieval_loader(
++        photo_clip.encoder,
++        _loader(split.validation_photo_entries, photo_clip.transform, args.batch_size),
++    )
++    values = []
++    for configured_checkpoint in args.checkpoints:
++        checkpoint = (
++            configured_checkpoint
++            if configured_checkpoint.is_absolute()
++            else PROJECT_ROOT / configured_checkpoint
++        )
++        model, payload, transform = _load_model(checkpoint, device=device)
++        train_h, train_ref, _, _ = _hidden(
++            _loader(split.train_sketch_entries, transform, args.batch_size),
++            model,
++            photo_clip.encoder.model.visual,
++            device,
++        )
++        val_h, val_ref, val_labels, val_paths = _hidden(
++            _loader(split.validation_sketch_entries, transform, args.batch_size),
++            model,
++            photo_clip.encoder.model.visual,
++            device,
++        )
++        projection = model.photo_projection.cpu()
++        train_h = train_h.float()
++        train_ref = train_ref.float()
++        cross = train_h.T @ train_ref
++        u, _, vh = torch.linalg.svd(cross, full_matrices=False)
++        rotation = u @ vh
++        x = torch.cat((train_h, torch.ones(train_h.shape[0], 1)), dim=1)
++        target = F.normalize(projection(train_ref), dim=-1)
++        gram = x.T @ x
++        regularizer = torch.eye(gram.shape[0]) * args.ridge
++        regularizer[-1, -1] = 0
++        ridge = torch.linalg.solve(gram + regularizer, x.T @ target)
++        val_x = torch.cat((val_h, torch.ones(val_h.shape[0], 1)), dim=1)
++        reference_queries = F.normalize(projection(val_ref), dim=-1)
++        methods = {
++            "frozen_original_W_CLIP": projection(val_h),
++            "orthogonal_adapter": projection(val_h @ rotation),
++            "ridge_projection": val_x @ ridge,
++        }
++        method_results = {}
++        for name, embeddings in methods.items():
++            result = _evaluate(embeddings, val_labels, val_paths, gallery, device)
++            result["frozen_W_compatibility_cosine"] = float(
++                F.cosine_similarity(
++                    F.normalize(embeddings, dim=-1), reference_queries, dim=-1
++                ).mean()
++            )
++            method_results[name] = result
++        values.append(
++            {
++                "checkpoint": str(checkpoint),
++                "checkpoint_step": int(payload["step"]),
++                "fit_split": "pseudo_train only",
++                "evaluation_split": "pseudo_unseen only",
++                "data_split_identity": payload.get("data_split_identity"),
++                "hidden_geometry": hidden_space_compatibility(
++                    val_ref, val_h, projection
++                ),
++                "methods": method_results,
++                "checkpoint_provenance": payload.get("metadata", {}).get("provenance"),
++            }
++        )
++    result = {
++        "schema_version": 1,
++        "probe": "projection_refit_control",
++        "seed": 3407,
++        "official_unseen_used": False,
++        "ridge": args.ridge,
++        "values": values,
++        "provenance": capture_provenance(
++            PROJECT_ROOT, command=[str(value) for value in __import__("sys").argv]
++        ),
++    }
++    args.output.parent.mkdir(parents=True, exist_ok=True)
++    args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
++    print(args.output)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/summarize_transport_corrected.py b/scripts/summarize_transport_corrected.py
+new file mode 100644
+index 0000000..0c0e01c
+--- /dev/null
++++ b/scripts/summarize_transport_corrected.py
+@@ -0,0 +1,667 @@
++"""Integrity-first transport summary generated only from structured raw runs."""
++
++from __future__ import annotations
++
++import argparse
++from datetime import date
++import io
++import json
++import math
++from pathlib import Path
++from typing import Any
++
++import matplotlib.pyplot as plt
++
++try:
++    from scripts.transport_artifact_utils import (
++        ArtifactIntegrityError,
++        ROOT,
++        assert_matched_runs,
++        collect_runs,
++        config_of,
++        factorial_effects,
++        missing_result,
++        point_map,
++        repository_provenance,
++        select_unique_role,
++        validate_freeze_optimizer_role,
++        write_new,
++    )
++except ModuleNotFoundError:  # direct `python scripts/...` execution
++    from transport_artifact_utils import (
++        ArtifactIntegrityError,
++        ROOT,
++        assert_matched_runs,
++        collect_runs,
++        config_of,
++        factorial_effects,
++        missing_result,
++        point_map,
++        repository_provenance,
++        select_unique_role,
++        validate_freeze_optimizer_role,
++        write_new,
++    )
++
++STEPS = (0, 15, 44, 73, 100, 500, 1000, 1800, 5400)
++CAMPAIGN = "transport_corrected_2026-09-02_v2"
++FACTORIAL_ROLES = {
++    "A": "endpoint0_factorial_A",
++    "B": "endpoint0_factorial_B",
++    "C": "endpoint0_factorial_C",
++    "D": "endpoint0_factorial_D",
++}
++P1_ROLES = {
++    "A": "freeze_optimizer_A",
++    "B": "freeze_optimizer_B",
++    "C": "freeze_optimizer_C",
++    "D": "freeze_optimizer_D",
++}
++P2_ROLES = {
++    "S1": "two_stage_S1",
++    "S2": "two_stage_S2",
++    "S3": "two_stage_S3",
++    "S4": "two_stage_S4",
++}
++
++
++def _role(
++    records: list[tuple[Path, dict[str, Any]]], role: str
++) -> tuple[Path, dict[str, Any]] | None:
++    try:
++        return select_unique_role(records, role)
++    except ArtifactIntegrityError as error:
++        if str(error).startswith("missing raw run"):
++            return None
++        raise
++
++
++def _number(point: dict[str, Any] | None, *keys: str) -> float | None:
++    value: Any = point
++    for key in keys:
++        if not isinstance(value, dict):
++            return None
++        value = value.get(key)
++    return (
++        float(value)
++        if isinstance(value, (int, float)) and math.isfinite(value)
++        else None
++    )
++
++
++def _representation_value(
++    result: dict[str, Any], step: int, representation: str
++) -> float | None:
++    point = point_map(result).get(step)
++    transport = config_of(result).get("transport_enabled") is True
++    if representation == "q" or not transport:
++        return _number(point, "val", "mAP")
++    return _number(point, "base_val", "mAP")
++
++
++def _stability(result: dict[str, Any], representation: str = "q") -> dict[str, Any]:
++    values = [
++        (step, value)
++        for step in STEPS
++        if (value := _representation_value(result, step, representation)) is not None
++    ]
++    if not values:
++        return missing_result("no raw pseudo-unseen mAP checkpoints")
++    peak_step, peak = max(values, key=lambda item: item[1])
++    late = _representation_value(result, 5400, representation)
++    return {
++        "status": "completed" if late is not None else "partial",
++        "peak_mAP": peak,
++        "peak_step": peak_step,
++        "late_mAP": late,
++        "retention_ratio": None if late is None or peak == 0 else late / peak,
++        "absolute_decay": None if late is None else peak - late,
++    }
++
++
++def _relative(path: Path) -> str:
++    return str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)
++
++
++def _same_checkpoint(left: object, right: object) -> bool:
++    def resolve(value: object) -> Path:
++        path = Path(str(value))
++        return (path if path.is_absolute() else ROOT / path).resolve()
++
++    return resolve(left) == resolve(right)
++
++
++def _raw_run(record: tuple[Path, dict[str, Any]]) -> dict[str, Any]:
++    path, result = record
++    provenance = result.get("provenance")
++    validation = (
++        "valid"
++        if isinstance(provenance, dict) and provenance.get("status") == "valid"
++        else "legacy_provenance_incomplete"
++    )
++    return {
++        "run_id": result.get("wandb", {}).get("run_id") or _relative(path),
++        "artifact_path": _relative(path / "run_result.json"),
++        "checkpoint_id": result.get("checkpoint"),
++        "resolved_config": result.get("resolved_config") or config_of(result),
++        "seed": config_of(result).get("seed"),
++        "data_split_identity": result.get("data_split_identity")
++        or result.get("pseudo_split"),
++        "provenance": provenance,
++        "validation_status": validation,
++        "raw_metrics": result.get("probe_history", []),
++        "gradient_diagnostics": result.get("gradient_conflicts", []),
++        "resume": result.get("resume"),
++    }
++
++
++def _causal(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
++    base = _role(records, "endpoint0_factorial_B")
++    transport = _role(records, "endpoint0_factorial_D")
++    if base is None or transport is None:
++        return missing_result(
++            "matched structured roles endpoint0_factorial_B/D have not both run"
++        )
++    assert_matched_runs(base[1], transport[1])
++    rows = []
++    for step in sorted(set(point_map(base[1])) & set(point_map(transport[1]))):
++        z0_b = _representation_value(base[1], step, "z0")
++        z0_t = _representation_value(transport[1], step, "z0")
++        q_t = _representation_value(transport[1], step, "q")
++        if None in (z0_b, z0_t, q_t):
++            continue
++        rows.append(
++            {
++                "step": step,
++                "mAP_z0_B": z0_b,
++                "mAP_z0_T": z0_t,
++                "mAP_q_T": q_t,
++                "encoder_training_effect": z0_t - z0_b,
++                "inference_head_effect": q_t - z0_t,
++                "total_transport_effect": q_t - z0_b,
++            }
++        )
++    if not rows:
++        return missing_result(
++            "matched runs contain no common raw evaluation checkpoint"
++        )
++    return {
++        "status": "completed",
++        "runs": {"z0_B": _raw_run(base), "z0_T_q_T": _raw_run(transport)},
++        "matched_validation": "passed",
++        "pointwise": rows,
++        "step_5400": next((row for row in rows if row["step"] == 5400), None),
++        "definitions": {
++            "encoder_training_effect": "mAP(z0_T)-mAP(z0_B)",
++            "inference_head_effect": "mAP(q_T)-mAP(z0_T)",
++            "total_transport_effect": "mAP(q_T)-mAP(z0_B)",
++        },
++    }
++
++
++def _validate_factorial_cell(name: str, result: dict[str, Any]) -> None:
++    expected = {
++        "A": (False, False),
++        "B": (False, True),
++        "C": (True, False),
++        "D": (True, True),
++    }[name]
++    config = config_of(result)
++    observed = (config.get("transport_enabled"), config.get("use_text_cls"))
++    if observed != expected or float(config.get("lambda_endpoint", 1.0)) != 0.0:
++        raise ArtifactIntegrityError(
++            f"factorial role {name} requires transport/text={expected}, endpoint=0; observed {observed}"
++        )
++
++
++def _factorial(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
++    selected = {name: _role(records, role) for name, role in FACTORIAL_ROLES.items()}
++    missing = [name for name, record in selected.items() if record is None]
++    if missing:
++        return missing_result(
++            f"structured endpoint=0 factorial roles not run: {', '.join(missing)}"
++        )
++    complete = {name: record for name, record in selected.items() if record is not None}
++    for name, record in complete.items():
++        _validate_factorial_cell(name, record[1])
++    assert_matched_runs(complete["B"][1], complete["D"][1])
++    common_steps = sorted(
++        set.intersection(*(set(point_map(record[1])) for record in complete.values()))
++    )
++    pointwise: dict[str, list[dict[str, Any]]] = {}
++    for representation in ("z0", "q"):
++        rows = []
++        for step in common_steps:
++            cells = {
++                name: _representation_value(record[1], step, representation)
++                for name, record in complete.items()
++            }
++            if any(value is None for value in cells.values()):
++                continue
++            numeric = {
++                name: float(value) for name, value in cells.items() if value is not None
++            }
++            rows.append(
++                {"step": step, "cells": numeric, "effects": factorial_effects(numeric)}
++            )
++        pointwise[representation] = rows
++    peaks = {
++        representation: {
++            name: _stability(record[1], representation)
++            for name, record in complete.items()
++        }
++        for representation in ("z0", "q")
++    }
++    peak_effects = {}
++    for representation, rows in peaks.items():
++        values = {name: row.get("peak_mAP") for name, row in rows.items()}
++        peak_effects[representation] = (
++            factorial_effects(values)
++            if all(isinstance(value, (int, float)) for value in values.values())
++            else missing_result("a cell has no peak")
++        )
++    return {
++        "status": "completed",
++        "runs": {name: _raw_run(record) for name, record in complete.items()},
++        "pointwise": pointwise,
++        "step_5400": {
++            representation: next((row for row in rows if row["step"] == 5400), None)
++            for representation, rows in pointwise.items()
++        },
++        "cell_wise_peak": {
++            "label": "best-achievable/early-stopped comparison; not a pointwise causal effect",
++            "cells": peaks,
++            "effects": peak_effects,
++        },
++    }
++
++
++def _freeze_factorial(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
++    source = _role(records, "freeze_optimizer_source")
++    branches = {name: _role(records, role) for name, role in P1_ROLES.items()}
++    missing = [name for name, record in branches.items() if record is None]
++    if source is None or missing:
++        return missing_result(
++            "P1 source/branches not complete: "
++            + ("source " if source is None else "")
++            + ",".join(missing)
++        )
++    complete = {name: record for name, record in branches.items() if record is not None}
++    source_checkpoint = source[1].get("checkpoint")
++    rows = {}
++    for name, record in complete.items():
++        validate_freeze_optimizer_role(config_of(record[1]))
++        resume = record[1].get("resume", {})
++        if not _same_checkpoint(resume.get("checkpoint"), source_checkpoint):
++            raise ArtifactIntegrityError(
++                "P1 branches do not resume the identical source checkpoint"
++            )
++        checkpoints = {}
++        for step in (500, 1800, 5400):
++            point = point_map(record[1]).get(step)
++            checkpoints[str(step)] = {
++                "mAP_z0": _number(point, "base_val", "mAP"),
++                "mAP_q": _number(point, "val", "mAP"),
++                "semantic_margin": _number(
++                    point, "val_geometry", "semantic", "semantic_margin"
++                ),
++                "base_reference_cosine": _number(
++                    point, "val_geometry", "reference", "base_reference_cosine"
++                ),
++                "query_reference_cosine": _number(
++                    point, "val_geometry", "reference", "query_reference_cosine"
++                ),
++                "hidden_CKA": _number(
++                    point, "val_geometry", "hidden_space_compatibility", "linear_cka"
++                ),
++            }
++        rows[name] = {
++            "semantics": validate_freeze_optimizer_role(config_of(record[1])),
++            "checkpoints": checkpoints,
++            "stability_z0": _stability(record[1], "z0"),
++            "stability_q": _stability(record[1], "q"),
++            "run": _raw_run(record),
++        }
++    return {
++        "status": "completed",
++        "source": _raw_run(source),
++        "branches": rows,
++        "question": "Encoder updates or optimizer state causes late degradation",
++    }
++
++
++def _two_stage(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
++    stage1 = _role(records, "two_stage_stage1")
++    stages = {name: _role(records, role) for name, role in P2_ROLES.items()}
++    if stage1 is None or any(record is None for record in stages.values()):
++        return missing_result(
++            "P2 stage 1 and all S1-S4 structured runs are not complete; S0 is stage-1 z0"
++        )
++    return {
++        "status": "completed",
++        "S0": _raw_run(stage1),
++        "variants": {
++            name: {"run": _raw_run(record), "stability": _stability(record[1])}
++            for name, record in stages.items()
++            if record is not None
++        },
++    }
++
++
++def _gradient_report(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
++    values = []
++    for path, result in records:
++        for item in result.get("gradient_conflicts", []):
++            if not isinstance(item, dict) or "spaces" not in item:
++                continue
++            spaces = item["spaces"]
++            if set(spaces) != {"query", "base", "parameter"}:
++                raise ArtifactIntegrityError(
++                    f"gradient spaces mixed or missing in {path}"
++                )
++            values.append({"run": _relative(path), **item})
++    return (
++        {"status": "completed", "raw_cosine_matrices": values}
++        if values
++        else missing_result("no corrected gradient artifacts")
++    )
++
++
++def _plot(
++    path: Path, title: str, series: dict[str, list[tuple[int, float]]], source: Any
++) -> None:
++    figure, axis = plt.subplots(figsize=(7, 4.5))
++    for label, values in series.items():
++        if values:
++            axis.plot(
++                [x for x, _ in values], [y for _, y in values], marker="o", label=label
++            )
++    if any(series.values()):
++        axis.legend(fontsize=8)
++    else:
++        axis.text(
++            0.5,
++            0.5,
++            "NOT RUN / no valid raw artifact",
++            ha="center",
++            va="center",
++            transform=axis.transAxes,
++        )
++    axis.set_title(title)
++    axis.set_xlabel("training step")
++    axis.set_ylabel("pseudo-unseen mAP")
++    figure.tight_layout()
++    buffer = io.BytesIO()
++    figure.savefig(buffer, format="png", dpi=160)
++    plt.close(figure)
++    write_new(path, buffer.getvalue())
++    write_new(
++        path.with_suffix(".json"), json.dumps(source, indent=2, sort_keys=True) + "\n"
++    )
++
++
++def _make_plots(output: Path, report: dict[str, Any]) -> list[dict[str, str]]:
++    causal = report["causal_decomposition"]
++    causal_rows = (
++        causal.get("pointwise", []) if causal.get("status") == "completed" else []
++    )
++    factorial = report["endpoint0_factorial"]
++    factorial_rows = (
++        factorial.get("pointwise", {}).get("q", [])
++        if factorial.get("status") == "completed"
++        else []
++    )
++    freeze = report["freeze_optimizer_factorial"]
++    p1_series = {}
++    if freeze.get("status") == "completed":
++        p1_series = {
++            name: [
++                (int(step), row["mAP_q"])
++                for step, row in value["checkpoints"].items()
++                if row["mAP_q"] is not None
++            ]
++            for name, value in freeze["branches"].items()
++        }
++    two_stage = report["two_stage_transport"]
++    p2_series = {}
++    if two_stage.get("status") == "completed":
++        for name, value in two_stage["variants"].items():
++            p2_series[name] = [
++                (int(point["step"]), float(point["val"]["mAP"]))
++                for point in value["run"]["raw_metrics"]
++                if isinstance(point.get("val", {}).get("mAP"), (int, float))
++            ]
++    specifications = [
++        (
++            "corrected_causal_decomposition.png",
++            "Corrected causal decomposition",
++            {
++                key: [(row["step"], row[key]) for row in causal_rows]
++                for key in ("mAP_z0_B", "mAP_z0_T", "mAP_q_T")
++            },
++            causal,
++        ),
++        (
++            "corrected_endpoint0_factorial.png",
++            "Corrected endpoint=0 factorial",
++            {
++                name: [(row["step"], row["cells"][name]) for row in factorial_rows]
++                for name in FACTORIAL_ROLES
++            },
++            factorial,
++        ),
++        (
++            "freeze_optimizer_factorial.png",
++            "Freeze × optimizer factorial",
++            p1_series,
++            freeze,
++        ),
++        (
++            "two_stage_transport.png",
++            "Two-stage frozen-origin transport",
++            p2_series,
++            two_stage,
++        ),
++        (
++            "projection_refit_control.png",
++            "Projection refit control",
++            {},
++            report["projection_refit_control"],
++        ),
++        (
++            "frozen_origin_direction_ablation.png",
++            "Frozen-origin direction ablation",
++            p2_series,
++            two_stage,
++        ),
++        (
++            "stability_retention_corrected.png",
++            "Corrected stability",
++            p1_series or p2_series,
++            report["stability"],
++        ),
++    ]
++    artifacts = []
++    for filename, title, series, source in specifications:
++        path = output / filename
++        _plot(path, title, series, source)
++        artifacts.append(
++            {
++                "plot": str(path.relative_to(ROOT)),
++                "sidecar": str(path.with_suffix(".json").relative_to(ROOT)),
++            }
++        )
++    return artifacts
++
++
++def _markdown(report: dict[str, Any]) -> str:
++    def status(name: str) -> str:
++        value = report[name]
++        return f"{value.get('status', 'unknown').upper()}: {value.get('reason', 'raw artifact validated')}"
++
++    lines = [
++        f"# Corrected SPICA transport summary ({report['report_date']})",
++        "",
++        "All selection uses pseudo-unseen validation and structured `experiment_role`; official unseen is excluded.",
++        "",
++        "## Integrity status",
++        f"- Causal decomposition — {status('causal_decomposition')}",
++        f"- Endpoint=0 factorial — {status('endpoint0_factorial')}",
++        f"- P1 freeze × optimizer — {status('freeze_optimizer_factorial')}",
++        f"- P2 two-stage transport — {status('two_stage_transport')}",
++        f"- P3 projection refit — {status('projection_refit_control')}",
++        f"- P4 direction ablation — {status('frozen_origin_direction_ablation')}",
++        f"- P5 statistical confirmation — {status('statistical_confirmation')}",
++        f"- P6 deterministic K — {status('deterministic_K')}",
++        "- Mo-vMF — DEFER",
++        "",
++        "## Scientific result",
++    ]
++    if report["freeze_optimizer_factorial"].get("status") == "completed":
++        lines.append(
++            "P1 raw branch trajectories are available in the JSON and plot sidecar; interpretation must use their matched late metrics."
++        )
++    else:
++        lines.append(
++            "The requested causal mechanisms are not yet known because no complete corrected raw factorial is available."
++        )
++    lines += [
++        "",
++        "Cell-wise peaks, when present, are labeled best-achievable/early-stopped comparisons and are not pointwise causal effects.",
++        "Missing values are `null` with an explicit status/reason; no historical headline was carried forward.",
++        "",
++        "## Raw artifacts",
++    ]
++    for role, raw in report["run_index"].items():
++        lines.append(
++            f"- `{role}`: `{raw['artifact_path']}` ({raw['validation_status']})"
++        )
++    return "\n".join(lines) + "\n"
++
++
++def build_report(run_root: Path, report_date: str) -> dict[str, Any]:
++    records = collect_runs(run_root)
++    role_records = [
++        record
++        for record in records
++        if config_of(record[1]).get("experiment_role")
++        and config_of(record[1]).get("experiment_campaign") == CAMPAIGN
++    ]
++    roles = [str(config_of(result)["experiment_role"]) for _, result in role_records]
++    duplicates = sorted({role for role in roles if roles.count(role) > 1})
++    if duplicates:
++        raise ArtifactIntegrityError(
++            f"ambiguous duplicate experiment roles: {duplicates}"
++        )
++    run_index = {
++        str(config_of(result)["experiment_role"]): _raw_run((path, result))
++        for path, result in role_records
++    }
++    freeze = _freeze_factorial(role_records)
++    two_stage = _two_stage(role_records)
++    stability_rows = {
++        role: _stability(result)
++        for path, result in role_records
++        if (role := config_of(result).get("experiment_role"))
++    }
++    return {
++        "schema_version": 1,
++        "report_date": report_date,
++        "repository": repository_provenance(),
++        "selection_protocol": {
++            "selector": f"exact structured experiment_role within campaign {CAMPAIGN}",
++            "official_unseen_selection": False,
++            "duplicate_roles": "fatal",
++            "missing_artifacts": "null/status=not_run",
++        },
++        "run_index": run_index,
++        "causal_decomposition": _causal(role_records),
++        "endpoint0_factorial": _factorial(role_records),
++        "freeze_optimizer_factorial": freeze,
++        "two_stage_transport": two_stage,
++        "projection_refit_control": missing_result(
++            "P3 adapter/projection refit has not run"
++        ),
++        "frozen_origin_direction_ablation": two_stage
++        if two_stage.get("status") == "completed"
++        else missing_result("P4 frozen-origin direction runs have not completed"),
++        "statistical_confirmation": missing_result(
++            "P5 three-seed confirmation has not run"
++        ),
++        "deterministic_K": missing_result("P6 is deferred until P1-P5 finalists"),
++        "gradient_conflict": _gradient_report(role_records),
++        "stability": {"status": "completed", "runs": stability_rows}
++        if stability_rows
++        else missing_result("no corrected runs"),
++    }
++
++
++def _commands() -> dict[str, Any]:
++    train = "PYTHONPATH=src python -m spica.train_transport"
++    return {
++        "P1_source": f"{train} +experiments=transport_corrected_p1_source73",
++        "P1_forks": [
++            f"{train} +experiments=transport_corrected_p1_{suffix} resume_checkpoint_path=$SOURCE73"
++            for suffix in (
++                "A_trainable_restored",
++                "B_frozen_restored",
++                "C_trainable_reset",
++                "D_frozen_reset",
++            )
++        ],
++        "P2_stage1": f"{train} +experiments=transport_corrected_p2_stage1",
++        "P2_stage2": [
++            f"{train} +experiments=transport_corrected_p2_{suffix} resume_checkpoint_path=$STAGE1"
++            for suffix in (
++                "S1_no_direction",
++                "S2_class_centroid",
++                "S3_moving",
++                "S4_fixed_reference",
++            )
++        ],
++        "summary": "PYTHONPATH=src python scripts/summarize_transport_corrected.py --date YYYY-MM-DD",
++    }
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser()
++    parser.add_argument("--date", default=date.today().isoformat())
++    parser.add_argument(
++        "--run-root", type=Path, default=ROOT / "outputs" / "experiments"
++    )
++    parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs")
++    args = parser.parse_args()
++    report = build_report(args.run_root, args.date)
++    output = args.output_dir.resolve()
++    plots = _make_plots(output, report)
++    report["plots"] = plots
++    manifest = {
++        "schema_version": 1,
++        "report_date": args.date,
++        "runs": report["run_index"],
++        "commands": _commands(),
++        "probe_status": {
++            key: report[key]
++            for key in (
++                "freeze_optimizer_factorial",
++                "two_stage_transport",
++                "projection_refit_control",
++                "frozen_origin_direction_ablation",
++                "statistical_confirmation",
++                "deterministic_K",
++            )
++        },
++    }
++    json_path = output / f"research_summary_transport_corrected_{args.date}.json"
++    md_path = output / f"research_summary_transport_corrected_{args.date}.md"
++    manifest_path = output / f"experiment_manifest_transport_corrected_{args.date}.json"
++    write_new(json_path, json.dumps(report, indent=2, sort_keys=True) + "\n")
++    write_new(md_path, _markdown(report))
++    write_new(manifest_path, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
++    print(md_path)
++    print(json_path)
++    print(manifest_path)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/scripts/validate_transport_corrected_configs.py b/scripts/validate_transport_corrected_configs.py
+new file mode 100644
+index 0000000..115d9bb
+--- /dev/null
++++ b/scripts/validate_transport_corrected_configs.py
+@@ -0,0 +1,50 @@
++"""Dry-run semantic validation for corrected transport experiment configs."""
++
++from __future__ import annotations
++
++from omegaconf import OmegaConf
++
++from spica.train_transport import PROJECT_ROOT, _validate_options
++
++CONFIGS = (
++    "transport_factorial_base_no_text",
++    "transport_factorial_base_text",
++    "transport_factorial_transport_no_text",
++    "transport_factorial_transport_text",
++    "transport_corrected_p1_source73",
++    "transport_corrected_p1_A_trainable_restored",
++    "transport_corrected_p1_B_frozen_restored",
++    "transport_corrected_p1_C_trainable_reset",
++    "transport_corrected_p1_D_frozen_reset",
++    "transport_corrected_p2_stage1",
++    "transport_corrected_p2_S1_no_direction",
++    "transport_corrected_p2_S2_class_centroid",
++    "transport_corrected_p2_S3_moving",
++    "transport_corrected_p2_S4_fixed_reference",
++)
++
++
++def main() -> None:
++    base = OmegaConf.load(PROJECT_ROOT / "configs" / "train_transport.yaml")
++    for name in CONFIGS:
++        override = OmegaConf.load(
++            PROJECT_ROOT / "configs" / "experiments" / f"{name}.yaml"
++        )
++        config = OmegaConf.merge(base, override)
++        if config.experiment_role in {
++            "freeze_optimizer_A",
++            "freeze_optimizer_B",
++            "freeze_optimizer_C",
++            "freeze_optimizer_D",
++            "two_stage_S1",
++            "two_stage_S2",
++            "two_stage_S3",
++            "two_stage_S4",
++        }:
++            config.resume_checkpoint_path = "/REQUIRED/step73.pt"
++        _validate_options(config)
++        print(f"VALID {name}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/src/spica/provenance.py b/src/spica/provenance.py
+new file mode 100644
+index 0000000..09616b3
+--- /dev/null
++++ b/src/spica/provenance.py
+@@ -0,0 +1,132 @@
++"""Reproducible source, environment, and RNG provenance for experiments."""
++
++from __future__ import annotations
++
++import hashlib
++import importlib.metadata
++import json
++import os
++from pathlib import Path
++import platform
++import random
++import subprocess
++import sys
++from typing import Any
++
++import torch
++
++_SOURCE_SUFFIXES = {".py", ".yaml", ".yml", ".toml", ".md", ".lock"}
++
++
++def _git(root: Path, *args: str) -> str:
++    return subprocess.run(
++        ["git", *args], cwd=root, check=True, capture_output=True, text=True
++    ).stdout
++
++
++def _sha256(value: bytes) -> str:
++    return hashlib.sha256(value).hexdigest()
++
++
++def source_snapshot(root: Path) -> dict[str, Any]:
++    """Hash every tracked or untracked, non-ignored source/config file."""
++    names = _git(
++        root, "ls-files", "--cached", "--others", "--exclude-standard"
++    ).splitlines()
++    names = sorted(
++        name
++        for name in names
++        if not name.startswith("outputs/") and Path(name).suffix in _SOURCE_SUFFIXES
++    )
++    manifest = []
++    aggregate = hashlib.sha256()
++    for name in names:
++        data = (root / name).read_bytes()
++        digest = _sha256(data)
++        manifest.append({"path": name, "sha256": digest, "bytes": len(data)})
++        aggregate.update(name.encode())
++        aggregate.update(b"\0")
++        aggregate.update(data)
++        aggregate.update(b"\0")
++    return {
++        "sha256": aggregate.hexdigest(),
++        "file_count": len(manifest),
++        "manifest": manifest,
++    }
++
++
++def capture_provenance(
++    root: Path,
++    *,
++    resolved_config: dict[str, Any] | None = None,
++    command: list[str] | None = None,
++) -> dict[str, Any]:
++    """Capture enough information to identify a dirty source tree exactly."""
++    try:
++        commit = _git(root, "rev-parse", "HEAD").strip()
++        status = _git(
++            root, "status", "--porcelain", "--untracked-files=all"
++        ).splitlines()
++        patch = _git(root, "diff", "--binary", "HEAD", "--", ".", ":(exclude)outputs")
++        snapshot = source_snapshot(root)
++    except (OSError, subprocess.CalledProcessError) as error:
++        return {"status": "unavailable", "reason": str(error)}
++    dependencies = sorted(
++        f"{distribution.metadata['Name']}=={distribution.version}"
++        for distribution in importlib.metadata.distributions()
++        if distribution.metadata.get("Name")
++    )
++    return {
++        "status": "valid",
++        "head_commit": commit,
++        "working_tree_state": "dirty" if status else "clean",
++        "dirty_files": status,
++        "git_diff": patch if status else "",
++        "git_diff_sha256": _sha256(patch.encode()),
++        "source_snapshot": snapshot,
++        "resolved_config": resolved_config,
++        "command": command or sys.argv,
++        "environment": {
++            "python": sys.version,
++            "platform": platform.platform(),
++            "executable": sys.executable,
++            "torch": str(torch.__version__),
++            "cuda": None if torch.version.cuda is None else str(torch.version.cuda),
++            "dependencies": dependencies,
++            "environment_variables": {
++                key: os.environ[key]
++                for key in ("CUDA_VISIBLE_DEVICES", "CUBLAS_WORKSPACE_CONFIG")
++                if key in os.environ
++            },
++        },
++    }
++
++
++def capture_rng_state(generator: torch.Generator | None = None) -> dict[str, Any]:
++    return {
++        "python": random.getstate(),
++        "torch_cpu": torch.get_rng_state(),
++        "torch_cuda": torch.cuda.get_rng_state_all()
++        if torch.cuda.is_available()
++        else [],
++        "data_loader_generator": None if generator is None else generator.get_state(),
++    }
++
++
++def restore_rng_state(
++    state: dict[str, Any], generator: torch.Generator | None = None
++) -> None:
++    required = {"python", "torch_cpu", "torch_cuda", "data_loader_generator"}
++    missing = required - state.keys()
++    if missing:
++        raise ValueError(f"checkpoint RNG state is missing keys: {sorted(missing)}")
++    random.setstate(state["python"])
++    torch.set_rng_state(state["torch_cpu"])
++    if torch.cuda.is_available() and state["torch_cuda"]:
++        torch.cuda.set_rng_state_all(state["torch_cuda"])
++    if generator is not None and state["data_loader_generator"] is not None:
++        generator.set_state(state["data_loader_generator"])
++
++
++def hash_json(value: Any) -> str:
++    return _sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+diff --git a/tests/test_transport_research_integrity.py b/tests/test_transport_research_integrity.py
+new file mode 100644
+index 0000000..49e4b07
+--- /dev/null
++++ b/tests/test_transport_research_integrity.py
+@@ -0,0 +1,241 @@
++from __future__ import annotations
++
++import json
++from pathlib import Path
++import random
++import subprocess
++from types import SimpleNamespace
++
++import pytest
++import torch
++
++from scripts.summarize_transport_corrected import _same_checkpoint, build_report
++from scripts.transport_artifact_utils import (
++    ArtifactIntegrityError,
++    MATCHED_FIELDS,
++    assert_matched_runs,
++    factorial_effects,
++    select_unique_role,
++    validate_freeze_optimizer_role,
++    write_new,
++)
++from spica.provenance import capture_provenance, capture_rng_state
++from spica.train_transport import (
++    _parameter_gradient_space,
++    _representation_gradient_conflicts,
++    _restore_training_state,
++)
++
++
++def _config(**updates):
++    value = {field: 1 for field in MATCHED_FIELDS}
++    value.update(
++        {
++            "model_family": "predictive_semantic_transport",
++            "transport_enabled": False,
++            "use_text_cls": True,
++            "lambda_cls": 1.0,
++            "lambda_endpoint": 0.0,
++            "text_loss_location": "q",
++        }
++    )
++    value.update(updates)
++    return value
++
++
++def _run(**updates):
++    config = _config(**updates)
++    return {
++        "config": config,
++        "data_split_identity": {"sha256": "split"},
++        "probe_history": [{"step": 73, "val": {"mAP": 0.5}, "base_val": {"mAP": 0.4}}],
++    }
++
++
++def test_causal_decomposition_rejects_different_text_configuration() -> None:
++    base = _run()
++    transport = _run(transport_enabled=True, text_loss_location="z0")
++    with pytest.raises(ArtifactIntegrityError, match="text_loss_location"):
++        assert_matched_runs(base, transport)
++
++
++@pytest.mark.parametrize("field", ["seed", "steps"])
++def test_causal_decomposition_rejects_seed_or_training_budget(field: str) -> None:
++    base = _run()
++    transport = _run(transport_enabled=True, **{field: 2})
++    with pytest.raises(ArtifactIntegrityError, match=field):
++        assert_matched_runs(base, transport)
++
++
++def test_causal_decomposition_rejects_different_split() -> None:
++    base = _run()
++    transport = _run(transport_enabled=True)
++    transport["data_split_identity"] = {"sha256": "other"}
++    with pytest.raises(ArtifactIntegrityError, match="split"):
++        assert_matched_runs(base, transport)
++
++
++def test_endpoint0_factorial_effects_are_correct() -> None:
++    assert factorial_effects({"A": 1.0, "B": 3.0, "C": 4.0, "D": 10.0}) == {
++        "text_effect_without_transport": 2.0,
++        "text_effect_with_transport": 6.0,
++        "transport_effect_without_text": 3.0,
++        "transport_effect_with_text": 7.0,
++        "interaction": 4.0,
++    }
++
++
++def test_optimizer_reset_only_rejects_frozen_encoder() -> None:
++    with pytest.raises(ArtifactIntegrityError, match="keep the encoder trainable"):
++        validate_freeze_optimizer_role(
++            {
++                "experiment_role": "optimizer_reset_only",
++                "freeze_encoder_at_step": 73,
++                "reset_optimizer_on_resume": True,
++                "resume_checkpoint_path": "source.pt",
++            }
++        )
++
++
++@pytest.mark.parametrize(
++    ("role", "freeze", "reset"),
++    [
++        ("freeze_optimizer_A", None, False),
++        ("freeze_optimizer_B", 73, False),
++        ("freeze_optimizer_C", None, True),
++        ("freeze_optimizer_D", 73, True),
++    ],
++)
++def test_freeze_reset_branches_resolve_exactly(
++    role: str, freeze: int | None, reset: bool
++) -> None:
++    assert validate_freeze_optimizer_role(
++        {
++            "experiment_role": role,
++            "freeze_encoder_at_step": freeze,
++            "reset_optimizer_on_resume": reset,
++            "resume_checkpoint_path": "source.pt",
++        }
++    ) == {"freeze": freeze == 73, "reset": reset}
++
++
++def test_gradient_outputs_keep_q_z0_and_parameter_spaces_separate() -> None:
++    parameter = torch.nn.Parameter(torch.tensor([1.0, 2.0]))
++    z0 = parameter * 2
++    q = z0.square()
++    prediction = SimpleNamespace(q=q, z0=z0)
++    losses = {
++        "L_cls": q.sum(),
++        "L_rank": q.square().sum(),
++        "L_dir": z0.sum(),
++        "L_endpoint": (q - 1).square().sum(),
++    }
++    spaces = {
++        **_representation_gradient_conflicts(losses, prediction),
++        "parameter": _parameter_gradient_space(losses, [parameter]),
++    }
++    assert {name: value["space"] for name, value in spaces.items()} == {
++        "query": "dL/dq",
++        "base": "dL/dz0",
++        "parameter": "dL/dtheta",
++    }
++    assert all(len(value["cosine_matrix"]) == 4 for value in spaces.values())
++    assert all(value["loss_names"] == list(losses) for value in spaces.values())
++
++
++def test_dirty_tree_provenance_contains_diff_and_source_hash(tmp_path: Path) -> None:
++    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
++    subprocess.run(
++        ["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True
++    )
++    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
++    source = tmp_path / "module.py"
++    source.write_text("value = 1\n")
++    subprocess.run(["git", "add", "module.py"], cwd=tmp_path, check=True)
++    subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
++    source.write_text("value = 2\n")
++    provenance = capture_provenance(tmp_path)
++    assert provenance["working_tree_state"] == "dirty"
++    assert "value = 2" in provenance["git_diff"]
++    assert len(provenance["git_diff_sha256"]) == 64
++    assert len(provenance["source_snapshot"]["sha256"]) == 64
++
++
++def test_missing_raw_artifact_stays_not_run(tmp_path: Path) -> None:
++    report = build_report(tmp_path, "2099-01-01")
++    assert report["causal_decomposition"]["status"] == "not_run"
++    assert "peak_mAP" not in report["causal_decomposition"]
++    assert report["endpoint0_factorial"]["status"] == "not_run"
++
++
++def test_duplicate_structured_role_is_fatal() -> None:
++    records = [
++        (Path("a"), {"config": {"experiment_role": "role"}}),
++        (Path("b"), {"config": {"experiment_role": "role"}}),
++    ]
++    with pytest.raises(ArtifactIntegrityError, match="ambiguous"):
++        select_unique_role(records, "role")
++
++
++def test_generated_artifacts_never_overwrite(tmp_path: Path) -> None:
++    path = tmp_path / "historical.json"
++    write_new(path, "old")
++    with pytest.raises(FileExistsError):
++        write_new(path, "new")
++    assert path.read_text() == "old"
++
++
++def test_checkpoint_identity_accepts_relative_and_absolute_paths() -> None:
++    relative = Path("outputs/source.pt")
++    assert _same_checkpoint(relative, Path.cwd() / relative)
++
++
++def test_resume_restores_model_optimizer_scheduler_step_and_rng() -> None:
++    random.seed(7)
++    torch.manual_seed(7)
++    model = torch.nn.Linear(2, 1)
++    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1)
++    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)
++    model(torch.ones(1, 2)).sum().backward()
++    optimizer.step()
++    scheduler.step()
++    rng = capture_rng_state()
++    expected_python = random.random()
++    expected_torch = torch.rand(2)
++    payload = {
++        "step": 73,
++        "model_state_dict": model.state_dict(),
++        "optimizer_state_dict": optimizer.state_dict(),
++        "scheduler_state_dict": scheduler.state_dict(),
++        "rng_state": rng,
++    }
++    restored_model = torch.nn.Linear(2, 1)
++    restored_optimizer = torch.optim.AdamW(restored_model.parameters(), lr=9.0)
++    restored_scheduler = torch.optim.lr_scheduler.StepLR(
++        restored_optimizer, step_size=9
++    )
++    step = _restore_training_state(
++        payload,
++        model=restored_model,
++        optimizer=restored_optimizer,
++        scheduler=restored_scheduler,
++    )
++    assert step == 73
++    assert restored_optimizer.state_dict()["state"]
++    assert restored_scheduler.state_dict() == scheduler.state_dict()
++    assert random.random() == expected_python
++    assert torch.equal(torch.rand(2), expected_torch)
++
++
++def test_summary_contains_raw_values_not_only_conclusions(tmp_path: Path) -> None:
++    run_dir = tmp_path / "group" / "timestamp"
++    run_dir.mkdir(parents=True)
++    result = _run(
++        experiment_role="unrelated_probe",
++        experiment_campaign="transport_corrected_2026-09-02_v2",
++    )
++    (run_dir / "run_result.json").write_text(json.dumps(result))
++    report = build_report(tmp_path, "2099-01-01")
++    raw = report["run_index"]["unrelated_probe"]
++    assert raw["raw_metrics"][0]["val"]["mAP"] == 0.5
++    assert raw["resolved_config"]["seed"] == 1

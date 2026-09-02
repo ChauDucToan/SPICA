@@ -1,6 +1,8 @@
 # @package _global_
 # P1 D: matched K=1 tangent transport plus frozen seen-class CLIPText CE.
 experiment_name: transport_factorial_transport_text
+experiment_role: endpoint0_factorial_D
+experiment_campaign: transport_corrected_2026-09-02_v2
 transport_enabled: true
 text_loss_location: q
 direction_target: moving

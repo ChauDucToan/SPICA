@@ -1,0 +1,30 @@
+# @package _global_
+experiment_name: corrected_p1_D_frozen_reset
+experiment_role: freeze_optimizer_D
+experiment_campaign: transport_corrected_2026-09-02_v2
+transport_enabled: true
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+rho_strategy: fixed
+rho_max_degrees: 15.0
+fixed_rho_degrees: 15.0
+lambda_dir: 1.0
+lambda_dist: 0.0
+lambda_endpoint: 0.0
+lambda_rank: 1.0
+lambda_cls: 1.0
+text_loss_location: q
+direction_target: moving
+use_vmf: false
+save_optimizer: true
+max_steps: 5400
+probe_steps: [500, 1800, 5400]
+gradient_conflict_steps: [500]
+resume_checkpoint_path: null
+freeze_encoder_at_step: 73
+reset_optimizer_on_resume: true
+optimizer_reset_scope: all
+seed: 42
+train_class_scope: pseudo_train

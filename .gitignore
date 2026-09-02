@@ -32,6 +32,24 @@ outputs/*
 !outputs/stability_retention.png
 !outputs/seed_replication_controls.png
 !outputs/transport_multi_photo_probe_*.json
+!outputs/research_summary_transport_corrected_*.md
+!outputs/research_summary_transport_corrected_*.json
+!outputs/experiment_manifest_transport_corrected_*.json
+!outputs/corrected_causal_decomposition.png
+!outputs/corrected_causal_decomposition.json
+!outputs/corrected_endpoint0_factorial.png
+!outputs/corrected_endpoint0_factorial.json
+!outputs/freeze_optimizer_factorial.png
+!outputs/freeze_optimizer_factorial.json
+!outputs/two_stage_transport.png
+!outputs/two_stage_transport.json
+!outputs/projection_refit_control.png
+!outputs/projection_refit_control.json
+!outputs/frozen_origin_direction_ablation.png
+!outputs/frozen_origin_direction_ablation.json
+!outputs/stability_retention_corrected.png
+!outputs/stability_retention_corrected.json
+!outputs/transport_corrected_*.patch
 
 # ckeckpoint
 *.pth

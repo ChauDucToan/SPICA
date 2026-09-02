@@ -1,12 +1,15 @@
 # @package _global_
 # P1 B: matched base-query plus frozen seen-class CLIPText CE.
 experiment_name: transport_factorial_base_text
+experiment_role: endpoint0_factorial_B
+experiment_campaign: transport_corrected_2026-09-02_v2
 transport_enabled: false
 transport_mode: tangent
 K: 1
 encoder_mode: partial
 encoder_unfreeze_depth: 4
 lambda_cls: 1.0
+text_loss_location: q
 lambda_dir: 0.0
 lambda_dist: 0.0
 lambda_endpoint: 0.0

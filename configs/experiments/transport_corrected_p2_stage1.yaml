@@ -1,0 +1,27 @@
+# @package _global_
+# Stage 1: semantic origin only, selected on pseudo-unseen validation.
+experiment_name: corrected_p2_stage1_semantic_origin
+experiment_role: two_stage_stage1
+experiment_campaign: transport_corrected_2026-09-02_v2
+transport_enabled: false
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+rho_strategy: fixed
+rho_max_degrees: 15.0
+fixed_rho_degrees: 15.0
+lambda_dir: 0.0
+lambda_dist: 0.0
+lambda_endpoint: 0.0
+lambda_rank: 1.0
+lambda_cls: 1.0
+text_loss_location: z0
+direction_target: none
+use_vmf: false
+save_optimizer: true
+max_steps: 73
+probe_steps: [15, 44, 73]
+gradient_conflict_steps: []
+seed: 42
+train_class_scope: pseudo_train

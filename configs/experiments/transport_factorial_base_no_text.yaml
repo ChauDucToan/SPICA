@@ -1,12 +1,15 @@
 # @package _global_
 # P1 A: matched base-query control, q=z0, no text classifier.
 experiment_name: transport_factorial_base_no_text
+experiment_role: endpoint0_factorial_A
+experiment_campaign: transport_corrected_2026-09-02_v2
 transport_enabled: false
 transport_mode: tangent
 K: 1
 encoder_mode: partial
 encoder_unfreeze_depth: 4
 lambda_cls: 0.0
+text_loss_location: none
 lambda_dir: 0.0
 lambda_dist: 0.0
 lambda_endpoint: 0.0
