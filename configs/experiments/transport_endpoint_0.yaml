@@ -1,0 +1,25 @@
+# @package _global_
+# P4 matched endpoint-loss ablation; select on pseudo-unseen validation only.
+experiment_name: transport_endpoint_0
+transport_enabled: true
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+lambda_cls: 1.0
+lambda_dir: 1.0
+lambda_dist: 1.0
+lambda_endpoint: 0
+lambda_rank: 1.0
+lambda_vmf: 0.0
+lambda_geom: 0.0
+use_geometry_loss: false
+rho_max_degrees: 15.0
+loss_profile: transport
+max_steps: 5400
+probe_steps: [0, 15, 73, 500, 1000, 1800, 5400]
+run_probes: true
+gradient_conflict_steps: [15, 73, 500]
+save_optimizer: true
+seed: 42
+train_class_scope: pseudo_train
