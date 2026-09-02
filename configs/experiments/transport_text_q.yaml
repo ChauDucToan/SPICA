@@ -1,0 +1,19 @@
+# P6 TQ: CE(q), endpoint=0 transport.
+experiment_name: deep_text_q
+transport_enabled: true
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+rho_strategy: learned
+rho_max_degrees: 15.0
+fixed_rho_degrees: 15.0
+lambda_endpoint: 0.0
+lambda_cls: 1.0
+text_loss_location: q
+direction_target: moving
+use_vmf: false
+save_optimizer: true
+probe_steps: [0, 15, 44, 73, 100, 500, 1000, 1800, 5400]
+max_steps: 5400
+seed: 42

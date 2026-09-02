@@ -16,6 +16,12 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 
+from transport_artifact_utils import (
+    explicit_transport_enabled,
+    repository_provenance,
+    source_run_provenance,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUTS = ROOT / "outputs"
 # Keep the filenames at outputs/ so they match the research-iteration
@@ -134,6 +140,8 @@ def run_record(path: Path, result: dict[str, Any]) -> dict[str, Any]:
         "points": points(result),
         "photo_sampling": result.get("photo_sampling", {}),
         "inference_contract": result.get("inference_contract", {}),
+        "provenance": source_run_provenance(path, result),
+        "transport_enabled_recorded": explicit_transport_enabled(result),
     }
 
 
@@ -214,7 +222,12 @@ def _save_plot(path: Path) -> None:
 
 def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[str, str]:
     PLOTS.mkdir(parents=True, exist_ok=True)
-    transport_records = [record for record in records if record["step"] >= 100]
+    # Base-only controls are useful in their own curves, but must never be
+    # selected as a transport model or a K=1 transport point.
+    transport_records = [
+        record for record in records
+        if record["step"] >= 100 and record.get("transport_enabled_recorded") is True
+    ]
     plt.figure(figsize=(8, 5))
     if baseline.get("best_mAP") is not None:
         plt.axhline(float(baseline["best_mAP"]), linestyle="--", color="black", label="full-vector JEPA best")
@@ -327,20 +340,21 @@ def build_report(
     official_evaluations: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], str]:
     usable = [record for record in records if record["step"] >= 100 and best_point(record) is not None]
-    residual = [record for record in usable if record["config"].get("transport_mode") in {"residual", "bounded_residual"}]
-    tangent = [record for record in usable if record["config"].get("transport_mode") == "tangent" and int(record["config"].get("K", 1)) == 1]
+    transport_usable = [record for record in usable if record.get("transport_enabled_recorded") is True]
+    residual = [record for record in transport_usable if record["config"].get("transport_mode") in {"residual", "bounded_residual"}]
+    tangent = [record for record in transport_usable if record["config"].get("transport_mode") == "tangent" and int(record["config"].get("K", 1)) == 1]
     best_residual_record = max(residual, key=lambda record: float(best_point(record)["mAP"]), default=None)
     simple_residual = [record for record in residual if record["config"].get("transport_mode") == "residual"]
     best_simple_residual_record = max(simple_residual, key=lambda record: float(best_point(record)["mAP"]), default=None)
     best_tangent_record = max(tangent, key=lambda record: float(best_point(record)["mAP"]), default=None)
     plain_tangent = [record for record in tangent if not record["config"].get("use_text_cls")]
     best_plain_tangent_record = max(plain_tangent, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    text_records = [record for record in usable if record["config"].get("use_text_cls") and int(record["config"].get("K", 1)) == 1]
+    text_records = [record for record in transport_usable if record["config"].get("use_text_cls") and int(record["config"].get("K", 1)) == 1]
     no_text_rho15 = [record for record in tangent if not record["config"].get("use_text_cls") and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6]
     geometry_records = [record for record in tangent if record["config"].get("use_geometry_loss")]
     no_geometry_rho15 = [record for record in tangent if not record["config"].get("use_geometry_loss") and not record["config"].get("use_text_cls") and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6]
-    deterministic_records = [record for record in usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
-    vmf_records = [record for record in usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
+    deterministic_records = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
+    vmf_records = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
     best_text_record = max(text_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
     best_plain_rho15 = max(no_text_rho15, key=lambda record: float(best_point(record)["mAP"]), default=None)
     best_geometry_record = max(geometry_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
@@ -350,13 +364,14 @@ def build_report(
     residual_long = max((record for record in residual if record["step"] >= 1000), key=lambda record: record["step"], default=None)
     k_ablation_records = [
         record
-        for record in usable
+        for record in transport_usable
         if record["config"].get("transport_mode") == "tangent"
         and not record["config"].get("use_text_cls")
         and not record["config"].get("use_geometry_loss")
         and record["config"].get("photo_target") == "instance"
         and record["config"].get("encoder_mode") == "partial"
         and abs(float(record["config"].get("rho_max", 0.0)) - 15.0) < 1e-6
+        and abs(float(record["config"].get("lambda_endpoint", 0.0))) < 1e-12
     ]
     k_best: dict[int, dict[str, Any]] = {}
     for record in k_ablation_records:
@@ -390,12 +405,16 @@ def build_report(
         if denom > 0:
             radius_correlation = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denom
 
+    current_repository = repository_provenance()
     report: dict[str, Any] = {
         "report_date": report_date,
         "repository": {
-            "starting_commit": "1cb49522c0a554d68d432a56076c7d181fb4f9f1",
-            "audited_commit": "1cb49522c0a554d68d432a56076c7d181fb4f9f1",
-            "working_tree_at_audit": "dirty before implementation (pre-existing JEPA/W&B edits preserved)",
+            "starting_commit": "73ecaea34b43947c520092de1c08f6f5073da2ee",
+            **current_repository,
+            "source_run_provenance": {
+                record["run_dir"]: record.get("provenance")
+                for record in records
+            },
         },
         "previous_full_vector_jepa": baseline,
         "transport_runs": records,
@@ -445,7 +464,7 @@ def build_report(
         "- Conclusions below distinguish measured runs from mechanisms that are implemented but not yet measured.",
         "",
         "## 2. Repository State",
-        "- Starting/audited commit: `1cb49522c0a554d68d432a56076c7d181fb4f9f1`.",
+        "- Starting commit: `73ecaea34b43947c520092de1c08f6f5073da2ee`; current report commit is recorded dynamically below.",
         "- The starting tree was dirty with pre-existing `configs/train_jepa.yaml`, `src/spica/train_jepa.py`, `src/spica/tracking/wandb.py` edits and an upload script; those were preserved.",
         "- Files added: `src/spica/models/transport.py`, `src/spica/evaluation/transport.py`, `src/spica/train_transport.py`, `src/spica/evaluate_transport.py`, `tests/test_transport.py`, transport configs, `scripts/summarize_transport.py`, and the versioned report/plots.",
         "- Files modified: `README.md`, `.gitignore`, `pyproject.toml`, `src/spica/models/clip.py`, and the compatibility export in `src/spica/models/jepa.py`; the pre-existing JEPA/W&B files remain modified as found.",
@@ -552,8 +571,8 @@ def build_report(
     if not k_best:
         lines.append("| not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |")
     lines += ["- K means plausible transport directions, not positive-photo count.", "", "## 12. Probabilistic Necessity"]
-    deterministic = [record for record in usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
-    vmf = [record for record in usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
+    deterministic = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
+    vmf = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
     lines.append(f"- Deterministic multi-direction runs: {len(deterministic)}; Mo-vMF runs: {len(vmf)}.")
     lines.append("- Mo-vMF is retained only as an evaluated option; no novelty-based retention decision is made without a matched deterministic comparison.")
     lines += ["", "## 13. Feature Geometry", "- Every probe reports h/z0/q effective rank, semantic margin, base-reference cosine, query-reference cosine, photo alignment, direction alignment, and rho quantiles.", "- The previous artifact's rank/margin trajectory is reproduced above; transport artifacts remain inspectable in the run directories.", "", "## 14. Self-Query Verification", "- input at inference = sketch only", "- text at inference = NO", "- photo at inference = NO", "- gallery photos are precomputed frozen embeddings and are not re-encoded by the query model.", "", "## 15. Official Diagnostic Evaluation"]
@@ -574,8 +593,8 @@ def build_report(
     final_tangent = best_point(best_tangent_record) if best_tangent_record else None
     best_k = max(k_best.items(), key=lambda item: float(best_point(item[1])["mAP"]), default=None)
     lines += [
-        "Repository commit: 1cb49522c0a554d68d432a56076c7d181fb4f9f1",
-        "Working tree clean: NO (pre-existing user changes plus this implementation)",
+        f"Repository commit: {current_repository.get('current_commit') or 'unavailable'}",
+        f"Working tree clean: {'YES' if current_repository.get('working_tree_state') == 'clean' else 'NO'}",
         "",
         f"Previous full-vector JEPA best mAP: {_fmt(baseline.get('best_mAP'))}",
         f"Previous full-vector JEPA late-training mAP: {_fmt(baseline.get('late_mAP'))}",

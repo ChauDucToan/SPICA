@@ -2,6 +2,9 @@
 # P1 C: matched K=1 tangent transport without text CE.
 experiment_name: transport_factorial_transport_no_text
 transport_enabled: true
+text_loss_location: none
+direction_target: moving
+save_optimizer: true
 transport_mode: tangent
 K: 1
 encoder_mode: partial
@@ -9,12 +12,15 @@ encoder_unfreeze_depth: 4
 lambda_cls: 0.0
 lambda_dir: 1.0
 lambda_dist: 1.0
-lambda_endpoint: 1.0
+lambda_endpoint: 0.0
 lambda_rank: 1.0
 lambda_vmf: 0.0
 lambda_geom: 0.0
 use_geometry_loss: false
 rho_max_degrees: 15.0
+rho_strategy: learned
+fixed_rho_degrees: 15.0
+rho_warmup_steps: 75
 loss_profile: transport
 max_steps: 5400
 probe_steps: [0, 15, 44, 73, 100, 500, 1000, 1800, 5400]

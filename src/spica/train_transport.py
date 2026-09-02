@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import random
+import subprocess
 from typing import Any
 
 import hydra
@@ -31,7 +32,10 @@ from .evaluation.transport import (
     encode_transport_loader,
     evaluate_base_queries,
     evaluate_transport_features,
+    hidden_space_compatibility,
+    training_angle_summary,
     transport_probe_dict,
+    transport_query_correlations,
 )
 from .evaluation.text_bank import EncodedTextBank, encode_class_text_bank
 from .models.clip import (
@@ -39,12 +43,14 @@ from .models.clip import (
     frozen_visual_projection,
     load_frozen_clip,
     load_trainable_sketch_hidden_encoder,
+    visual_pre_projection,
 )
 from .models.transport import (
     SemanticTransportPrediction,
     SpicaPredictiveTransport,
     deterministic_direction_mixture_loss,
     directional_mixture_loss,
+    fixed_origin_transport_target,
     photo_transport_target,
     transport_direction_loss,
     transport_distance_loss,
@@ -63,6 +69,105 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HYDRA_CONFIG_DIR = str(PROJECT_ROOT / "configs")
 OBJECTIVE_NAME = "predictive_semantic_transport"
 PSEUDO_SPLIT_SEED = 3407
+
+
+def _git_provenance() -> dict[str, object]:
+    """Capture repository provenance at run creation, never from a report date."""
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+    except (OSError, subprocess.CalledProcessError) as error:
+        return {
+            "commit": None,
+            "working_tree_state": "unavailable",
+            "dirty_files": [],
+            "error": str(error),
+        }
+    return {
+        "commit": commit,
+        "working_tree_state": "clean" if not status else "dirty",
+        "dirty_files": status,
+    }
+
+
+def _angle_values(
+    origin: Tensor,
+    positive_embeddings: Tensor,
+    *,
+    max_items: int,
+) -> Tensor:
+    """Return acos(origin·photo) for actual sampled training pairs."""
+    if positive_embeddings.ndim != 3:
+        raise ValueError("positive_embeddings must have shape [B,M,D]")
+    origin = F.normalize(origin.detach(), dim=-1)
+    photos = F.normalize(positive_embeddings.detach(), dim=-1)
+    values = (origin[:, None, :] * photos).sum(dim=-1).clamp(-1.0 + 1e-6, 1.0 - 1e-6)
+    angles = torch.acos(values).reshape(-1).cpu()
+    if angles.numel() > max_items:
+        angles = angles[:max_items]
+    return angles
+
+
+def _gradient_wrt(loss: Tensor, variable: Tensor) -> Tensor:
+    """Differentiate a diagnostic loss with respect to a representation tensor."""
+    if not loss.requires_grad or not variable.requires_grad:
+        return torch.zeros_like(variable)
+    gradient = torch.autograd.grad(
+        loss,
+        variable,
+        retain_graph=True,
+        allow_unused=True,
+    )[0]
+    return torch.zeros_like(variable) if gradient is None else gradient
+
+
+def _gradient_pair_cosine(first: Tensor, second: Tensor) -> float | None:
+    first_flat = first.reshape(-1)
+    second_flat = second.reshape(-1)
+    first_norm = first_flat.norm()
+    second_norm = second_flat.norm()
+    if first_norm <= 1e-12 or second_norm <= 1e-12:
+        return None
+    return float((first_flat * second_flat).sum().div(first_norm * second_norm).item())
+
+
+def _representation_gradient_conflicts(
+    losses: dict[str, Tensor],
+    prediction: SemanticTransportPrediction,
+) -> dict[str, dict[str, float | None]]:
+    """Pairwise loss-gradient cosines in q and z0 representation spaces."""
+    result: dict[str, dict[str, float | None]] = {}
+    for representation_name, representation in (("q", prediction.q), ("z0", prediction.z0)):
+        gradients = {
+            name: _gradient_wrt(loss, representation)
+            for name, loss in losses.items()
+        }
+        pairs: dict[str, float | None] = {}
+        for left, right in (("endpoint", "cls"), ("endpoint", "rank"), ("cls", "rank"), ("dir", "cls")):
+            pairs[f"{left}_{right}"] = _gradient_pair_cosine(
+                gradients[left], gradients[right]
+            )
+        result[representation_name] = pairs
+    return result
+
+
+def _validate_device_optional(value: object) -> None:
+    if value is None:
+        return
+    if not isinstance(value, (int, float)):
+        raise ValueError("diagnostic limits must be numeric")
 
 
 def _resolve_device(requested_device: str) -> torch.device:
@@ -127,6 +232,12 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("use_vmf=true requires lambda_vmf > 0")
     if str(args.rho_mode) not in {"shared", "component"}:
         raise ValueError("rho_mode must be shared or component")
+    if str(args.rho_strategy) not in {"learned", "zero", "fixed", "linear_warmup", "cosine_warmup"}:
+        raise ValueError("rho_strategy is not supported")
+    if int(args.rho_warmup_steps) <= 0:
+        raise ValueError("rho_warmup_steps must be positive")
+    if not 0 < float(args.fixed_rho_degrees) <= float(args.rho_max_degrees):
+        raise ValueError("fixed_rho_degrees must be in (0, rho_max_degrees]")
     if str(args.photo_target) not in {"instance", "class_prototype"}:
         raise ValueError("photo_target must be instance or class_prototype")
     if str(args.loss_profile) not in {"endpoint_rank", "transport"}:
@@ -200,6 +311,14 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("train_class_scope must be pseudo_train or all_seen")
     if not str(args.prompt_template).count("{}") == 1:
         raise ValueError("prompt_template must contain exactly one '{}' placeholder")
+    if str(args.text_loss_location) not in {"q", "z0", "both", "none"}:
+        raise ValueError("text_loss_location must be q, z0, both, or none")
+    if str(args.direction_target) not in {"moving", "fixed_reference", "class_centroid", "none"}:
+        raise ValueError("direction_target must be moving, fixed_reference, class_centroid, or none")
+    if int(args.training_angle_diagnostic_max) <= 0:
+        raise ValueError("training_angle_diagnostic_max must be positive")
+    if not isinstance(args.reset_optimizer_on_resume, bool):
+        raise ValueError("reset_optimizer_on_resume must be boolean")
     if str(args.wandb_mode) not in {"online", "offline", "disabled"}:
         raise ValueError("wandb_mode must be online, offline, or disabled")
 
@@ -457,6 +576,9 @@ def _save_checkpoint(
             "rho_max": rho_max,
             "initial_rho": math.radians(float(args.initial_rho_degrees)),
             "rho_mode": str(args.rho_mode),
+            "rho_strategy": str(args.rho_strategy),
+            "fixed_rho": math.radians(float(args.fixed_rho_degrees)),
+            "rho_warmup_steps": int(args.rho_warmup_steps),
             "use_vmf": bool(args.use_vmf),
             "min_kappa": float(args.min_kappa),
             "max_kappa": float(args.max_kappa),
@@ -500,6 +622,11 @@ def _save_checkpoint(
             "lambda_geom": float(args.lambda_geom),
             "rho_max_degrees": float(args.rho_max_degrees),
             "rho_mode": str(args.rho_mode),
+            "rho_strategy": str(args.rho_strategy),
+            "fixed_rho_degrees": float(args.fixed_rho_degrees),
+            "rho_warmup_steps": int(args.rho_warmup_steps),
+            "direction_target": str(args.direction_target),
+            "text_loss_location": str(args.text_loss_location),
             "score_temperature": float(args.score_temperature),
             "seed": int(args.seed),
             "predictor_learning_rate": float(args.predictor_learning_rate),
@@ -509,6 +636,7 @@ def _save_checkpoint(
             "pseudo_validation_class_ids": list(split.validation_class_ids),
             "pseudo_train_class_ids": list(split.train_class_ids),
             "checkpoint_contains_optimizer": include_optimizer,
+            "provenance": _git_provenance(),
         },
     }
     torch.save(payload, path)
@@ -549,6 +677,8 @@ def _probe(
     test_gallery: EncodedRetrievalSet,
     val_reference: Tensor,
     test_reference: Tensor,
+    val_hidden_reference: Tensor,
+    test_hidden_reference: Tensor,
     initial_val: TransportFeatureSet,
     initial_test: TransportFeatureSet,
     device: torch.device,
@@ -612,6 +742,26 @@ def _probe(
     )
     val_probe["drift"] = _drift_probe(val_features, initial_val)
     test_probe["drift"] = _drift_probe(test_features, initial_test)
+    val_probe["transport"]["rho_correlations"] = transport_query_correlations(
+        val_features,
+        val_gallery,
+        val_evaluations[selected_mode].average_precision_per_query,
+    )
+    test_probe["transport"]["rho_correlations"] = transport_query_correlations(
+        test_features,
+        test_gallery,
+        test_evaluations[selected_mode].average_precision_per_query,
+    )
+    val_probe["hidden_space_compatibility"] = hidden_space_compatibility(
+        val_hidden_reference,
+        val_features.h,
+        model.photo_projection,
+    )
+    test_probe["hidden_space_compatibility"] = hidden_space_compatibility(
+        test_hidden_reference,
+        test_features.h,
+        model.photo_projection,
+    )
     result = {
         "val": _metrics_summary(val_evaluations[selected_mode]),
         "base_val": _metrics_summary(val_base_evaluation),
@@ -682,6 +832,7 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
     semantic = val_geometry.get("semantic", {})
     reference = val_geometry.get("reference", {})
     drift = val_geometry.get("drift", {})
+    hidden = val_geometry.get("hidden_space_compatibility", {})
     for source, names in (
         (transport, ("mean_rho", "std_rho", "p95_rho", "mean_direction_cosine", "mean_distance_error", "endpoint_photo_cosine", "base_photo_cosine")),
         (mixture, ("gate_entropy", "responsibility_entropy", "mean_kappa", "kappa_saturation_fraction")),
@@ -689,6 +840,7 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
         (semantic, ("semantic_margin",)),
         (reference, ("base_reference_cosine", "query_reference_cosine")),
         (drift, ("base_initial_cosine", "query_initial_cosine")),
+        (hidden, ("linear_cka", "procrustes_residual", "frozen_projection_mean_cosine", "effective_rank_h_ref", "effective_rank_h_t", "effective_rank_W_h_t")),
     ):
         if isinstance(source, dict):
             for name in names:
@@ -770,6 +922,9 @@ def run(args: DictConfig) -> None:
         rho_max=rho_max,
         initial_rho=math.radians(float(args.initial_rho_degrees)),
         shared_rho=str(args.rho_mode) == "shared",
+        rho_strategy=str(args.rho_strategy),
+        fixed_rho=math.radians(float(args.fixed_rho_degrees)),
+        rho_warmup_steps=int(args.rho_warmup_steps),
         use_vmf=bool(args.use_vmf),
         transport_enabled=bool(args.transport_enabled),
         min_kappa=float(args.min_kappa),
@@ -799,19 +954,32 @@ def run(args: DictConfig) -> None:
                 batches.append(photo_clip.encoder(batch["image"].to(device)).float().cpu())
         return torch.cat(batches, dim=0)
 
+    def encode_hidden_reference_loader(loader: DataLoader) -> Tensor:
+        batches: list[Tensor] = []
+        with torch.no_grad():
+            for batch in loader:
+                hidden = visual_pre_projection(
+                    photo_clip.encoder.model.visual,
+                    batch["image"].to(device),
+                )
+                batches.append(hidden.float().cpu())
+        return torch.cat(batches, dim=0)
+
     val_reference = encode_reference_loader(val_loader)
     test_reference = encode_reference_loader(test_loader)
+    val_hidden_reference = encode_hidden_reference_loader(val_loader)
+    test_hidden_reference = encode_hidden_reference_loader(test_loader)
 
     prototype_labels: Tensor | None = None
     prototypes: Tensor | None = None
-    if str(args.photo_target) == "class_prototype":
+    if str(args.photo_target) == "class_prototype" or str(args.direction_target) == "class_centroid":
         print("Building train-photo-only class prototypes...")
         prototype_labels, prototypes = _build_class_prototypes(
             photo_clip.encoder, train_photo_entries, photo_clip.transform, args
         )
 
     text_bank: EncodedTextBank | None = None
-    if float(args.lambda_cls) > 0:
+    if float(args.lambda_cls) > 0 and str(args.text_loss_location) != "none":
         text_bank = encode_class_text_bank(
             photo_clip.encoder,
             photo_clip.tokenizer,
@@ -850,18 +1018,23 @@ def run(args: DictConfig) -> None:
         model.load_state_dict(payload["model_state_dict"], strict=True)
         resume_step = int(payload.get("step", 0))
         optimizer_state = payload.get("optimizer_state_dict")
-        if optimizer_state is not None:
+        if optimizer_state is not None and not bool(args.reset_optimizer_on_resume):
             optimizer.load_state_dict(optimizer_state)
-        print(f"Resumed transport checkpoint at step {resume_step}: {resume_path}")
+        print(
+            f"Resumed transport checkpoint at step {resume_step}: {resume_path}"
+            + (" (optimizer reset)" if bool(args.reset_optimizer_on_resume) else "")
+        )
     freeze_step = None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step)
     if freeze_step is not None and resume_step >= freeze_step:
         _freeze_encoder(model)
         optimizer = _rebuild_optimizer_without_encoder(optimizer, model)
         print(f"Sketch encoder frozen at resumed step {resume_step}")
+    model.set_schedule_step(resume_step)
     parameter_counts = _parameter_counts(model, photo_clip.encoder)
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     equivalent_epochs_per_step = int(args.batch_size) / len(train_loader.dataset)
+    provenance = _git_provenance()
     run_config: dict[str, Any] = {
         "model_family": "predictive_semantic_transport",
         "objective": OBJECTIVE_NAME,
@@ -876,9 +1049,14 @@ def run(args: DictConfig) -> None:
         "scheduler": "none",
         "K": int(args.K),
         "shared_or_component_rho": str(args.rho_mode),
+        "rho_strategy": str(args.rho_strategy),
         "rho_max": float(args.rho_max_degrees),
+        "fixed_rho_degrees": float(args.fixed_rho_degrees),
+        "rho_warmup_steps": int(args.rho_warmup_steps),
         "use_vmf": bool(args.use_vmf),
-        "use_text_cls": float(args.lambda_cls) > 0,
+        "use_text_cls": float(args.lambda_cls) > 0 and str(args.text_loss_location) != "none",
+        "text_loss_location": str(args.text_loss_location),
+        "direction_target": str(args.direction_target),
         "use_geometry_loss": bool(args.use_geometry_loss),
         "photo_target": str(args.photo_target),
         "loss_profile": str(args.loss_profile),
@@ -894,6 +1072,7 @@ def run(args: DictConfig) -> None:
         "predictor_learning_rate": float(args.predictor_learning_rate),
         "encoder_learning_rate": float(args.encoder_learning_rate),
         "resume_checkpoint_path": None if args.resume_checkpoint_path is None else str(args.resume_checkpoint_path),
+        "reset_optimizer_on_resume": bool(args.reset_optimizer_on_resume),
         "freeze_encoder_at_step": None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step),
         "gradient_conflict_steps": [int(value) for value in args.gradient_conflict_steps],
         "seed": seed,
@@ -913,6 +1092,7 @@ def run(args: DictConfig) -> None:
         "wandb_project": str(args.wandb_project),
         "wandb_group": None if args.wandb_group is None else str(args.wandb_group),
         "wandb_mode": str(args.wandb_mode),
+        "provenance": provenance,
     }
     initial_parameters = _capture_initial_parameters(model)
     probe_steps = {0} if resume_step == 0 else set()
@@ -965,6 +1145,10 @@ def run(args: DictConfig) -> None:
                 "radius_vs_ap": _radius_ap_payload(val_evals[selected], initial_val.rho),
                 "val_geometry": transport_probe_dict(initial_val, val_gallery, frozen_reference=val_reference, kappa_max=float(args.max_kappa)),
                 "diagnostic_test_geometry": transport_probe_dict(initial_test, test_gallery, frozen_reference=test_reference, kappa_max=float(args.max_kappa)),
+                "hidden_space_compatibility": {
+                    "val": hidden_space_compatibility(val_hidden_reference, initial_val.h, model.photo_projection),
+                    "diagnostic_test": hidden_space_compatibility(test_hidden_reference, initial_test.h, model.photo_projection),
+                },
                 "protocol": {"val_is_pseudo_unseen": str(args.train_class_scope) == "pseudo_train", "official_test_is_diagnostic_only": True, "text_used_for_evaluation": False, "photo_gallery_reencoded": False, "map_at_k_denominator": str(args.map_at_k_denominator)},
                 "step": 0,
                 "equivalent_epochs": 0.0,
@@ -973,6 +1157,12 @@ def run(args: DictConfig) -> None:
             }
             step0_probe["val_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
             step0_probe["diagnostic_test_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
+            step0_probe["val_geometry"]["transport"]["rho_correlations"] = transport_query_correlations(  # type: ignore[index]
+                initial_val, val_gallery, val_evals[selected].average_precision_per_query
+            )
+            step0_probe["diagnostic_test_geometry"]["transport"]["rho_correlations"] = transport_query_correlations(  # type: ignore[index]
+                initial_test, test_gallery, test_evals[selected].average_precision_per_query
+            )
             history.append(step0_probe)
             (output_dir / "probe_step0.json").write_text(
                 json.dumps(step0_probe, indent=2, sort_keys=True) + "\n"
@@ -997,9 +1187,13 @@ def run(args: DictConfig) -> None:
             "train_direction_cosine": 0.0,
             "train_endpoint_photo_cosine": 0.0,
             "classification_accuracy": 0.0,
+            "classification_accuracy_q": 0.0,
+            "classification_accuracy_z0": 0.0,
         }
         window_count = 0
         positive_paths_seen: set[str] = set()
+        training_angle_values: list[float] = []
+        training_angle_fixed_values: list[float] = []
         gradient_conflicts: list[dict[str, object]] = []
         gradient_conflict_steps = {int(value) for value in args.gradient_conflict_steps}
         while step < int(args.max_steps):
@@ -1016,10 +1210,16 @@ def run(args: DictConfig) -> None:
                     prototype_labels=prototype_labels,
                     prototypes=prototypes,
                 )
+                # P4 records the true sampled sketch/photo angle, regardless
+                # of whether the optimization target is an instance or a
+                # class prototype.  The frozen reference is also the target
+                # frame for the fixed-origin direction control.
+                sketch_reference = _encode_reference(photo_clip.encoder, sketch_images)
                 model.train()
                 if not any(parameter.requires_grad for parameter in model.sketch_context_encoder.parameters()):
                     model.sketch_context_encoder.eval()
                 optimizer.zero_grad(set_to_none=True)
+                model.set_schedule_step(step)
                 prediction: SemanticTransportPrediction = model(sketch_images)
                 # The base controls use the same encoder and ranking harness,
                 # but q is exactly z0 and all transport-specific losses are
@@ -1027,11 +1227,47 @@ def run(args: DictConfig) -> None:
                 # hidden source of gradients in the factorial experiment.
                 query = prediction.q if bool(args.transport_enabled) else prediction.z0
                 target_transport = photo_transport_target(prediction.z0, target_photo)
+                if str(args.direction_target) == "class_centroid":
+                    direction_photo = _target_for_labels(
+                        positive_embeddings,
+                        labels,
+                        photo_target="class_prototype",
+                        prototype_labels=prototype_labels,
+                        prototypes=prototypes,
+                    )
+                else:
+                    direction_photo = target_photo
+                if str(args.direction_target) == "fixed_reference":
+                    direction_transport = fixed_origin_transport_target(
+                        sketch_reference,
+                        direction_photo,
+                        prediction.z0,
+                    )
+                else:
+                    direction_transport = photo_transport_target(
+                        prediction.z0,
+                        direction_photo,
+                    )
                 positive_targets_for_direction = (
                     target_photo[:, None, :]
                     if str(args.photo_target) == "class_prototype"
                     else positive_embeddings
                 )
+                if len(training_angle_values) < int(args.training_angle_diagnostic_max):
+                    training_angle_values.extend(
+                        _angle_values(
+                            prediction.z0,
+                            positive_embeddings,
+                            max_items=int(args.training_angle_diagnostic_max) - len(training_angle_values),
+                        ).tolist()
+                    )
+                    training_angle_fixed_values.extend(
+                        _angle_values(
+                            sketch_reference,
+                            positive_embeddings,
+                            max_items=int(args.training_angle_diagnostic_max) - len(training_angle_fixed_values),
+                        ).tolist()
+                    )
                 mixture = None
                 if not bool(args.transport_enabled):
                     loss_dir = query.new_zeros(())
@@ -1039,7 +1275,13 @@ def run(args: DictConfig) -> None:
                     loss_endpoint = query.new_zeros(())
                     loss_rank = transport_ranking_loss(query, target_photo, negative_embedding, margin=float(args.margin))
                 elif int(args.K) == 1:
-                    loss_dir = transport_direction_loss(prediction.direction, target_transport.direction)
+                    loss_dir = (
+                        query.new_zeros(())
+                        if str(args.direction_target) == "none"
+                        else transport_direction_loss(
+                            prediction.direction, direction_transport.direction
+                        )
+                    )
                     loss_rank = transport_ranking_loss(query, target_photo, negative_embedding, margin=float(args.margin))
                     rho_for_loss = prediction.rho if prediction.rho.ndim == 1 else prediction.rho.mean(dim=-1)
                     loss_dist = transport_distance_loss(rho_for_loss, target_transport.theta)
@@ -1048,7 +1290,7 @@ def run(args: DictConfig) -> None:
                     if bool(args.use_vmf):
                         mixture = directional_mixture_loss(
                             prediction,
-                            target_transport.direction,
+                            direction_transport.direction,
                             positive_targets_for_direction,
                             negative_embedding,
                             margin=float(args.margin),
@@ -1062,12 +1304,12 @@ def run(args: DictConfig) -> None:
                     else:
                         mixture = deterministic_direction_mixture_loss(
                             prediction,
-                            target_transport.direction,
+                            direction_transport.direction,
                             positive_targets_for_direction,
                             negative_embedding,
                             margin=float(args.margin),
                             ranking_weight=1.0,
-                            direction_weight=1.0,
+                            direction_weight=0.0 if str(args.direction_target) == "none" else 1.0,
                             assignment_temperature=float(args.assignment_temperature),
                         )
                         loss_dir = mixture.direction_nll
@@ -1077,19 +1319,43 @@ def run(args: DictConfig) -> None:
                     loss_endpoint = transport_endpoint_loss(query, target_photo)
                 loss_cls = query.new_zeros(())
                 cls_accuracy = query.new_zeros(())
+                cls_accuracy_q = query.new_zeros(())
+                cls_accuracy_z0 = query.new_zeros(())
                 if text_embeddings is not None and text_labels is not None:
-                    loss_cls, logits = jepa_text_classification_loss(
-                        query,
-                        text_embeddings,
-                        text_labels,
-                        labels,
-                        temperature=float(args.tau_cls),
-                    )
-                    cls_accuracy = classification_accuracy(logits, text_labels, labels)
+                    location = str(args.text_loss_location)
+                    if location in {"q", "both"}:
+                        loss_cls_q, logits_q = jepa_text_classification_loss(
+                            query,
+                            text_embeddings,
+                            text_labels,
+                            labels,
+                            temperature=float(args.tau_cls),
+                        )
+                        cls_accuracy_q = classification_accuracy(logits_q, text_labels, labels)
+                    else:
+                        loss_cls_q = query.new_zeros(())
+                    if location in {"z0", "both"}:
+                        loss_cls_z0, logits_z0 = jepa_text_classification_loss(
+                            prediction.z0,
+                            text_embeddings,
+                            text_labels,
+                            labels,
+                            temperature=float(args.tau_cls),
+                        )
+                        cls_accuracy_z0 = classification_accuracy(logits_z0, text_labels, labels)
+                    else:
+                        loss_cls_z0 = query.new_zeros(())
+                    if location == "q":
+                        loss_cls, cls_accuracy = loss_cls_q, cls_accuracy_q
+                    elif location == "z0":
+                        loss_cls, cls_accuracy = loss_cls_z0, cls_accuracy_z0
+                    elif location == "both":
+                        # Equal total text-loss scale: 0.5 CE on each anchor.
+                        loss_cls = 0.5 * (loss_cls_q + loss_cls_z0)
+                        cls_accuracy = 0.5 * (cls_accuracy_q + cls_accuracy_z0)
                 loss_geom = prediction.q.new_zeros(())
                 if bool(args.use_geometry_loss):
-                    reference = _encode_reference(photo_clip.encoder, sketch_images)
-                    loss_geom = transport_geometry_loss(query, reference)
+                    loss_geom = transport_geometry_loss(query, sketch_reference)
                 loss_vmf = query.new_zeros(())
                 if bool(args.use_vmf):
                     if mixture is None:
@@ -1100,17 +1366,28 @@ def run(args: DictConfig) -> None:
                 if str(args.loss_profile) == "endpoint_rank":
                     dir_weight = 0.0
                     dist_weight = 0.0
-                gradient_conflict: dict[str, float | None] | None = None
+                gradient_conflict: dict[str, object] | None = None
                 if step + 1 in gradient_conflict_steps and bool(args.transport_enabled):
                     conflict_parameters = [
                         parameter for parameter in model.transport_head.parameters()
                         if parameter.requires_grad
                     ]
+                    diagnostic_losses = {
+                        "endpoint": loss_endpoint,
+                        "cls": loss_cls,
+                        "rank": loss_rank,
+                        "dir": loss_dir,
+                    }
                     gradient_conflict = {
                         "step": step + 1,
-                        "endpoint_cls": _gradient_cosine(loss_endpoint, loss_cls, conflict_parameters),
-                        "endpoint_rank": _gradient_cosine(loss_endpoint, loss_rank, conflict_parameters),
-                        "cls_rank": _gradient_cosine(loss_cls, loss_rank, conflict_parameters),
+                        "parameter_space": {
+                            "endpoint_cls": _gradient_cosine(loss_endpoint, loss_cls, conflict_parameters),
+                            "endpoint_rank": _gradient_cosine(loss_endpoint, loss_rank, conflict_parameters),
+                            "cls_rank": _gradient_cosine(loss_cls, loss_rank, conflict_parameters),
+                        },
+                        "representation_space": _representation_gradient_conflicts(
+                            diagnostic_losses, prediction
+                        ),
                     }
                 loss_total = (
                     dir_weight * loss_dir
@@ -1143,7 +1420,7 @@ def run(args: DictConfig) -> None:
                     if not torch.isfinite(parameter).all().item():
                         raise FloatingPointError(f"parameter {name} contains non-finite values")
                 with torch.no_grad():
-                    train_direction = ((prediction.direction * target_transport.direction).sum(dim=-1).mean() if bool(args.transport_enabled) and int(args.K) == 1 else (prediction.directions * target_transport.direction[:, None, :]).sum(dim=-1).max(dim=-1).values.mean() if bool(args.transport_enabled) else query.new_zeros(()))
+                    train_direction = ((prediction.direction * direction_transport.direction).sum(dim=-1).mean() if bool(args.transport_enabled) and int(args.K) == 1 else (prediction.directions * direction_transport.direction[:, None, :]).sum(dim=-1).max(dim=-1).values.mean() if bool(args.transport_enabled) else query.new_zeros(()))
                     train_endpoint = (query * target_transport.z_photo).sum(dim=-1).mean()
                 # The dataset samples positive photos afresh in __getitem__; keep
                 # an explicit diversity counter so M=1 is not mistaken for a
@@ -1171,6 +1448,8 @@ def run(args: DictConfig) -> None:
                     "train_direction_cosine": train_direction.item(),
                     "train_endpoint_photo_cosine": train_endpoint.item(),
                     "classification_accuracy": cls_accuracy.item(),
+                    "classification_accuracy_q": cls_accuracy_q.item(),
+                    "classification_accuracy_z0": cls_accuracy_z0.item(),
                 }
                 for name, value in current.items():
                     window[name] += value
@@ -1187,7 +1466,8 @@ def run(args: DictConfig) -> None:
                 if bool(args.run_probes) and step in probe_steps:
                     checkpoint_path = output_dir / "checkpoints" / f"transport_step{step}.pt"
                     _save_checkpoint(path=checkpoint_path, model=model, optimizer=optimizer, step=step, data_name=data.name, args=args, split=split, parameter_counts=parameter_counts, include_optimizer=bool(args.save_optimizer))
-                    probe, _, _ = _probe(model=model, val_loader=val_loader, val_gallery=val_gallery, test_loader=test_loader, test_gallery=test_gallery, val_reference=val_reference, test_reference=test_reference, initial_val=initial_val, initial_test=initial_test, device=device, args=args)
+                    model.set_schedule_step(step)
+                    probe, _, _ = _probe(model=model, val_loader=val_loader, val_gallery=val_gallery, test_loader=test_loader, test_gallery=test_gallery, val_reference=val_reference, test_reference=test_reference, val_hidden_reference=val_hidden_reference, test_hidden_reference=test_hidden_reference, initial_val=initial_val, initial_test=initial_test, device=device, args=args)
                     probe.update({"step": step, "equivalent_epochs": step * equivalent_epochs_per_step, "checkpoint": str(checkpoint_path), "parameter_drift": _parameter_drift(model, initial_parameters), "training_losses_at_checkpoint": current})
                     history.append(probe)
                     (output_dir / f"probe_step{step}.json").write_text(json.dumps(probe, indent=2, sort_keys=True) + "\n")
@@ -1210,15 +1490,32 @@ def run(args: DictConfig) -> None:
             "training_history": training_history,
             "probe_history": history,
             "gradient_conflicts": gradient_conflicts,
+            "training_target_angles": {
+                "theta_train": {
+                    **training_angle_summary(torch.tensor(training_angle_values)),
+                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_values],
+                },
+                "theta_train_fixed": {
+                    **training_angle_summary(torch.tensor(training_angle_fixed_values)),
+                    "values_degrees": [value * (180.0 / math.pi) for value in training_angle_fixed_values],
+                },
+                "origin_definitions": {
+                    "theta_train": "acos(clamp(z0 · z_positive_instance))",
+                    "theta_train_fixed": "acos(clamp(z_ref · z_positive_instance))",
+                    "positive_pairs": "actual sampled training sketch/photo pairs",
+                },
+            } if training_angle_values and training_angle_fixed_values else {},
+            "provenance": provenance,
             "resume": {
                 "checkpoint": None if resume_path is None else str(resume_path),
                 "starting_step": resume_step,
                 "freeze_encoder_at_step": freeze_step,
-                "optimizer_state_restored": resume_path is not None and payload.get("optimizer_state_dict") is not None if resume_path is not None else False,
+                "optimizer_state_restored": (resume_path is not None and payload.get("optimizer_state_dict") is not None and not bool(args.reset_optimizer_on_resume)) if resume_path is not None else False,
+                "optimizer_state_reset": bool(args.reset_optimizer_on_resume),
             },
             "photo_sampling": {"num_positive_photos_per_step": int(args.num_positive_photos), "unique_positive_photo_paths_seen": len(positive_paths_seen), "same_sketch_can_see_new_photo_each_epoch": True},
             "inference_contract": {"required_inputs": ["raw_sketch_image"], "text_required": False, "photo_required": False, "positive_set_required": False, "oracle_class_required": False},
-            "text_contract": {"enters_predictor": False, "enters_gate": False, "enters_distance_head": False, "enters_vmf": False, "used_only_for_seen_classification": text_bank is not None},
+            "text_contract": {"enters_predictor": False, "enters_gate": False, "enters_distance_head": False, "enters_vmf": False, "loss_location": str(args.text_loss_location), "used_only_for_seen_classification": text_bank is not None},
             "wandb": {"mode": experiment_mode, "project": str(args.wandb_project), "group": None if args.wandb_group is None else str(args.wandb_group), "run_id": experiment.run_id, "run_url": experiment.run_url},
         }
         (output_dir / "training_history.json").write_text(json.dumps(training_history, indent=2, sort_keys=True) + "\n")

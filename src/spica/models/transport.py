@@ -320,6 +320,9 @@ class TangentTransportHead(nn.Module):
     Directions are projected into the tangent plane at z0.  The endpoint is
     produced by the exponential map ``cos(rho) z0 + sin(rho) d`` and therefore
     cannot change the semantic origin by an unconstrained full-vector rewrite.
+
+    ``rho_strategy`` is explicit so fixed trust-region and warmup controls do
+    not secretly instantiate a learned distance head.
     """
 
     def __init__(
@@ -333,6 +336,9 @@ class TangentTransportHead(nn.Module):
         rho_max: float = math.pi / 4.0,
         initial_rho: float = 0.0,
         shared_rho: bool = True,
+        rho_strategy: str = "learned",
+        fixed_rho: float | None = None,
+        rho_warmup_steps: int = 75,
         use_vmf: bool = False,
         min_kappa: float = 1e-4,
         max_kappa: float = 2048.0,
@@ -348,6 +354,18 @@ class TangentTransportHead(nn.Module):
             raise ValueError("rho_max must be in (0, pi]")
         if not math.isfinite(initial_rho) or not 0 <= initial_rho < rho_max:
             raise ValueError("initial_rho must be in [0, rho_max)")
+        if rho_strategy not in {"learned", "zero", "fixed", "linear_warmup", "cosine_warmup"}:
+            raise ValueError(
+                "rho_strategy must be learned, zero, fixed, linear_warmup, or cosine_warmup"
+            )
+        if fixed_rho is None:
+            fixed_rho = rho_max
+        if not math.isfinite(fixed_rho) or not 0 <= fixed_rho <= rho_max:
+            raise ValueError("fixed_rho must be finite and in [0, rho_max]")
+        if rho_strategy == "fixed" and fixed_rho <= 0:
+            raise ValueError("fixed rho strategy requires a positive fixed_rho")
+        if rho_strategy in {"linear_warmup", "cosine_warmup"} and rho_warmup_steps <= 0:
+            raise ValueError("rho warmup strategies require positive rho_warmup_steps")
         if not math.isfinite(min_kappa) or min_kappa < 0:
             raise ValueError("min_kappa must be finite and non-negative")
         if not math.isfinite(max_kappa) or max_kappa <= min_kappa:
@@ -362,6 +380,10 @@ class TangentTransportHead(nn.Module):
         self.rho_max = rho_max
         self.initial_rho = initial_rho
         self.shared_rho = shared_rho
+        self.rho_strategy = rho_strategy
+        self.fixed_rho = fixed_rho
+        self.rho_warmup_steps = int(rho_warmup_steps)
+        self._schedule_step = 0
         self.use_vmf = use_vmf
         self.min_kappa = min_kappa
         self.max_kappa = max_kappa
@@ -376,11 +398,18 @@ class TangentTransportHead(nn.Module):
         self.direction_head.initialize_output(direction_init_std)
 
         rho_outputs = 1 if shared_rho else num_components
-        self.rho_head = _TransportMLP(input_dim, predictor_hidden_dim, rho_outputs)
-        self.rho_head.zero_initialize_output()
-        self.rho_head.output.bias.data.fill_(
-            _inverse_sigmoid(initial_rho / rho_max)
-        )
+        if rho_strategy == "learned":
+            self.rho_head: _TransportMLP | None = _TransportMLP(
+                input_dim, predictor_hidden_dim, rho_outputs
+            )
+            self.rho_head.zero_initialize_output()
+            self.rho_head.output.bias.data.fill_(
+                _inverse_sigmoid(initial_rho / rho_max)
+            )
+        else:
+            # Fixed and scheduled controls deliberately contain no distance
+            # predictor; they are trust-region/curriculum controls.
+            self.rho_head = None
 
         if num_components > 1:
             self.gate_head = _TransportMLP(input_dim, predictor_hidden_dim, num_components)
@@ -401,6 +430,27 @@ class TangentTransportHead(nn.Module):
         else:
             self.kappa_head = None
 
+    def set_schedule_step(self, step: int) -> None:
+        if step < 0:
+            raise ValueError("schedule step must be non-negative")
+        self._schedule_step = int(step)
+
+    def _scheduled_radius(
+        self, batch_size: int, *, device: torch.device, dtype: torch.dtype
+    ) -> Tensor:
+        if self.rho_strategy == "zero":
+            value = 0.0
+        elif self.rho_strategy == "fixed":
+            value = self.fixed_rho
+        elif self.rho_strategy in {"linear_warmup", "cosine_warmup"}:
+            progress = min(self._schedule_step / self.rho_warmup_steps, 1.0)
+            if self.rho_strategy == "cosine_warmup":
+                progress = 0.5 * (1.0 - math.cos(math.pi * progress))
+            value = self.rho_max * progress
+        else:
+            raise RuntimeError("_scheduled_radius called for learned rho")
+        return torch.full((batch_size,), float(value), device=device, dtype=dtype)
+
     def forward(self, h: Tensor, z0: Tensor) -> SemanticTransportPrediction:
         features = _feature_input(h, z0, self.use_z0)
         batch_size = h.shape[0]
@@ -408,13 +458,26 @@ class TangentTransportHead(nn.Module):
             batch_size, self.num_components, self.embedding_dim
         )
         directions = _stable_tangent_direction(raw, z0)
-        raw_rho = self.rho_head(features)
-        if self.shared_rho:
-            rho = self.rho_max * raw_rho.squeeze(-1).sigmoid()
-            rho_for_endpoint = rho[:, None].expand(-1, self.num_components)
+        if self.rho_strategy == "learned":
+            if self.rho_head is None:
+                raise RuntimeError("learned rho strategy has no rho head")
+            raw_rho = self.rho_head(features)
+            if self.shared_rho:
+                rho = self.rho_max * raw_rho.squeeze(-1).sigmoid()
+                rho_for_endpoint = rho[:, None].expand(-1, self.num_components)
+            else:
+                rho = self.rho_max * raw_rho.sigmoid()
+                rho_for_endpoint = rho
         else:
-            rho = self.rho_max * raw_rho.sigmoid()
-            rho_for_endpoint = rho
+            scheduled = self._scheduled_radius(
+                batch_size, device=h.device, dtype=h.dtype
+            )
+            if self.shared_rho:
+                rho = scheduled
+                rho_for_endpoint = rho[:, None].expand(-1, self.num_components)
+            else:
+                rho = scheduled[:, None].expand(-1, self.num_components)
+                rho_for_endpoint = rho
         q_hypotheses = (
             rho_for_endpoint.cos()[..., None] * z0[:, None, :]
             + rho_for_endpoint.sin()[..., None] * directions
@@ -456,6 +519,7 @@ class SpicaPredictiveTransport(nn.Module):
 
     The model has no text/photo arguments.  ``photo_projection`` is a frozen
     parameter buffer copied from the photo CLIP image encoder at construction.
+    ``rho_strategy`` selects learned, fixed, or scheduled inference transport.
     """
 
     def __init__(
@@ -473,6 +537,9 @@ class SpicaPredictiveTransport(nn.Module):
         rho_max: float = math.pi / 4.0,
         initial_rho: float = 0.0,
         shared_rho: bool = True,
+        rho_strategy: str = "learned",
+        fixed_rho: float | None = None,
+        rho_warmup_steps: int = 75,
         use_vmf: bool = False,
         min_kappa: float = 1e-4,
         max_kappa: float = 2048.0,
@@ -532,6 +599,9 @@ class SpicaPredictiveTransport(nn.Module):
                 rho_max=rho_max,
                 initial_rho=initial_rho,
                 shared_rho=shared_rho,
+                rho_strategy=rho_strategy,
+                fixed_rho=fixed_rho,
+                rho_warmup_steps=rho_warmup_steps,
                 use_vmf=use_vmf,
                 min_kappa=min_kappa,
                 max_kappa=max_kappa,
@@ -565,6 +635,12 @@ class SpicaPredictiveTransport(nn.Module):
     @property
     def sketch_encoder_trainable_parameter_count(self) -> int:
         return self.sketch_context_encoder.trainable_parameter_count
+
+    def set_schedule_step(self, step: int) -> None:
+        """Set the externally visible step for fixed/scheduled rho controls."""
+        setter = getattr(self.transport_head, "set_schedule_step", None)
+        if callable(setter):
+            setter(step)
 
     def forward(self, sketch_images: Tensor) -> SemanticTransportPrediction:
         h = self.sketch_context_encoder(sketch_images)

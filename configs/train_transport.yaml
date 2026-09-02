@@ -23,9 +23,14 @@ transport_mode: tangent
 transport_enabled: true
 K: 1
 rho_mode: shared
+# P3 controls: learned, zero, fixed, linear_warmup, or cosine_warmup.
+# Non-learned controls do not instantiate a distance head.
+rho_strategy: learned
+fixed_rho_degrees: 15.0
+rho_warmup_steps: 75
 rho_max_degrees: 45.0
 # A tiny non-zero warm start avoids a sigmoid-at-zero gradient stall while
-# remaining effectively at z0 for step-0 retrieval.
+# remaining effectively at z0 for step-0 retrieval (learned strategy only).
 initial_rho_degrees: 0.5
 # Residual controls use these values; tangent runs ignore alpha.
 alpha: 1.0
@@ -56,9 +61,15 @@ lambda_dist: 1.0
 lambda_endpoint: 1.0
 lambda_rank: 1.0
 lambda_cls: 0.0
+# Semantic-anchor probe: q, z0, both (0.5/0.5), or none.
+text_loss_location: q
 lambda_vmf: 0.0
 lambda_geom: 0.0
 use_geometry_loss: false
+# Direction target probe: moving, fixed_reference, class_centroid, or none.
+direction_target: moving
+# Cap the number of actual sampled pair angles retained in run_result.
+training_angle_diagnostic_max: 8192
 
 tau_cls: 0.07
 prompt_template: a photo of a {}
@@ -84,6 +95,8 @@ map_at_k_denominator: prefix_positive
 save_optimizer: false
 # Optional exact-checkpoint continuation used by freeze-after-warmup controls.
 resume_checkpoint_path: null
+# A controlled optimizer-reset continuation (P8 branch C).
+reset_optimizer_on_resume: false
 freeze_encoder_at_step: null
 # Gradient conflict is intentionally sparse; these are not per-iteration logs.
 gradient_conflict_steps: [15, 73, 500]

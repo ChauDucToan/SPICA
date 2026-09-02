@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.utils.data import DataLoader
 
+from ..models.clip import FrozenVisualProjection
 from ..models.transport import (
     SemanticTransportPrediction,
     SpicaPredictiveTransport,
@@ -28,6 +29,87 @@ from .metrics import (
 )
 
 TransportScoreMode = Literal["barycentric", "angular_logsumexp", "max"]
+
+
+def _effective_rank_from_matrix(values: Tensor) -> float:
+    centered = values.float() - values.float().mean(dim=0, keepdim=True)
+    singular_values = torch.linalg.svdvals(centered)
+    energy = singular_values.square()
+    denominator = energy.square().sum().clamp_min(1e-12)
+    return float(energy.sum().square().div(denominator).item())
+
+
+def hidden_space_compatibility(
+    h_ref: Tensor,
+    h_t: Tensor,
+    projection: FrozenVisualProjection,
+) -> dict[str, float]:
+    """Compare adapted and original pre-projection CLIP hidden spaces.
+
+    Rows must correspond to the same raw sketches.  CKA and Procrustes are
+    invariant/agnostic to a global orthogonal change of basis; the projection
+    cosine tests the stronger claim that the *frozen* CLIP projection remains
+    usable after adaptation.
+    """
+    if h_ref.ndim != 2 or h_t.ndim != 2 or h_ref.shape != h_t.shape:
+        raise ValueError("h_ref and h_t must have matching shape [N,D]")
+    if h_ref.shape[0] < 2 or not h_ref.is_floating_point() or not h_t.is_floating_point():
+        raise ValueError("hidden features must be floating point with at least two rows")
+    if not torch.isfinite(h_ref).all().item() or not torch.isfinite(h_t).all().item():
+        raise ValueError("hidden features must be finite")
+    x = h_ref.float() - h_ref.float().mean(dim=0, keepdim=True)
+    y = h_t.float() - h_t.float().mean(dim=0, keepdim=True)
+    xx = x.T @ x
+    yy = y.T @ y
+    xy = x.T @ y
+    cka_denominator = (xx.square().sum() * yy.square().sum()).sqrt().clamp_min(1e-12)
+    cka = xy.square().sum().div(cka_denominator)
+    # Orthogonal Procrustes for h_t R ~= h_ref, using the uncentered states
+    # exactly as specified by the probe.  CKA above remains centered.
+    ref = h_ref.float()
+    adapted = h_t.float()
+    u, _, vh = torch.linalg.svd(adapted.T @ ref, full_matrices=False)
+    rotation = u @ vh
+    residual = (adapted @ rotation - ref).norm().div(ref.norm().clamp_min(1e-12))
+    projected_ref = projection(ref)
+    projected_t = projection(h_t.float())
+    projection_cosine = F.cosine_similarity(
+        F.normalize(projected_ref, dim=-1), F.normalize(projected_t, dim=-1), dim=-1
+    ).mean()
+    return {
+        "linear_cka": float(cka.item()),
+        "procrustes_residual": float(residual.item()),
+        "frozen_projection_mean_cosine": float(projection_cosine.item()),
+        "effective_rank_h_ref": _effective_rank_from_matrix(h_ref),
+        "effective_rank_h_t": _effective_rank_from_matrix(h_t),
+        "effective_rank_W_h_t": _effective_rank_from_matrix(projected_t),
+    }
+
+
+def training_angle_summary(theta: Tensor) -> dict[str, object]:
+    """Summarize actual sampled sketch/photo angles in radians/degrees."""
+    if theta.ndim != 1 or theta.numel() == 0:
+        raise ValueError("theta must be a non-empty [N] tensor")
+    if not theta.is_floating_point() or not torch.isfinite(theta).all().item():
+        raise ValueError("theta must be finite floating point")
+    degrees = theta.detach().float().clamp_min(0.0) * (180.0 / math.pi)
+    quantiles = torch.quantile(degrees, torch.tensor([0.05, 0.25, 0.50, 0.75, 0.95]))
+    return {
+        "count": int(degrees.numel()),
+        "mean_degrees": float(degrees.mean().item()),
+        "std_degrees": float(degrees.std(unbiased=False).item()),
+        "p05_degrees": float(quantiles[0].item()),
+        "p25_degrees": float(quantiles[1].item()),
+        "p50_degrees": float(quantiles[2].item()),
+        "p75_degrees": float(quantiles[3].item()),
+        "p95_degrees": float(quantiles[4].item()),
+        "fraction_gt_5_degrees": float((degrees > 5).float().mean().item()),
+        "fraction_gt_10_degrees": float((degrees > 10).float().mean().item()),
+        "fraction_gt_15_degrees": float((degrees > 15).float().mean().item()),
+        "fraction_gt_20_degrees": float((degrees > 20).float().mean().item()),
+        "fraction_gt_30_degrees": float((degrees > 30).float().mean().item()),
+        "fraction_gt_45_degrees": float((degrees > 45).float().mean().item()),
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -310,6 +392,51 @@ def evaluate_base_queries(
     )
 
 
+def _pearson(first: Tensor, second: Tensor) -> float | None:
+    if first.ndim != 1 or second.ndim != 1 or first.shape != second.shape or first.numel() < 2:
+        return None
+    first = first.float()
+    second = second.float()
+    first_centered = first - first.mean()
+    second_centered = second - second.mean()
+    denominator = (first_centered.square().sum() * second_centered.square().sum()).sqrt()
+    if denominator <= 1e-12:
+        return None
+    return float((first_centered * second_centered).sum().div(denominator).item())
+
+
+def transport_query_correlations(
+    features: TransportFeatureSet,
+    gallery: EncodedRetrievalSet,
+    average_precision: Tensor,
+) -> dict[str, float | None]:
+    """Correlate learned rho with per-query retrieval and target diagnostics."""
+    if average_precision.ndim != 1 or average_precision.shape[0] != features.q.shape[0]:
+        raise ValueError("average_precision must contain one value per query")
+    target = _class_centroid_targets(features, gallery)
+    target_angle = photo_transport_target(features.z0, target).theta
+    query = F.normalize(features.q, dim=-1)
+    query_labels = torch.unique(features.labels, sorted=True)
+    query_centroids = torch.stack([
+        F.normalize(query[features.labels == label].mean(dim=0), dim=-1)
+        for label in query_labels
+    ])
+    positions = torch.searchsorted(query_labels, features.labels)
+    own = (query * query_centroids[positions]).sum(dim=-1)
+    all_cosines = query_centroids[positions] @ query_centroids.T
+    own_class = torch.arange(query_labels.numel(), device=query_labels.device)[positions]
+    other_mask = torch.ones_like(all_cosines, dtype=torch.bool)
+    other_mask[torch.arange(all_cosines.shape[0], device=all_cosines.device), own_class] = False
+    other = all_cosines.masked_fill(~other_mask, 0.0).sum(dim=-1) / other_mask.sum(dim=-1).clamp_min(1)
+    class_margin = own - other
+    rho = features.rho if features.rho.ndim == 1 else features.rho.mean(dim=-1)
+    return {
+        "rho_vs_per_query_ap": _pearson(rho, average_precision),
+        "rho_vs_class_margin": _pearson(rho, class_margin),
+        "rho_vs_target_angle": _pearson(rho, target_angle),
+    }
+
+
 def _class_centroid_targets(
     features: TransportFeatureSet,
     gallery: EncodedRetrievalSet,
@@ -434,6 +561,89 @@ def component_direction_alignment(
         result["instance_alignment_responsibility_selected"] = (posterior * instance_cos).sum(dim=-1).mean().item()
         result["class_alignment_responsibility_selected"] = (posterior * class_cos).sum(dim=-1).mean().item()
     return result
+
+
+def multi_photo_component_alignment(
+    features: TransportFeatureSet,
+    train_photo_embeddings: Tensor,
+    train_photo_labels: Tensor,
+    *,
+    photos_per_class: int = 8,
+    seed: int = 3407,
+) -> dict[str, object]:
+    """Measure class-semantic versus instance-residual transport directions.
+
+    ``train_photo_embeddings`` must contain training photos only.  The class
+    prototype and all R sampled photos are formed in the tangent space at each
+    current z0 using the spherical logarithm; no validation/test photo can
+    enter this diagnostic unless the caller supplies it explicitly.
+    """
+    if photos_per_class <= 0:
+        raise ValueError("photos_per_class must be positive")
+    if train_photo_embeddings.ndim != 2 or train_photo_labels.ndim != 1:
+        raise ValueError("training photos/labels have invalid dimensions")
+    if train_photo_embeddings.shape[0] != train_photo_labels.shape[0]:
+        raise ValueError("training photo embeddings and labels must align")
+    if train_photo_embeddings.shape[1] != features.z0.shape[1]:
+        raise ValueError("training photo dimension must match z0")
+    if not torch.isfinite(train_photo_embeddings).all().item():
+        raise ValueError("training photo embeddings must be finite")
+    photos = F.normalize(train_photo_embeddings, dim=-1)
+    labels = torch.unique(train_photo_labels, sorted=True)
+    by_label = {int(label): torch.where(train_photo_labels == label)[0] for label in labels}
+    if any(int(label) not in by_label for label in features.labels.unique()):
+        raise ValueError("a query class is missing from training photos")
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(seed)
+    direction_values: list[Tensor] = []
+    residual_values: list[Tensor] = []
+    class_values: list[Tensor] = []
+    for index, label in enumerate(features.labels.tolist()):
+        candidates = by_label[int(label)]
+        if candidates.numel() >= photos_per_class:
+            chosen = candidates[torch.randperm(candidates.numel(), generator=generator)[:photos_per_class]]
+        else:
+            chosen = candidates[torch.randint(candidates.numel(), (photos_per_class,), generator=generator)]
+        base = F.normalize(features.z0[index], dim=-1)
+        selected = photos[chosen]
+        prototype = F.normalize(selected.mean(dim=0), dim=-1)
+        # The prototype is deliberately computed from the complete train-photo
+        # class, while the R instances are sampled from that same train set.
+        full_class_prototype = F.normalize(photos[candidates].mean(dim=0), dim=-1)
+        prototype = full_class_prototype
+
+        def sphere_log(destination: Tensor) -> Tensor:
+            cosine = (base * destination).sum().clamp(-1.0 + 1e-6, 1.0 - 1e-6)
+            theta = torch.acos(cosine)
+            tangent = destination - cosine * base
+            return tangent * (theta / tangent.norm().clamp_min(1e-8))
+
+        class_log = sphere_log(prototype)
+        class_unit = F.normalize(class_log, dim=-1)
+        instance_logs = torch.stack([sphere_log(photo) for photo in selected])
+        residuals = instance_logs - (instance_logs * class_unit).sum(dim=-1, keepdim=True) * class_unit
+        residuals = F.normalize(residuals, dim=-1, eps=1e-8)
+        predicted = F.normalize(features.directions[index], dim=-1)
+        class_values.append((predicted * class_unit).sum(dim=-1))
+        residual_cosines = predicted @ residuals.T
+        direction_values.append(residual_cosines)
+        residual_values.append(residual_cosines.max(dim=-1).values)
+    class_alignment = torch.stack(class_values)
+    all_residual = torch.stack(direction_values)
+    max_residual = torch.stack(residual_values)
+    weights = features.probabilities
+    return {
+        "photos_per_class": photos_per_class,
+        "seed": seed,
+        "class_alignment_by_component": class_alignment.mean(dim=0).tolist(),
+        "instance_residual_alignment_by_component": all_residual.mean(dim=(0, 2)).tolist(),
+        "instance_residual_alignment_max_by_component": max_residual.mean(dim=0).tolist(),
+        "class_alignment_max": class_alignment.max(dim=-1).values.mean().item(),
+        "instance_residual_alignment_mean": all_residual.mean().item(),
+        "instance_residual_alignment_max": max_residual.max(dim=-1).values.mean().item(),
+        "class_alignment_gate_weighted": (weights * class_alignment).sum(dim=-1).mean().item(),
+        "instance_residual_alignment_gate_weighted": (weights * max_residual).sum(dim=-1).mean().item(),
+    }
 
 
 def train_photo_class_prototypes(

@@ -70,6 +70,9 @@ def _load_model(
         num_components = int(config["K"])
         use_z0 = bool(config["use_z0"])
         rho_mode = str(config["rho_mode"])
+        rho_strategy = str(config.get("rho_strategy", "learned"))
+        fixed_rho = float(config.get("fixed_rho", config.get("rho_max", 0.25)))
+        rho_warmup_steps = int(config.get("rho_warmup_steps", 75))
         use_vmf = bool(config["use_vmf"])
     except KeyError as error:
         raise ValueError(f"transport model_config is missing {error.args[0]!r}") from error
@@ -102,6 +105,9 @@ def _load_model(
         rho_max=float(config.get("rho_max", 0.25)),
         initial_rho=float(config.get("initial_rho", 0.0)),
         shared_rho=rho_mode == "shared",
+        rho_strategy=rho_strategy,
+        fixed_rho=fixed_rho,
+        rho_warmup_steps=rho_warmup_steps,
         use_vmf=use_vmf,
         transport_enabled=bool(config.get("transport_enabled", True)),
         min_kappa=float(config.get("min_kappa", 1e-4)),
@@ -115,6 +121,7 @@ def _load_model(
     for name, parameter in model.named_parameters():
         if not torch.isfinite(parameter).all().item():
             raise ValueError(f"transport checkpoint contains a non-finite parameter: {name}")
+    model.set_schedule_step(int(payload["step"]))
     model.to(device).eval()
     return model, payload, sketch_bundle.transform
 

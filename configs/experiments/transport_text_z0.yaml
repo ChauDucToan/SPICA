@@ -1,0 +1,19 @@
+# P6 TZ: CE(z0), no text CE directly on q.
+experiment_name: deep_text_z0
+transport_enabled: true
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+rho_strategy: learned
+rho_max_degrees: 15.0
+fixed_rho_degrees: 15.0
+lambda_endpoint: 0.0
+lambda_cls: 1.0
+text_loss_location: z0
+direction_target: moving
+use_vmf: false
+save_optimizer: true
+probe_steps: [0, 15, 44, 73, 100, 500, 1000, 1800, 5400]
+max_steps: 5400
+seed: 42

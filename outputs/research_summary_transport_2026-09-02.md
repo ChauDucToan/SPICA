@@ -13,7 +13,7 @@
 - Conclusions below distinguish measured runs from mechanisms that are implemented but not yet measured.
 
 ## 2. Repository State
-- Starting/audited commit: `1cb49522c0a554d68d432a56076c7d181fb4f9f1`.
+- Starting commit: `73ecaea34b43947c520092de1c08f6f5073da2ee`; current report commit is recorded dynamically below.
 - The starting tree was dirty with pre-existing `configs/train_jepa.yaml`, `src/spica/train_jepa.py`, `src/spica/tracking/wandb.py` edits and an upload script; those were preserved.
 - Files added: `src/spica/models/transport.py`, `src/spica/evaluation/transport.py`, `src/spica/train_transport.py`, `src/spica/evaluate_transport.py`, `tests/test_transport.py`, transport configs, `scripts/summarize_transport.py`, and the versioned report/plots.
 - Files modified: `README.md`, `.gitignore`, `pyproject.toml`, `src/spica/models/clip.py`, and the compatibility export in `src/spica/models/jepa.py`; the pre-existing JEPA/W&B files remain modified as found.
@@ -41,6 +41,14 @@ z0 + predicted transport -> q
 | JEPA T0 | full 512-D query | previous partial | 0.4970 | not measured here | 0.3632 | 15.0492 | 0.1670 |
 | bounded_residual K=1 | bounded residual | partial | 0.4615 | 0.3969 | not measured | 13.2869 | 0.1059 |
 | tangent K=2 | tangent/geodesic | partial | 0.4659 | not measured | not measured | 12.4507 | 0.1003 |
+| tangent K=1 | tangent/geodesic | partial | not measured | 0.5139 | not measured | not measured | not measured |
+| tangent K=1 | tangent/geodesic | partial | not measured | 0.5121 | not measured | not measured | not measured |
+| tangent K=1 | tangent/geodesic | partial | not measured | 0.4904 | not measured | not measured | not measured |
+| tangent K=1 | tangent/geodesic | partial | 0.5677 | 0.4453 | not measured | 11.8985 | 0.6274 |
+| tangent K=1 | tangent/geodesic | partial | 0.6381 | 0.5155 | not measured | 21.6450 | 0.5646 |
+| tangent K=1 | tangent/geodesic | partial | not measured | 0.5169 | not measured | not measured | not measured |
+| tangent K=1 | tangent/geodesic | partial | 0.4821 | 0.4700 | not measured | 12.8569 | 0.1124 |
+| tangent K=1 | tangent/geodesic | partial | 0.5238 | 0.5260 | not measured | 15.7311 | 0.1614 |
 | tangent K=2 | tangent/geodesic | partial | 0.4527 | not measured | not measured | 9.8847 | 0.1138 |
 | tangent K=4 | tangent/geodesic | partial | 0.4614 | not measured | not measured | 9.8946 | 0.1172 |
 | tangent K=8 | tangent/geodesic | partial | 0.4585 | not measured | not measured | 9.6986 | 0.1157 |
@@ -65,43 +73,44 @@ z0 + predicted transport -> q
 
 ## 6. Tangent/Geodesic Transport
 - Direction cosine, distance error, endpoint cosine, and retrieval are stored in every transport probe under `val_geometry.transport` and `diagnostic_test_geometry.transport`.
-- transport_t3_tangent_k1_actual/2026-09-02_05-59-49 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4224, direction cosine 0.8035, endpoint photo cosine 0.8821, mean rho degrees 44.2616.
-- transport_tangent_endpoint_rank_actual/2026-09-02_06-27-44 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4507, direction cosine 0.1831, endpoint photo cosine 0.8726, mean rho degrees 13.5474.
-- transport_tangent_rho15_actual/2026-09-02_06-02-47 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4716, direction cosine 0.6163, endpoint photo cosine 0.8771, mean rho degrees 14.9184.
-- transport_tangent_rho15_frozen_actual/2026-09-02_06-07-40 (tangent, K=1, encoder=frozen, text=False, geom=False): mAP 0.3234, direction cosine 0.7421, endpoint photo cosine 0.8275, mean rho degrees 14.9486.
-- transport_tangent_rho15_full_actual/2026-09-02_06-08-50 (tangent, K=1, encoder=full, text=False, geom=False): mAP 0.4529, direction cosine 0.6042, endpoint photo cosine 0.8635, mean rho degrees 14.9142.
-- transport_tangent_rho15_geometry_actual/2026-09-02_06-06-23 (tangent, K=1, encoder=partial, text=False, geom=True): mAP 0.4684, direction cosine 0.5991, endpoint photo cosine 0.8792, mean rho degrees 14.9182.
-- transport_tangent_rho15_no_text_long_actual/2026-09-02_06-37-11 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4825, direction cosine 0.5399, endpoint photo cosine 0.8773, mean rho degrees 14.7953.
-- transport_tangent_rho15_prototype_actual/2026-09-02_06-16-22 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4466, direction cosine 0.5934, endpoint photo cosine 0.8834, mean rho degrees 14.9091.
-- transport_tangent_rho15_text_actual/2026-09-02_06-05-09 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.5265, direction cosine 0.7455, endpoint photo cosine 0.8261, mean rho degrees 14.9131.
-- transport_tangent_rho15_text_long5400_actual/2026-09-02_07-04-57 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.6196, direction cosine 0.8108, endpoint photo cosine 0.5423, mean rho degrees 14.8915.
-- transport_tangent_rho15_text_long_actual/2026-09-02_06-18-14 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.5265, direction cosine 0.7455, endpoint photo cosine 0.8261, mean rho degrees 14.9131.
-- transport_tangent_rho30_actual/2026-09-02_06-04-00 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4476, direction cosine 0.7223, endpoint photo cosine 0.8802, mean rho degrees 29.8001.
+- transport_endpoint_0/2026-09-02_08-51-05 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.6420, direction cosine 0.8251, endpoint photo cosine 0.2753, mean rho degrees 14.9168.
+- transport_endpoint_0.1/2026-09-02_09-00-07 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.6415, direction cosine 0.8256, endpoint photo cosine 0.3107, mean rho degrees 14.9145.
+- transport_endpoint_0.5/2026-09-02_09-08-51 (tangent, K=1, encoder=partial, text=True, geom=False): mAP 0.6340, direction cosine 0.8225, endpoint photo cosine 0.4329, mean rho degrees 14.9053.
+- transport_freeze100/2026-09-02_09-35-19 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.5290, direction cosine 0.8701, endpoint photo cosine 0.8217, mean rho degrees 45.0000.
+- transport_freeze44/2026-09-02_09-28-09 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.4821, direction cosine 0.8475, endpoint photo cosine 0.8694, mean rho degrees 44.0141.
+- transport_freeze73/2026-09-02_09-20-47 (tangent, K=1, encoder=partial, text=False, geom=False): mAP 0.5274, direction cosine 0.8672, endpoint photo cosine 0.8235, mean rho degrees 44.9998.
 
 ## 7. Transport Radius Analysis
-- Descriptive rho/mAP correlation across stored checkpoints: 0.2318.
+- Descriptive rho/mAP correlation across stored checkpoints: 0.1524.
 - A bounded radius is configurable at 15/30/45 degree diagnostic settings; an optimal radius is claimed only if matched curves show retrieval peaking before overshoot.
 - M=1 is the primary sampled-positive setting; each training batch samples a positive photo path afresh and logs unique positive paths.
 
 ## 8. Text Classification Ablation
+- Text run transport_factorial_base_text/2026-09-02_08-38-39 (tangent, K=1, encoder=partial, text=True, geom=False): mAP@100 0.6381.
 - Text run transport_tangent_rho15_text_actual/2026-09-02_06-05-09 (tangent, K=1, encoder=partial, text=True, geom=False): mAP@100 0.5265.
 - Text run transport_tangent_rho15_text_long5400_actual/2026-09-02_07-04-57 (tangent, K=1, encoder=partial, text=True, geom=False): mAP@100 0.6129.
 - Text run transport_tangent_rho15_text_long_actual/2026-09-02_06-18-14 (tangent, K=1, encoder=partial, text=True, geom=False): mAP@100 0.5265.
-- No-text transport early mAP values: 0.4615, 0.4659, 0.4527, 0.4614, 0.4585, 0.4379, 0.4513, 0.4567, 0.4567, 0.4224, 0.4507, 0.4716, 0.3234, 0.4529, 0.4684, 0.4716, 0.4466, 0.4476.
-- Matched rho=15 degree partial K=1 comparison: text 0.6196 vs no-text 0.4825; text helps at this checkpoint.
-- Observed M=1 unique-positive-path counts across runs: 55662, 3102, 3102, 3102, 3102, 55662, 3102, 3102, 24696, 3102, 3102, 3102, 3102, 3102, 3102, 55662, 3102, 3102, 55662, 24696, 3102.
+- No-text transport early mAP values: 0.4615, 0.4659, 0.5677, 0.4821, 0.5238, 0.4527, 0.4614, 0.4585, 0.4379, 0.4513, 0.4567, 0.4567, 0.4224, 0.4507, 0.4716, 0.3234, 0.4529, 0.4684, 0.4716, 0.4466, 0.4476.
+- Observed M=1 unique-positive-path counts across runs: 55662, 3102, 55662, 55662, 55662, 55662, 55662, 55494, 55597, 55542, 3102, 3102, 3102, 55662, 3102, 3102, 24696, 3102, 3102, 3102, 3102, 3102, 3102, 55662, 3102, 3102, 55662, 24696, 3102.
 - The headline text result uses lambda_cls=1.0, whereas the earlier 0.5265 text result used lambda_cls=0.1; this is not a matched coefficient sweep.
 - Text remains classification supervision only; it is never an inference input.
 
 ## 9. Geometry Preservation Ablation
 - transport_tangent_rho15_geometry_actual/2026-09-02_06-06-23 (tangent, K=1, encoder=partial, text=False, geom=True): mAP 0.4684, query/reference cosine 0.7800.
-- Matched no-text rho=15 comparison: geometry 0.4684 vs no geometry 0.4825.
 - Direct q-to-reference pinning is not used; the implemented regularizer preserves off-diagonal relational geometry.
 
 ## 10. Encoder Stability
 - The transport trainer supports frozen, partial, and full modes with separate predictor and encoder learning-rate groups.
 - partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4790.
 - partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4659.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.6420.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.6415.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.6340.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.5678.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.6409.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.5290.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4821.
+- partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.5274.
 - partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4527.
 - partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4614.
 - partial / predictor LR 0.0001 / encoder LR 0.0000: mAP 0.4585.
@@ -125,14 +134,11 @@ z0 + predicted transport -> q
 ## 11. K Ablation
 | K | vMF | mAP | P@200 | Gate Entropy | Resp Entropy | κ | Compute |
 |---:|---|---:|---:|---:|---:|---:|---|
-| 1 | False | 0.4825 | 0.5864 | 0.0000 | not measured | 0.0000 | one model query with K=1 hypotheses |
-| 2 | False | 0.4659 | 0.5840 | 0.6832 | not measured | 0.0000 | one model query with K=2 hypotheses |
-| 4 | True | 0.4614 | 0.5706 | 1.1104 | 0.0451 | 224.1180 | one model query with K=4 hypotheses |
-| 8 | True | 0.4585 | 0.5672 | 1.8104 | 0.0426 | 270.3096 | one model query with K=8 hypotheses |
+| not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |
 - K means plausible transport directions, not positive-photo count.
 
 ## 12. Probabilistic Necessity
-- Deterministic multi-direction runs: 1; Mo-vMF runs: 3.
+- Deterministic multi-direction runs: 0; Mo-vMF runs: 0.
 - Mo-vMF is retained only as an evaluated option; no novelty-based retention decision is made without a matched deterministic comparison.
 
 ## 13. Feature Geometry
@@ -151,7 +157,7 @@ z0 + predicted transport -> q
 - outputs/experiments/evaluate_transport_smoke/2026-09-02_05-50-45: checkpoint step 1, mode barycentric, diagnostic mAP 0.2625, P@200 0.3593; not used for selection.
 
 ## 16. Recommended SPICA Architecture
-- Current evidence-supported candidate: transport_tangent_rho15_text_long5400_actual/2026-09-02_07-04-57 (tangent, K=1, encoder=partial, text=True, geom=False) with pseudo mAP 0.6196.
+- Current evidence-supported candidate: transport_endpoint_0/2026-09-02_08-51-05 (tangent, K=1, encoder=partial, text=True, geom=False) with pseudo mAP 0.6420.
 - Keep the semantic origin fixed by the photo CLIP projection; select encoder mode, rho_max, text loss, geometry loss, and K only on pseudo-unseen validation.
 
 ## Plots
@@ -163,41 +169,41 @@ z0 + predicted transport -> q
 
 FINAL SPICA TRANSPORT VERDICT
 
-Repository commit: 1cb49522c0a554d68d432a56076c7d181fb4f9f1
-Working tree clean: NO (pre-existing user changes plus this implementation)
+Repository commit: 73ecaea34b43947c520092de1c08f6f5073da2ee
+Working tree clean: NO
 
 Previous full-vector JEPA best mAP: 0.4970
 Previous full-vector JEPA late-training mAP: 0.3632
 
-Best residual transport model: outputs/experiments/transport_bounded_residual_long_actual/2026-09-02_06-55-43
-Best residual transport mAP: 0.4790
+Best residual transport model: not measured
+Best residual transport mAP: not measured
 
-Best tangent transport model: outputs/experiments/transport_tangent_rho15_text_long5400_actual/2026-09-02_07-04-57
-Best tangent transport mAP: 0.6196
+Best tangent transport model: outputs/experiments/transport_endpoint_0/2026-09-02_08-51-05
+Best tangent transport mAP: 0.6420
 
-Does residual transport reduce semantic drift: NO clear stability proof; bounded residual mAP falls from 0.4615 to 0.3563
-Does tangent/geodesic transport improve over simple residual transport: YES on matched no-text checkpoints
+Does residual transport reduce semantic drift: not established
+Does tangent/geodesic transport improve over simple residual transport: not measured
 
 Best encoder mode: partial
 Best encoder LR: 0.0000
 Best rho_max: 15.0000
-Mean learned rho: 14.8915 degrees
-Does transport overshoot correlate with degradation: 0.2318 correlation (descriptive)
+Mean learned rho: 14.9168 degrees
+Does transport overshoot correlate with degradation: 0.1524 correlation (descriptive)
 
-Does text classification help: YES
-Does geometry preservation help: NO
+Does text classification help: not established
+Does geometry preservation help: not established
 
-K=1 mAP: 0.4825
-K=2 mAP: 0.4659
-K=4 mAP: 0.4614
-K=8 mAP: 0.4585
-Best K: 1
+K=1 mAP: not measured
+K=2 mAP: not measured
+K=4 mAP: not measured
+K=8 mAP: not measured
+Best K: not measured
 
-Does deterministic multi-direction help: NO
-Does Mo-vMF improve beyond deterministic multi-direction: NO
+Does deterministic multi-direction help: not established
+Does Mo-vMF improve beyond deterministic multi-direction: not established
 
-Does learned kappa behave meaningfully: YES, it increases without reaching the configured ceiling
-Does mixture specialize into distinct transport directions: modestly; see pairwise direction cosine, responsibilities, and usage
+Does learned kappa behave meaningfully: not measured
+Does mixture specialize into distinct transport directions: not measured
 
 Does dimensional collapse occur: previous JEPA evidence does not support simple dimensional collapse
 Does semantic drift occur: YES in the previous JEPA artifacts and in long transport probes

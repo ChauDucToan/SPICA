@@ -9,6 +9,9 @@ from spica.evaluation.embeddings import EncodedRetrievalSet
 from spica.evaluation.transport import (
     TransportFeatureSet,
     evaluate_transport_features,
+    hidden_space_compatibility,
+    multi_photo_component_alignment,
+    training_angle_summary,
     transport_probe_dict,
 )
 from spica.models.clip import FrozenVisualProjection, TrainableSketchHiddenEncoder
@@ -67,6 +70,73 @@ def test_transport_uses_pre_projection_hidden_and_stable_origin() -> None:
     assert torch.allclose(prediction.q, prediction.z0, atol=1e-5)
     assert model.photo_projection.matrix.requires_grad is False
     assert not hasattr(model, "text")
+
+
+def test_nonlearned_rho_controls_have_expected_schedule_and_no_head() -> None:
+    for strategy, expected in (("zero", 0.0), ("fixed", math.radians(15.0))):
+        model = SpicaPredictiveTransport(
+            TrainableSketchHiddenEncoder(_DummyVisual(), hidden_dim=4, mode="full"),
+            FrozenVisualProjection(torch.randn(4, 3)),
+            predictor_hidden_dim=8,
+            rho_max=math.radians(15.0),
+            fixed_rho=math.radians(15.0),
+            rho_strategy=strategy,
+        )
+        assert model.transport_head.rho_head is None  # type: ignore[attr-defined]
+        output = model(torch.randn(2, 3, 8, 8))
+        assert torch.allclose(output.rho, torch.full((2,), expected), atol=1e-6)
+    model = SpicaPredictiveTransport(
+        TrainableSketchHiddenEncoder(_DummyVisual(), hidden_dim=4, mode="full"),
+        FrozenVisualProjection(torch.randn(4, 3)),
+        predictor_hidden_dim=8,
+        rho_max=math.radians(15.0),
+        rho_strategy="linear_warmup",
+        rho_warmup_steps=75,
+    )
+    model.set_schedule_step(37)
+    output = model(torch.randn(2, 3, 8, 8))
+    assert torch.allclose(output.rho, torch.full((2,), math.radians(15.0 * 37 / 75)), atol=1e-6)
+
+
+def test_hidden_compatibility_and_training_angle_summary_are_finite() -> None:
+    projection = FrozenVisualProjection(torch.randn(5, 3))
+    reference = torch.randn(12, 5)
+    adapted = reference @ torch.linalg.qr(torch.randn(5, 5)).Q
+    compatibility = hidden_space_compatibility(reference, adapted, projection)
+    assert 0.0 <= compatibility["linear_cka"] <= 1.00001
+    assert compatibility["procrustes_residual"] < 1e-4
+    assert -1.0 <= compatibility["frozen_projection_mean_cosine"] <= 1.0
+    summary = training_angle_summary(torch.tensor([0.1, 0.2, 0.8]))
+    assert summary["count"] == 3
+    assert abs(summary["fraction_gt_15_degrees"] - 1.0 / 3.0) < 1e-6
+
+
+def test_multi_photo_residual_alignment_has_one_value_per_component() -> None:
+    rows, components, dimension = 6, 3, 4
+    z0 = F.normalize(torch.randn(rows, dimension), dim=-1)
+    directions = torch.randn(rows, components, dimension)
+    directions = directions - (directions * z0[:, None, :]).sum(dim=-1, keepdim=True) * z0[:, None, :]
+    directions = F.normalize(directions, dim=-1)
+    features = TransportFeatureSet(
+        h=torch.randn(rows, dimension),
+        z0=z0,
+        directions=directions,
+        concentrations=None,
+        gate_logits=torch.randn(rows, components),
+        rho=torch.rand(rows),
+        q_hypotheses=F.normalize(z0[:, None, :] + 0.1 * directions, dim=-1),
+        q=F.normalize(z0 + 0.1 * directions[:, 0, :], dim=-1),
+        labels=torch.tensor([0, 0, 0, 1, 1, 1]),
+        paths=tuple(f"sketch-{index}" for index in range(rows)),
+    )
+    photo_embeddings = F.normalize(torch.randn(8, dimension), dim=-1)
+    photo_labels = torch.tensor([0, 0, 0, 0, 1, 1, 1, 1])
+    alignment = multi_photo_component_alignment(
+        features, photo_embeddings, photo_labels, photos_per_class=3
+    )
+    assert len(alignment["class_alignment_by_component"]) == components
+    assert len(alignment["instance_residual_alignment_by_component"]) == components
+    assert isinstance(alignment["instance_residual_alignment_mean"], float)
 
 
 def test_tangent_transport_is_unit_and_orthogonal() -> None:

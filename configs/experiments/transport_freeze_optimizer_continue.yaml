@@ -1,0 +1,24 @@
+# P8 source continuation.  First create a checkpoint at step 73 with
+# save_optimizer=true, then fork this configuration into A/B/C.
+experiment_name: deep_freeze_continue
+transport_enabled: true
+transport_mode: tangent
+K: 1
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+rho_strategy: learned
+rho_max_degrees: 15.0
+fixed_rho_degrees: 15.0
+lambda_endpoint: 0.0
+lambda_dir: 1.0
+lambda_dist: 1.0
+lambda_rank: 1.0
+lambda_cls: 1.0
+text_loss_location: q
+direction_target: moving
+save_optimizer: true
+probe_steps: [500, 1800, 5400]
+max_steps: 5400
+freeze_encoder_at_step: null
+reset_optimizer_on_resume: false
+seed: 42

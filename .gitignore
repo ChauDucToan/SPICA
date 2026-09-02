@@ -18,6 +18,20 @@ outputs/*
 !outputs/transport_direction_alignment.png
 !outputs/transport_semantic_drift.png
 !outputs/transport_K_ablation.png
+!outputs/causal_transport_decomposition.png
+!outputs/endpoint0_factorial.png
+!outputs/rho_schedule_ablation.png
+!outputs/training_target_angle_histogram.png
+!outputs/direction_supervision_ablation.png
+!outputs/text_anchor_location.png
+!outputs/hidden_space_compatibility.png
+!outputs/freeze_optimizer_control.png
+!outputs/query_gradient_conflict.png
+!outputs/matched_K_ablation.png
+!outputs/K_class_vs_instance_residual.png
+!outputs/stability_retention.png
+!outputs/seed_replication_controls.png
+!outputs/transport_multi_photo_probe_*.json
 
 # ckeckpoint
 *.pth
