@@ -527,6 +527,7 @@ def build_report(
     ]
     if sampled_counts:
         lines.append(f"- Observed M=1 unique-positive-path counts across runs: {', '.join(str(value) for value in sampled_counts if value is not None)}.")
+    lines.append("- The headline text result uses lambda_cls=1.0, whereas the earlier 0.5265 text result used lambda_cls=0.1; this is not a matched coefficient sweep.")
     lines.append("- Text remains classification supervision only; it is never an inference input.")
     lines += ["", "## 9. Geometry Preservation Ablation"]
     geom = [record for record in usable if record["config"].get("use_geometry_loss")]
@@ -619,14 +620,14 @@ def build_report(
         "",
         "Strongest current SPICA mechanism: fixed photo-CLIP semantic origin plus bounded tangent/geodesic transport and optional loss-only text classification",
         "Strongest defensible contribution: treating sketch-to-photo adaptation as direction-and-distance transport on the CLIP hypersphere",
-        "Largest remaining confound: encoder-mode and deterministic/Mo-vMF controls are mostly short, single-seed ablations rather than matched 5400-step curves",
+        "Largest remaining confound: the headline text jump changes lambda_cls from 0.1 to 1.0, and encoder-mode/deterministic/Mo-vMF controls are mostly single-seed ablations",
         "",
         "Should full-vector JEPA be retired: as the main formulation, YES; retain as T0 control",
         "Should Predictive Semantic Transport become the main SPICA architecture: YES as the research direction, subject to matched validation",
         "Should Mo-vMF remain: only if it beats the deterministic multi-direction control",
         "Should photo-derived soft prompting be implemented next: NO",
         "",
-        "Most important next experiment: matched 0/100/500/1000/1800/5400 pseudo-unseen curves for residual, tangent, bounded-rho, and encoder modes",
+        "Most important next experiment: matched lambda_cls={0,0.1,0.3,1.0} plus residual/tangent/encoder curves at fixed 0/100/500/1000/1800/5400 checkpoints",
         "Recommended final architecture direction: trainable pre-projection sketch encoder, frozen photo projection z0, tangent d/rho head, optional loss-only text classification, and K selected by deterministic-vs-Mo-vMF evidence",
     ]
     report["final_verdict"] = {"best_residual_mAP": (final_residual or {}).get("mAP"), "best_tangent_mAP": (final_tangent or {}).get("mAP"), "best_K": best_k[0] if best_k else None, "text_at_inference": False, "photo_at_inference": False}

@@ -103,6 +103,7 @@ def _load_model(
         initial_rho=float(config.get("initial_rho", 0.0)),
         shared_rho=rho_mode == "shared",
         use_vmf=use_vmf,
+        transport_enabled=bool(config.get("transport_enabled", True)),
         min_kappa=float(config.get("min_kappa", 1e-4)),
         max_kappa=float(config.get("max_kappa", 2048.0)),
         initial_kappa=float(config.get("initial_kappa", 64.0)),

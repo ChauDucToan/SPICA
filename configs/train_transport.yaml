@@ -18,6 +18,9 @@ predictor_hidden_dim: 512
 use_z0: false
 
 transport_mode: tangent
+# False is the matched base-query control (q=z0); it keeps the same encoder
+# and ranking harness without putting a transport head in the loss graph.
+transport_enabled: true
 K: 1
 rho_mode: shared
 rho_max_degrees: 45.0
@@ -79,6 +82,11 @@ precision_at_k: [1, 5, 10, 100, 200]
 map_at_k: [200]
 map_at_k_denominator: prefix_positive
 save_optimizer: false
+# Optional exact-checkpoint continuation used by freeze-after-warmup controls.
+resume_checkpoint_path: null
+freeze_encoder_at_step: null
+# Gradient conflict is intentionally sparse; these are not per-iteration logs.
+gradient_conflict_steps: [15, 73, 500]
 seed: 42
 checkpoint_path: null
 

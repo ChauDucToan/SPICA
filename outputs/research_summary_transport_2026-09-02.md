@@ -90,6 +90,7 @@ z0 + predicted transport -> q
 - No-text transport early mAP values: 0.4615, 0.4659, 0.4527, 0.4614, 0.4585, 0.4379, 0.4513, 0.4567, 0.4567, 0.4224, 0.4507, 0.4716, 0.3234, 0.4529, 0.4684, 0.4716, 0.4466, 0.4476.
 - Matched rho=15 degree partial K=1 comparison: text 0.6196 vs no-text 0.4825; text helps at this checkpoint.
 - Observed M=1 unique-positive-path counts across runs: 55662, 3102, 3102, 3102, 3102, 55662, 3102, 3102, 24696, 3102, 3102, 3102, 3102, 3102, 3102, 55662, 3102, 3102, 55662, 24696, 3102.
+- The headline text result uses lambda_cls=1.0, whereas the earlier 0.5265 text result used lambda_cls=0.1; this is not a matched coefficient sweep.
 - Text remains classification supervision only; it is never an inference input.
 
 ## 9. Geometry Preservation Ablation
@@ -208,12 +209,12 @@ Does the final model require photo at inference: NO
 
 Strongest current SPICA mechanism: fixed photo-CLIP semantic origin plus bounded tangent/geodesic transport and optional loss-only text classification
 Strongest defensible contribution: treating sketch-to-photo adaptation as direction-and-distance transport on the CLIP hypersphere
-Largest remaining confound: encoder-mode and deterministic/Mo-vMF controls are mostly short, single-seed ablations rather than matched 5400-step curves
+Largest remaining confound: the headline text jump changes lambda_cls from 0.1 to 1.0, and encoder-mode/deterministic/Mo-vMF controls are mostly single-seed ablations
 
 Should full-vector JEPA be retired: as the main formulation, YES; retain as T0 control
 Should Predictive Semantic Transport become the main SPICA architecture: YES as the research direction, subject to matched validation
 Should Mo-vMF remain: only if it beats the deterministic multi-direction control
 Should photo-derived soft prompting be implemented next: NO
 
-Most important next experiment: matched 0/100/500/1000/1800/5400 pseudo-unseen curves for residual, tangent, bounded-rho, and encoder modes
+Most important next experiment: matched lambda_cls={0,0.1,0.3,1.0} plus residual/tangent/encoder curves at fixed 0/100/500/1000/1800/5400 checkpoints
 Recommended final architecture direction: trainable pre-projection sketch encoder, frozen photo projection z0, tangent d/rho head, optional loss-only text classification, and K selected by deterministic-vs-Mo-vMF evidence
