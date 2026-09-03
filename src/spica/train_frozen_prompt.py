@@ -1001,6 +1001,23 @@ def run(args: DictConfig) -> None:
             return
         checkpoint = output_dir / "checkpoints" / f"frozen_prompt_step{probe_step}.pt"
         clip_policy_current = _assert_clip_policy(prompt_model, clip_before, role)
+        photo_changed = _clip_changed(photo_clip.encoder.model, photo_before)
+        photo_allowed = (
+            set(prompt_model.visual_layernorm_parameter_names)
+            if role == "frozen_prompt_v2_FP_LN"
+            else set()
+        )
+        if photo_changed - photo_allowed:
+            raise RuntimeError(
+                f"unexpected photo CLIP mutation: {sorted(photo_changed - photo_allowed)[:5]}"
+            )
+        clip_policy_current.update(
+            {
+                "photo_encoder_frozen": role != "frozen_prompt_v2_FP_LN",
+                "visual_projection_frozen": True,
+                "text_tower_frozen": True,
+            }
+        )
         _save_checkpoint(
             checkpoint,
             model=prompt_model,
@@ -1019,11 +1036,6 @@ def run(args: DictConfig) -> None:
             clip_freeze_policy=clip_policy_current,
         )
         checkpoint_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
-        if not all(
-            torch.equal(value, photo_before[name])
-            for name, value in _clip_snapshot(photo_clip.encoder.model).items()
-        ):
-            raise RuntimeError("photo CLIP encoder mutated")
         current_sketch = encode_prompted_loader(query_model, val_sketch_loader)
         current_photo = encode_prompted_loader(
             photo_model, val_photo_loader, photo=True
@@ -1382,6 +1394,13 @@ def run(args: DictConfig) -> None:
         for row in history
     }
     final_clip_policy = _assert_clip_policy(prompt_model, clip_before, role)
+    final_clip_policy.update(
+        {
+            "photo_encoder_frozen": role != "frozen_prompt_v2_FP_LN",
+            "visual_projection_frozen": True,
+            "text_tower_frozen": True,
+        }
+    )
     report = {
         "schema_version": 2,
         "experiment_role": role,
