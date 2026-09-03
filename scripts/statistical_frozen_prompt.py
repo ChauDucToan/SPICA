@@ -10,7 +10,10 @@ import subprocess
 
 import numpy as np
 
-from scripts.summarize_frozen_prompt import load_runs
+try:
+    from scripts.summarize_frozen_prompt import load_runs
+except ModuleNotFoundError:
+    from summarize_frozen_prompt import load_runs
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "outputs/frozen_prompt_v2_statistical_2026-09-04.json"
