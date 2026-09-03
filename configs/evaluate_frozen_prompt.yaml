@@ -1,0 +1,20 @@
+defaults:
+  - _self_
+
+checkpoint_path: null
+output_path: outputs/frozen_prompt_official_diagnostic.json
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+eval_batch_size: 256
+num_workers: 4
+pin_memory: true
+query_chunk_size: 256
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/experiments/frozen_prompt_evaluation/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: .hydra

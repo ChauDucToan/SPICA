@@ -1,0 +1,6 @@
+# @package _global_
+experiment_role: frozen_prompt_FP1
+visual_prompt_length: 3
+prompt_mode: prompt_only
+text_mode: none
+lambda_cls: 0.0

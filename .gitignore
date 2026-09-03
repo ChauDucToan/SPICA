@@ -34,6 +34,13 @@ outputs/*
 !outputs/transport_multi_photo_probe_*.json
 !outputs/research_summary_transport_corrected_*.md
 !outputs/research_summary_transport_corrected_*.json
+!outputs/research_summary_frozen_prompt_probe_*.md
+!outputs/research_summary_frozen_prompt_probe_*.json
+!outputs/experiment_manifest_frozen_prompt_probe_*.json
+!outputs/*frozen_prompt*2026-09-03.png
+!outputs/*visual_prompt*2026-09-03.png
+!outputs/*soft_text_prompt*2026-09-03.png
+!outputs/*prompt_attention*2026-09-03.png
 !outputs/experiment_manifest_transport_corrected_*.json
 !outputs/corrected_causal_decomposition.png
 !outputs/corrected_causal_decomposition.json

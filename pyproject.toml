@@ -50,6 +50,8 @@ spica-train-stageE-k1 = "spica.train_stageE_k1:main"
 spica-train-jepa = "spica.train_jepa:main"
 spica-eval-transport = "spica.evaluate_transport:main"
 spica-train-transport = "spica.train_transport:main"
+spica-train-frozen-prompt = "spica.train_frozen_prompt:main"
+spica-eval-frozen-prompt = "spica.evaluate_frozen_prompt:main"
 
 [build-system]
 requires = ["uv_build"]
@@ -93,6 +95,7 @@ dev = [
     "ipython>=9.15.0",
     "jupyterlab>=4.6.1",
     "ruff>=0.15.21",
+    "pytest>=8.0.0",
 ]
 
 [tool.pytest.ini_options]

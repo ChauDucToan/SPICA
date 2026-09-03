@@ -1,0 +1,6 @@
+# @package _global_
+experiment_role: frozen_prompt_FP4
+visual_prompt_length: 0
+prompt_mode: vanilla
+text_mode: soft
+lambda_cls: 1.0

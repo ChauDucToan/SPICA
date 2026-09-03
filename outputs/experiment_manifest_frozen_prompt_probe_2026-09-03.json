@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "campaign": "frozen_prompt_probe_2026-09-03",
+  "status": "incomplete",
+  "selection_metric": "full_pseudo_unseen_mAP",
+  "official_unseen_used_for_selection": false,
+  "planned_roles": [
+    "frozen_prompt_FP0",
+    "frozen_prompt_FP1",
+    "frozen_prompt_FP2",
+    "frozen_prompt_FP3",
+    "frozen_prompt_FP4",
+    "frozen_prompt_FP5",
+    "frozen_prompt_FP_LN"
+  ],
+  "completed_run_results": [
+    "outputs/experiments/frozen_prompt/frozen_prompt_FP0/2026-09-03_21-17-16/run_result.json"
+  ],
+  "not_run": {
+    "frozen_prompt_FP1": "primary campaign was not completed",
+    "frozen_prompt_FP2": "primary campaign was not completed",
+    "frozen_prompt_FP3": "primary campaign was not completed",
+    "frozen_prompt_FP4": "primary campaign was not completed",
+    "frozen_prompt_FP5": "primary campaign was not completed",
+    "frozen_prompt_FP_LN": "primary campaign was not completed"
+  },
+  "repository": {
+    "starting_commit": "494769741dacc8f27a04c4761637ca78e61432d0",
+    "branch": "experiments",
+    "working_tree_clean": false,
+    "python": "3.12.13",
+    "torch": "2.13.0+cu130",
+    "open_clip": "3.3.0",
+    "gpu": "NVIDIA GeForce RTX 5070 Ti",
+    "official_unseen_used_for_selection": false
+  },
+  "split": {
+    "dataset": "sketchy_104_21",
+    "pseudo_validation_seed": 3407,
+    "training_seed": 42,
+    "pseudo_train_and_unseen_disjoint": true
+  },
+  "provenance": {
+    "status": "partial",
+    "reason": "Only FP0 has a completed current campaign run; remaining roles are explicitly not_run. Historical transport artifacts were not borrowed."
+  }
+}

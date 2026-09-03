@@ -1,0 +1,49 @@
+defaults:
+  - _self_
+
+experiment_name: frozen_prompt_${experiment_role}
+experiment_role: null
+experiment_campaign: frozen_prompt_probe_2026-09-03
+
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+visual_prompt_length: 3
+train_visual_layernorm: false
+prompt_mode: prompt_only
+text_mode: none
+prompt_template: a photo of a {}
+soft_prompt_length: 4
+
+batch_size: 32
+eval_batch_size: 256
+num_workers: 4
+pin_memory: true
+drop_last: true
+learning_rate: 0.001
+soft_prompt_learning_rate: 0.001
+weight_decay: 0.0001
+margin: 0.2
+lambda_cls: 0.0
+tau_cls: 0.07
+
+pseudo_val_num_classes: 20
+pseudo_val_seed: 3407
+train_class_scope: pseudo_train
+probe_steps: [0, 15, 44, 73, 100, 250, 500, 1000, 1800, 5400]
+max_steps: 5400
+log_every: 10
+query_chunk_size: 256
+resume_checkpoint_path: null
+allow_short_run: false
+seed: 42
+save_optimizer: true
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/experiments/frozen_prompt/${experiment_role}/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: .hydra
