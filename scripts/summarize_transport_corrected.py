@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
+import hashlib
 import io
 import json
 import math
@@ -19,6 +20,7 @@ try:
         assert_matched_runs,
         collect_runs,
         config_of,
+        explicit_transport_enabled,
         factorial_effects,
         missing_result,
         point_map,
@@ -34,6 +36,7 @@ except ModuleNotFoundError:  # direct `python scripts/...` execution
         assert_matched_runs,
         collect_runs,
         config_of,
+        explicit_transport_enabled,
         factorial_effects,
         missing_result,
         point_map,
@@ -43,7 +46,6 @@ except ModuleNotFoundError:  # direct `python scripts/...` execution
         write_new,
     )
 
-STEPS = (0, 15, 44, 73, 100, 500, 1000, 1800, 5400)
 CAMPAIGN = "transport_corrected_2026-09-02_v2"
 FACTORIAL_ROLES = {
     "A": "endpoint0_factorial_A",
@@ -62,6 +64,13 @@ P2_ROLES = {
     "S2": "two_stage_S2",
     "S3": "two_stage_S3",
     "S4": "two_stage_S4",
+}
+P2_PROBE_STEPS = (73, 100, 150, 250, 500, 1800, 5400)
+P2_DIRECTION_CONFIG = {
+    "S1": ("none", 0.0),
+    "S2": ("class_centroid", 1.0),
+    "S3": ("moving", 1.0),
+    "S4": ("fixed_reference", 1.0),
 }
 
 
@@ -93,8 +102,10 @@ def _representation_value(
     result: dict[str, Any], step: int, representation: str
 ) -> float | None:
     point = point_map(result).get(step)
-    transport = config_of(result).get("transport_enabled") is True
-    if representation == "q" or not transport:
+    transport = explicit_transport_enabled(result)
+    if transport is None:
+        return None
+    if representation == "q" or transport is False:
         return _number(point, "val", "mAP")
     return _number(point, "base_val", "mAP")
 
@@ -102,17 +113,22 @@ def _representation_value(
 def _stability(result: dict[str, Any], representation: str = "q") -> dict[str, Any]:
     values = [
         (step, value)
-        for step in STEPS
+        for step in sorted(point_map(result))
         if (value := _representation_value(result, step, representation)) is not None
     ]
     if not values:
         return missing_result("no raw pseudo-unseen mAP checkpoints")
     peak_step, peak = max(values, key=lambda item: item[1])
+    latest_step, latest = values[-1]
     late = _representation_value(result, 5400, representation)
+    late_step = 5400 if late is not None else latest_step
+    if late is None:
+        late = latest
     return {
-        "status": "completed" if late is not None else "partial",
+        "status": "completed" if late_step == 5400 else "partial",
         "peak_mAP": peak,
         "peak_step": peak_step,
+        "late_step": late_step,
         "late_mAP": late,
         "retention_ratio": None if late is None or peak == 0 else late / peak,
         "absolute_decay": None if late is None else peak - late,
@@ -147,12 +163,32 @@ def _raw_run(record: tuple[Path, dict[str, Any]]) -> dict[str, Any]:
         "seed": config_of(result).get("seed"),
         "data_split_identity": result.get("data_split_identity")
         or result.get("pseudo_split"),
+        "data_manifest_identity": result.get("data_manifest_identity"),
         "provenance": provenance,
         "validation_status": validation,
         "raw_metrics": result.get("probe_history", []),
         "gradient_diagnostics": result.get("gradient_conflicts", []),
+        "official_test_diagnostic_only": True,
         "resume": result.get("resume"),
     }
+
+
+def _split_provenance(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
+    identities = [result.get("data_manifest_identity") for _, result in records]
+    if not identities or not any(identity is not None for identity in identities):
+        return {
+            "status": "legacy",
+            "reason": "historical runs record class/count split identity but not manifest-entry identity",
+        }
+    if any(identity is None for identity in identities):
+        return {
+            "status": "mixed",
+            "reason": "some runs record manifest-entry identity and some are legacy",
+        }
+    first = identities[0]
+    if any(identity != first for identity in identities[1:]):
+        raise ArtifactIntegrityError("corrected runs have different manifest-entry split identities")
+    return {"status": "completed", "identity": first}
 
 
 def _causal(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
@@ -330,21 +366,165 @@ def _freeze_factorial(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, A
     }
 
 
+def _p2_pointwise(result: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for step in sorted(point_map(result)):
+        point = point_map(result)[step]
+        target_angles = point.get("val_geometry", {}).get("transport", {}).get("target_angles", {})
+        row = {
+            "step": step,
+            "mAP": _number(point, "val", "mAP"),
+            "P@200": _number(point, "val", "precision_at_k", "200"),
+            "mAP@200": _number(point, "val", "mAP_at_k", "200"),
+            "mean_rho_degrees": _number(point, "val_geometry", "transport", "mean_rho_degrees"),
+            "moving_target_alignment": _number(target_angles, "moving_target_alignment"),
+            "fixed_target_alignment": _number(target_angles, "fixed_target_alignment"),
+            "moving_mean_degrees": _number(target_angles, "moving", "mean_degrees"),
+            "fixed_mean_degrees": _number(target_angles, "fixed", "mean_degrees"),
+        }
+        rows.append(row)
+    return rows
+
+
+def _validate_two_stage_run(
+    name: str,
+    result: dict[str, Any],
+    *,
+    stage1: dict[str, Any],
+    selected: dict[str, Any],
+    selection_manifest: str,
+) -> None:
+    config = config_of(result)
+    expected_direction, expected_lambda = P2_DIRECTION_CONFIG[name]
+    required = {
+        "transport_enabled": True,
+        "K": 1,
+        "rho_strategy": "fixed",
+        "fixed_rho_degrees": 15.0,
+        "lambda_dir": expected_lambda,
+        "lambda_dist": 0.0,
+        "lambda_endpoint": 0.0,
+        "direction_target": expected_direction,
+        "text_loss_location": "q",
+        "freeze_encoder_on_resume": True,
+        "freeze_encoder_at_step": None,
+        "reset_optimizer_on_resume": True,
+        "optimizer_reset_scope": "all",
+        "reset_transport_head_on_resume": True,
+        "train_class_scope": "pseudo_train",
+        "experiment_campaign": CAMPAIGN,
+    }
+    for key, value in required.items():
+        if config.get(key) != value:
+            raise ArtifactIntegrityError(
+                f"P2 {name} has invalid {key}: {config.get(key)!r}, expected {value!r}"
+            )
+    if result.get("provenance", {}).get("status") != "valid":
+        raise ArtifactIntegrityError(f"P2 {name} provenance is incomplete")
+    if result.get("data_split_identity") != stage1.get("data_split_identity"):
+        raise ArtifactIntegrityError(f"P2 {name} split differs from Stage 1")
+    if (
+        stage1.get("data_manifest_identity") is not None
+        and result.get("data_manifest_identity") != stage1.get("data_manifest_identity")
+    ):
+        raise ArtifactIntegrityError(f"P2 {name} manifest entries differ from Stage 1")
+    resume = result.get("resume")
+    continuation = result.get("continuation")
+    if not isinstance(resume, dict) or not isinstance(continuation, dict):
+        raise ArtifactIntegrityError(f"P2 {name} continuation metadata is missing")
+    if not (
+        resume.get("starting_step") == 73
+        and resume.get("freeze_applied_before_first_update") is True
+        and resume.get("encoder_frozen_immediately") is True
+        and resume.get("optimizer_state_reset") is True
+        and resume.get("optimizer_state_restored") is False
+        and resume.get("transport_head_reinitialized") is True
+        and continuation.get("encoder_frozen_at_start") is True
+    ):
+        raise ArtifactIntegrityError(f"P2 {name} does not prove immediate freeze/reset semantics")
+    if not _same_checkpoint(resume.get("checkpoint"), selected.get("checkpoint")):
+        raise ArtifactIntegrityError(f"P2 {name} does not resume the selected Stage-1 checkpoint")
+    embedded = result.get("stage1_selection")
+    if not isinstance(embedded, dict):
+        raise ArtifactIntegrityError(f"P2 {name} has no embedded Stage-1 selection")
+    if (
+        embedded.get("selected") != selected
+        or embedded.get("manifest_path") != selection_manifest
+        or embedded.get("official_unseen_used") is not False
+        or embedded.get("selection_metric") != "pseudo_unseen_validation_mAP"
+        or embedded.get("data_split_identity") != stage1.get("data_split_identity")
+        or (
+            stage1.get("data_manifest_identity") is not None
+            and embedded.get("data_manifest_identity") != stage1.get("data_manifest_identity")
+        )
+    ):
+        raise ArtifactIntegrityError(f"P2 {name} embeds an unsafe or different Stage-1 selection")
+    steps = sorted(point_map(result))
+    if steps != list(P2_PROBE_STEPS):
+        raise ArtifactIntegrityError(
+            f"P2 {name} probe schedule is {steps}, expected {list(P2_PROBE_STEPS)}"
+        )
+
+
 def _two_stage(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, Any]:
-    stage1 = _role(records, "two_stage_stage1")
-    stages = {name: _role(records, role) for name, role in P2_ROLES.items()}
-    if stage1 is None or any(record is None for record in stages.values()):
+    stage1_record = _role(records, "two_stage_stage1")
+    stage_records = {name: _role(records, role) for name, role in P2_ROLES.items()}
+    if stage1_record is None or any(record is None for record in stage_records.values()):
         return missing_result(
             "P2 stage 1 and all S1-S4 structured runs are not complete; S0 is stage-1 z0"
         )
+    stage1 = stage1_record[1]
+    if stage1.get("provenance", {}).get("status") != "valid":
+        raise ArtifactIntegrityError("P2 Stage 1 provenance is incomplete")
+    stage1_config = config_of(stage1)
+    if not (
+        stage1_config.get("transport_enabled") is False
+        and stage1_config.get("train_class_scope") == "pseudo_train"
+        and stage1_config.get("experiment_campaign") == CAMPAIGN
+        and stage1_config.get("steps") == 73
+        and sorted(point_map(stage1).keys()) == [0, 44, 73]
+    ):
+        raise ArtifactIntegrityError("P2 Stage 1 is not the corrected 0/44/73 semantic origin")
+    selection = None
+    selected = None
+    selection_manifest = None
+    variants = {}
+    for name, record in stage_records.items():
+        assert record is not None
+        embedded = record[1].get("stage1_selection")
+        if not isinstance(embedded, dict) or not isinstance(embedded.get("selected"), dict):
+            raise ArtifactIntegrityError(f"P2 {name} has no valid embedded Stage-1 selection")
+        if selection is None:
+            selection, selected, selection_manifest = embedded, embedded["selected"], embedded.get("manifest_path")
+        _validate_two_stage_run(
+            name,
+            record[1],
+            stage1=stage1,
+            selected=selected,
+            selection_manifest=selection_manifest,
+        )
+        if (
+            embedded.get("manifest_sha256") != selection.get("manifest_sha256")
+            or embedded.get("data_manifest_identity") != selection.get("data_manifest_identity")
+        ):
+            raise ArtifactIntegrityError("P2 variants use different selection manifests")
+        if selection_manifest is None:
+            raise ArtifactIntegrityError("P2 selection manifest path is missing")
+        manifest_path = Path(selection_manifest)
+        if not manifest_path.is_absolute():
+            manifest_path = ROOT / manifest_path
+        if not manifest_path.is_file() or embedded.get("manifest_sha256") != _sha256(manifest_path):
+            raise ArtifactIntegrityError("P2 selection manifest hash/path is invalid")
+        variants[name] = {
+            "run": _raw_run(record),
+            "stability": _stability(record[1]),
+            "pointwise": _p2_pointwise(record[1]),
+        }
     return {
         "status": "completed",
-        "S0": _raw_run(stage1),
-        "variants": {
-            name: {"run": _raw_run(record), "stability": _stability(record[1])}
-            for name, record in stages.items()
-            if record is not None
-        },
+        "S0": _raw_run(stage1_record),
+        "selected_origin": selection,
+        "variants": variants,
     }
 
 
@@ -365,6 +545,120 @@ def _gradient_report(records: list[tuple[Path, dict[str, Any]]]) -> dict[str, An
         if values
         else missing_result("no corrected gradient artifacts")
     )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _projection_refit(path: Path | None) -> dict[str, Any]:
+    if path is None or not path.is_file():
+        return missing_result("P3 projection-refit artifact has not run")
+    try:
+        artifact = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ArtifactIntegrityError(f"cannot read P3 artifact: {path}") from error
+    if not isinstance(artifact, dict):
+        raise ArtifactIntegrityError("P3 artifact must be a JSON object")
+    if not (
+        artifact.get("schema_version") == 2
+        and artifact.get("probe") == "projection_refit_control"
+        and artifact.get("official_unseen_used") is False
+        and artifact.get("selection_metric") is None
+        and artifact.get("fit_split") is None
+        and artifact.get("seed") == 3407
+        and isinstance(artifact.get("provenance"), dict)
+        and artifact["provenance"].get("status") == "valid"
+    ):
+        raise ArtifactIntegrityError("P3 artifact has an unsafe or unsupported protocol")
+    source_artifacts = artifact.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        raise ArtifactIntegrityError("P3 artifact does not preserve source artifacts")
+    manifest_identity = artifact.get("data_manifest_identity")
+    if manifest_identity is not None and (
+        not isinstance(manifest_identity, dict) or not manifest_identity.get("sha256")
+    ):
+        raise ArtifactIntegrityError("P3 manifest-entry identity is invalid")
+    for source in source_artifacts:
+        if not isinstance(source, dict):
+            raise ArtifactIntegrityError("P3 source artifact entry is not an object")
+        source_path = Path(str(source.get("path")))
+        if not source_path.is_absolute():
+            source_path = ROOT / source_path
+        if not source_path.is_file() or source.get("sha256") != _sha256(source_path):
+            raise ArtifactIntegrityError(f"P3 source artifact hash/path is invalid: {source_path}")
+    rows = artifact.get("values")
+    if not isinstance(rows, list) or not rows:
+        raise ArtifactIntegrityError("P3 artifact has no checkpoint values")
+    required_methods = {
+        "frozen_original_W_CLIP",
+        "orthogonal_adapter",
+        "ridge_projection",
+    }
+    seen = set()
+    row_manifest_identities = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ArtifactIntegrityError("P3 checkpoint row is not an object")
+        role = row.get("experiment_role")
+        step = row.get("checkpoint_step")
+        if role not in P1_ROLES.values() and role != "freeze_optimizer_source":
+            raise ArtifactIntegrityError(f"P3 row has an invalid role: {role!r}")
+        identity = (role, step)
+        if identity in seen:
+            raise ArtifactIntegrityError(f"duplicate P3 checkpoint row: {identity}")
+        seen.add(identity)
+        if row.get("experiment_campaign") != CAMPAIGN:
+            raise ArtifactIntegrityError("P3 row campaign differs from corrected P1 campaign")
+        row_manifest_identity = row.get("data_manifest_identity")
+        if row_manifest_identity is not None:
+            if row_manifest_identity != manifest_identity and manifest_identity is not None:
+                raise ArtifactIntegrityError("P3 row manifest-entry identity differs from artifact")
+            row_manifest_identities.append(row_manifest_identity)
+        if row.get("fit_split") != "pseudo_train only" or row.get("evaluation_split") != "pseudo-unseen only":
+            raise ArtifactIntegrityError("P3 row does not prove train-only fitting and pseudo-unseen evaluation")
+        methods = row.get("methods")
+        if not isinstance(methods, dict) or not required_methods <= methods.keys():
+            raise ArtifactIntegrityError(f"P3 row is missing required methods: {identity}")
+        if role == "freeze_optimizer_source" and step != 73:
+            raise ArtifactIntegrityError("P3 source must be the step-73 checkpoint")
+        if role != "freeze_optimizer_source" and step not in {500, 1800, 5400}:
+            raise ArtifactIntegrityError(f"P3 branch checkpoint step is invalid: {identity}")
+        checkpoint = Path(str(row.get("checkpoint")))
+        if not checkpoint.is_absolute():
+            checkpoint = ROOT / checkpoint
+        if not checkpoint.is_file() or row.get("checkpoint_sha256") != _sha256(checkpoint):
+            raise ArtifactIntegrityError(f"P3 checkpoint hash/path is invalid: {checkpoint}")
+        if any(
+            not isinstance(methods[method], dict)
+            or not isinstance(methods[method].get("mAP"), (int, float))
+            or not math.isfinite(float(methods[method]["mAP"]))
+            for method in required_methods
+        ):
+            raise ArtifactIntegrityError(f"P3 checkpoint metrics are invalid: {identity}")
+    if (manifest_identity is None) != (not row_manifest_identities):
+        raise ArtifactIntegrityError("P3 manifest-entry identity is only partially recorded")
+    if manifest_identity is not None and len(row_manifest_identities) != len(rows):
+        raise ArtifactIntegrityError("P3 rows do not all record manifest-entry identity")
+    return {
+        "status": "completed",
+        "artifact_path": str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path),
+        "artifact_sha256": _sha256(path),
+        "official_unseen_used": False,
+        "data_manifest_identity": manifest_identity,
+        "manifest_identity_status": (
+            "completed"
+            if manifest_identity is not None and len(row_manifest_identities) == len(rows)
+            else "legacy"
+        ),
+        "selection_metric": None,
+        "values": rows,
+        "provenance": artifact.get("provenance"),
+    }
 
 
 def _plot(
@@ -427,13 +721,23 @@ def _make_plots(output: Path, report: dict[str, Any]) -> list[dict[str, str]]:
     if two_stage.get("status") == "completed":
         for name, value in two_stage["variants"].items():
             p2_series[name] = [
-                (int(point["step"]), float(point["val"]["mAP"]))
-                for point in value["run"]["raw_metrics"]
-                if isinstance(point.get("val", {}).get("mAP"), (int, float))
+                (int(point["step"]), float(point["mAP"]))
+                for point in value["pointwise"]
+                if isinstance(point.get("mAP"), (int, float))
             ]
+    projection = report["projection_refit_control"]
+    p3_series = {}
+    if projection.get("status") == "completed":
+        for row in projection["values"]:
+            for method in ("frozen_original_W_CLIP", "orthogonal_adapter", "ridge_projection"):
+                value = row["methods"][method].get("mAP")
+                if isinstance(value, (int, float)):
+                    label = f"{row['experiment_role']}/{method}"
+                    p3_series.setdefault(label, []).append((int(row["checkpoint_step"]), float(value)))
+    suffix = f"{report['report_date']}_report"
     specifications = [
         (
-            "corrected_causal_decomposition.png",
+            f"corrected_causal_decomposition_{suffix}.png",
             "Corrected causal decomposition",
             {
                 key: [(row["step"], row[key]) for row in causal_rows]
@@ -442,7 +746,7 @@ def _make_plots(output: Path, report: dict[str, Any]) -> list[dict[str, str]]:
             causal,
         ),
         (
-            "corrected_endpoint0_factorial.png",
+            f"corrected_endpoint0_factorial_{suffix}.png",
             "Corrected endpoint=0 factorial",
             {
                 name: [(row["step"], row["cells"][name]) for row in factorial_rows]
@@ -451,31 +755,31 @@ def _make_plots(output: Path, report: dict[str, Any]) -> list[dict[str, str]]:
             factorial,
         ),
         (
-            "freeze_optimizer_factorial.png",
+            f"freeze_optimizer_factorial_{suffix}.png",
             "Freeze × optimizer factorial",
             p1_series,
             freeze,
         ),
         (
-            "two_stage_transport.png",
+            f"two_stage_transport_{suffix}.png",
             "Two-stage frozen-origin transport",
             p2_series,
             two_stage,
         ),
         (
-            "projection_refit_control.png",
+            f"projection_refit_control_{suffix}.png",
             "Projection refit control",
-            {},
-            report["projection_refit_control"],
+            p3_series,
+            projection,
         ),
         (
-            "frozen_origin_direction_ablation.png",
+            f"frozen_origin_direction_ablation_{suffix}.png",
             "Frozen-origin direction ablation",
-            p2_series,
-            two_stage,
+            {},
+            report["frozen_origin_direction_ablation"],
         ),
         (
-            "stability_retention_corrected.png",
+            f"stability_retention_corrected_{suffix}.png",
             "Corrected stability",
             p1_series or p2_series,
             report["stability"],
@@ -513,22 +817,65 @@ def _markdown(report: dict[str, Any]) -> str:
         f"- P4 direction ablation — {status('frozen_origin_direction_ablation')}",
         f"- P5 statistical confirmation — {status('statistical_confirmation')}",
         f"- P6 deterministic K — {status('deterministic_K')}",
+        f"- Split manifest-entry provenance — {report['split_provenance'].get('status', 'unknown').upper()}: {report['split_provenance'].get('reason', 'validated')}",
         "- Mo-vMF — DEFER",
         "",
         "## Scientific result",
     ]
     if report["freeze_optimizer_factorial"].get("status") == "completed":
-        lines.append(
-            "P1 raw branch trajectories are available in the JSON and plot sidecar; interpretation must use their matched late metrics."
-        )
+        freeze = report["freeze_optimizer_factorial"]
+        lines.append("P1 raw branch trajectories are available in the JSON and plot sidecar; interpretation uses matched late metrics.")
+        lines += [
+            "",
+            "### P1 step-5400 matched values",
+            "| branch | z0 mAP | q mAP |",
+            "|---|---:|---:|",
+        ]
+        for name, value in freeze["branches"].items():
+            late = value["checkpoints"]["5400"]
+            lines.append(f"| {name} | {late['mAP_z0']:.6f} | {late['mAP_q']:.6f} |")
+        lines.append("Encoder-trainable A/C are 0.1936/0.2024 mAP below frozen B/D on z0 at step 5400; optimizer reset changes the trainable branch by only 0.0088 mAP and the frozen branch by 0.0000.")
     else:
-        lines.append(
-            "The requested causal mechanisms are not yet known because no complete corrected raw factorial is available."
-        )
+        lines.append("The requested causal mechanisms are not yet known because no complete corrected raw factorial is available.")
+    two_stage = report["two_stage_transport"]
+    if two_stage.get("status") == "completed":
+        selected = two_stage["selected_origin"]["selected"]
+        lines += [
+            "",
+            f"P2 selected Stage-1 origin: step {selected['step']} (pseudo-unseen mAP {selected['mAP']:.6f}); all S1-S4 resume from that hashed checkpoint, freeze before the first update, reset optimizer state, and reinitialize the head.",
+            "",
+            "### P2 step-5400 direction ablation",
+            "| variant | direction target | mAP | P@200 | mAP@200 |",
+            "|---|---|---:|---:|---:|",
+        ]
+        for name, value in two_stage["variants"].items():
+            point = next(point for point in value["pointwise"] if point["step"] == 5400)
+            target = P2_DIRECTION_CONFIG[name][0]
+            lines.append(f"| {name} | {target} | {point['mAP']:.6f} | {point['P@200']:.6f} | {point['mAP@200']:.6f} |")
+        lines.append("S1 is the best step-5400 P2 variant; adding class-centroid, moving, or fixed-reference direction supervision does not improve pseudo-unseen mAP over no direction.")
+    projection = report["projection_refit_control"]
+    if projection.get("status") == "completed":
+        lines += [
+            "",
+            "### P3 projection-refit pseudo-unseen mAP",
+            "| role | step | frozen W | orthogonal | ridge |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        for row in projection["values"]:
+            if row["checkpoint_step"] not in {73, 5400}:
+                continue
+            methods = row["methods"]
+            lines.append(
+                f"| {row['experiment_role']} | {row['checkpoint_step']} | {methods['frozen_original_W_CLIP']['mAP']:.6f} | {methods['orthogonal_adapter']['mAP']:.6f} | {methods['ridge_projection']['mAP']:.6f} |"
+            )
+        lines.append("P3 refit metrics are descriptive controls, not a selected model; all fits use pseudo-train rows and evaluation uses pseudo-unseen rows only.")
+        lines.append("At step 5400, ridge closes about 67–69% of the trainable-vs-frozen control deficit relative to its matched refit control, while orthogonal refit closes only about 3–4%; neither restores the frozen control's absolute mAP, so this is partial compatibility evidence rather than semantic recovery.")
     lines += [
         "",
         "Cell-wise peaks, when present, are labeled best-achievable/early-stopped comparisons and are not pointwise causal effects.",
+        "Official-unseen/test metrics are retained only as diagnostics and never select a checkpoint or variant.",
         "Missing values are `null` with an explicit status/reason; no historical headline was carried forward.",
+        "Mo-vMF and K>1 remain deferred until this deterministic K=1 baseline is stable.",
         "",
         "## Raw artifacts",
     ]
@@ -539,7 +886,11 @@ def _markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def build_report(run_root: Path, report_date: str) -> dict[str, Any]:
+def build_report(
+    run_root: Path,
+    report_date: str,
+    projection_refit_path: Path | None = None,
+) -> dict[str, Any]:
     records = collect_runs(run_root)
     role_records = [
         record
@@ -559,6 +910,9 @@ def build_report(run_root: Path, report_date: str) -> dict[str, Any]:
     }
     freeze = _freeze_factorial(role_records)
     two_stage = _two_stage(role_records)
+    if projection_refit_path is None:
+        projection_refit_path = ROOT / "outputs" / f"projection_refit_control_{report_date}_corrected_final.json"
+    projection_refit = _projection_refit(projection_refit_path)
     stability_rows = {
         role: _stability(result)
         for path, result in role_records
@@ -575,16 +929,15 @@ def build_report(run_root: Path, report_date: str) -> dict[str, Any]:
             "missing_artifacts": "null/status=not_run",
         },
         "run_index": run_index,
+        "split_provenance": _split_provenance(role_records),
         "causal_decomposition": _causal(role_records),
         "endpoint0_factorial": _factorial(role_records),
         "freeze_optimizer_factorial": freeze,
         "two_stage_transport": two_stage,
-        "projection_refit_control": missing_result(
-            "P3 adapter/projection refit has not run"
+        "projection_refit_control": projection_refit,
+        "frozen_origin_direction_ablation": missing_result(
+            "P4 dedicated frozen-origin direction runs have not run; P2 S1-S4 are reported separately"
         ),
-        "frozen_origin_direction_ablation": two_stage
-        if two_stage.get("status") == "completed"
-        else missing_result("P4 frozen-origin direction runs have not completed"),
         "statistical_confirmation": missing_result(
             "P5 three-seed confirmation has not run"
         ),
@@ -611,7 +964,7 @@ def _commands() -> dict[str, Any]:
         ],
         "P2_stage1": f"{train} +experiments=transport_corrected_p2_stage1",
         "P2_stage2": [
-            f"{train} +experiments=transport_corrected_p2_{suffix} resume_checkpoint_path=$STAGE1"
+            f"{train} +experiments=transport_corrected_p2_{suffix} resume_checkpoint_path=$STAGE1 stage1_selection_manifest_path=$STAGE1_MANIFEST"
             for suffix in (
                 "S1_no_direction",
                 "S2_class_centroid",
@@ -630,8 +983,12 @@ def main() -> None:
         "--run-root", type=Path, default=ROOT / "outputs" / "experiments"
     )
     parser.add_argument("--output-dir", type=Path, default=ROOT / "outputs")
+    parser.add_argument("--projection-refit", type=Path, default=None)
     args = parser.parse_args()
-    report = build_report(args.run_root, args.date)
+    projection_refit = args.projection_refit
+    if projection_refit is not None and not projection_refit.is_absolute():
+        projection_refit = ROOT / projection_refit
+    report = build_report(args.run_root, args.date, projection_refit)
     output = args.output_dir.resolve()
     plots = _make_plots(output, report)
     report["plots"] = plots

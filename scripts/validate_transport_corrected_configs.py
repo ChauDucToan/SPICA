@@ -41,7 +41,8 @@ def main() -> None:
             "two_stage_S3",
             "two_stage_S4",
         }:
-            config.resume_checkpoint_path = "/REQUIRED/step73.pt"
+            config.resume_checkpoint_path = "/REQUIRED/stage1.pt"
+            config.stage1_selection_manifest_path = "/REQUIRED/stage1_selection.json"
         _validate_options(config)
         print(f"VALID {name}")
 

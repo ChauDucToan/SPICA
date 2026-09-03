@@ -313,6 +313,12 @@ def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None
             mismatches.append("data split identity hash differs")
     elif base_split != transport_split:
         mismatches.append("data split identity differs")
+    base_manifest = base.get("data_manifest_identity")
+    transport_manifest = transport.get("data_manifest_identity")
+    if (base_manifest is None) != (transport_manifest is None):
+        mismatches.append("manifest-entry identity: missing")
+    elif base_manifest is not None and base_manifest != transport_manifest:
+        mismatches.append("manifest-entry identity differs")
     if mismatches:
         raise ArtifactIntegrityError(
             "causal runs are not matched: " + "; ".join(mismatches)

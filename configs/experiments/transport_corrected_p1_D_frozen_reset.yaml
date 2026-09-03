@@ -22,7 +22,7 @@ save_optimizer: true
 max_steps: 5400
 probe_steps: [500, 1800, 5400]
 gradient_conflict_steps: [500]
-resume_checkpoint_path: null
+resume_checkpoint_path: outputs/experiments/corrected_p1_source73/2026-09-02_21-26-39/transport_final.pt
 freeze_encoder_at_step: 73
 reset_optimizer_on_resume: true
 optimizer_reset_scope: all

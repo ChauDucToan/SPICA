@@ -21,7 +21,8 @@ direction_target: none
 use_vmf: false
 save_optimizer: true
 max_steps: 73
-probe_steps: [15, 44, 73]
+probe_steps: [44, 73]
+probe_step_offsets: null
 gradient_conflict_steps: []
 seed: 42
 train_class_scope: pseudo_train

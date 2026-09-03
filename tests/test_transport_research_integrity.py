@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import random
@@ -9,7 +11,14 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from scripts.summarize_transport_corrected import _same_checkpoint, build_report
+from scripts.select_transport_stage1 import select_stage1
+from scripts.summarize_transport_corrected import (
+    _projection_refit,
+    _representation_value,
+    _same_checkpoint,
+    _stability,
+    build_report,
+)
 from scripts.transport_artifact_utils import (
     ArtifactIntegrityError,
     MATCHED_FIELDS,
@@ -19,8 +28,12 @@ from scripts.transport_artifact_utils import (
     validate_freeze_optimizer_role,
     write_new,
 )
+from spica.data.manifest import ManifestEntry
+from spica.data.splits import ClasswiseRetrievalSplit, split_manifest_identity
 from spica.provenance import capture_provenance, capture_rng_state
 from spica.train_transport import (
+    _apply_resume_controls,
+    _effective_probe_steps,
     _parameter_gradient_space,
     _representation_gradient_conflicts,
     _restore_training_state,
@@ -52,6 +65,54 @@ def _run(**updates):
     }
 
 
+def test_manifest_identity_covers_paths_labels_and_manifest_bytes(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    root.mkdir()
+    manifests = {
+        name: root / f"{name}.txt"
+        for name in ("train_sketch", "train_photo", "class_map")
+    }
+    for path in manifests.values():
+        path.write_text("entry\\n")
+    split = ClasswiseRetrievalSplit(
+        train_class_ids=(0,),
+        validation_class_ids=(1,),
+        train_sketch_entries=(ManifestEntry(root / "a.png", 0),),
+        train_photo_entries=(ManifestEntry(root / "p.jpg", 0),),
+        validation_sketch_entries=(ManifestEntry(root / "b.png", 1),),
+        validation_photo_entries=(ManifestEntry(root / "q.jpg", 1),),
+        seed=3407,
+    )
+    first = split_manifest_identity(
+        split,
+        dataset_name="fixture",
+        dataset_root=root,
+        manifest_paths=manifests,
+    )
+    changed_path = replace(
+        split,
+        train_sketch_entries=(ManifestEntry(root / "other.png", 0),),
+    )
+    changed_label = replace(
+        split,
+        train_sketch_entries=(ManifestEntry(root / "a.png", 9),),
+    )
+    for changed in (changed_path, changed_label):
+        assert first["sha256"] != split_manifest_identity(
+            changed,
+            dataset_name="fixture",
+            dataset_root=root,
+            manifest_paths=manifests,
+        )["sha256"]
+    manifests["train_sketch"].write_text("changed\\n")
+    assert first["sha256"] != split_manifest_identity(
+        split,
+        dataset_name="fixture",
+        dataset_root=root,
+        manifest_paths=manifests,
+    )["sha256"]
+
+
 def test_causal_decomposition_rejects_different_text_configuration() -> None:
     base = _run()
     transport = _run(transport_enabled=True, text_loss_location="z0")
@@ -72,6 +133,15 @@ def test_causal_decomposition_rejects_different_split() -> None:
     transport = _run(transport_enabled=True)
     transport["data_split_identity"] = {"sha256": "other"}
     with pytest.raises(ArtifactIntegrityError, match="split"):
+        assert_matched_runs(base, transport)
+
+
+def test_causal_decomposition_rejects_different_manifest_identity() -> None:
+    base = _run()
+    transport = _run(transport_enabled=True)
+    base["data_manifest_identity"] = {"sha256": "base"}
+    transport["data_manifest_identity"] = {"sha256": "other"}
+    with pytest.raises(ArtifactIntegrityError, match="manifest-entry"):
         assert_matched_runs(base, transport)
 
 
@@ -161,11 +231,67 @@ def test_dirty_tree_provenance_contains_diff_and_source_hash(tmp_path: Path) -> 
     assert len(provenance["source_snapshot"]["sha256"]) == 64
 
 
+def test_stability_uses_actual_probe_steps_and_unknown_transport_is_not_base() -> None:
+    result = {
+        "config": {"transport_enabled": True},
+        "probe_history": [
+            {"step": 100, "val": {"mAP": 0.5}},
+            {"step": 150, "val": {"mAP": 0.7}},
+            {"step": 250, "val": {"mAP": 0.6}},
+        ],
+    }
+    stability = _stability(result)
+    assert stability["peak_step"] == 150
+    assert stability["late_step"] == 250
+    assert stability["status"] == "partial"
+    assert _representation_value({"config": {}, "probe_history": []}, 100, "q") is None
+
+
 def test_missing_raw_artifact_stays_not_run(tmp_path: Path) -> None:
     report = build_report(tmp_path, "2099-01-01")
     assert report["causal_decomposition"]["status"] == "not_run"
     assert "peak_mAP" not in report["causal_decomposition"]
     assert report["endpoint0_factorial"]["status"] == "not_run"
+
+
+def test_stage1_selection_rejects_duplicate_candidate_steps(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "step44.pt"
+    split = {"sha256": "split"}
+    torch.save(
+        {
+            "step": 44,
+            "metadata": {
+                "experiment_role": "two_stage_stage1",
+                "transport_enabled": False,
+                "data_split_identity": split,
+            },
+        },
+        checkpoint,
+    )
+    run_result = tmp_path / "run_result.json"
+    protocol = {
+        "val_is_pseudo_unseen": True,
+        "official_test_is_diagnostic_only": True,
+    }
+    run_result.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "experiment_role": "two_stage_stage1",
+                    "transport_enabled": False,
+                    "train_class_scope": "pseudo_train",
+                },
+                "data_split_identity": split,
+                "provenance": {"status": "valid"},
+                "probe_history": [
+                    {"step": 44, "protocol": protocol, "checkpoint": str(checkpoint), "val": {"mAP": 0.5}},
+                    {"step": 44, "protocol": protocol, "checkpoint": str(checkpoint), "val": {"mAP": 0.5}},
+                ],
+            }
+        )
+    )
+    with pytest.raises(ValueError, match="duplicate"):
+        select_stage1(run_result)
 
 
 def test_duplicate_structured_role_is_fatal() -> None:
@@ -188,6 +314,46 @@ def test_generated_artifacts_never_overwrite(tmp_path: Path) -> None:
 def test_checkpoint_identity_accepts_relative_and_absolute_paths() -> None:
     relative = Path("outputs/source.pt")
     assert _same_checkpoint(relative, Path.cwd() / relative)
+
+
+def test_resume_probe_offsets_resolve_to_global_steps() -> None:
+    assert _effective_probe_steps(
+        resume_step=73,
+        absolute_steps=[],
+        relative_offsets=[0, 27, 77, 427],
+        max_steps=5400,
+        run_probes=True,
+    ) == [73, 100, 150, 500, 5400]
+    with pytest.raises(ValueError, match="between resume step"):
+        _effective_probe_steps(
+            resume_step=73,
+            absolute_steps=[44],
+            relative_offsets=None,
+            max_steps=5400,
+            run_probes=True,
+        )
+
+
+def test_resume_freeze_rebuilds_optimizer_before_updates() -> None:
+    encoder = torch.nn.Linear(2, 2)
+    head = torch.nn.Linear(2, 2)
+    model = SimpleNamespace(sketch_context_encoder=encoder, transport_head=head)
+    optimizer = torch.optim.AdamW(
+        list(encoder.parameters()) + list(head.parameters()), lr=0.1
+    )
+    rebuilt, freeze_step, applied = _apply_resume_controls(
+        model,
+        optimizer,
+        resume_step=73,
+        freeze_encoder_on_resume=True,
+        freeze_encoder_at_step=None,
+    )
+    assert applied is True
+    assert freeze_step == 73
+    assert all(not parameter.requires_grad for parameter in encoder.parameters())
+    assert {
+        id(parameter) for group in rebuilt.param_groups for parameter in group["params"]
+    } == {id(parameter) for parameter in head.parameters()}
 
 
 def test_resume_restores_model_optimizer_scheduler_step_and_rng() -> None:
@@ -225,6 +391,42 @@ def test_resume_restores_model_optimizer_scheduler_step_and_rng() -> None:
     assert restored_scheduler.state_dict() == scheduler.state_dict()
     assert random.random() == expected_python
     assert torch.equal(torch.rand(2), expected_torch)
+
+
+def test_projection_refit_rejects_tampered_hashed_source(tmp_path: Path) -> None:
+    source = tmp_path / "checkpoint.pt"
+    source.write_bytes(b"checkpoint")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    methods = {
+        name: {"mAP": 0.5}
+        for name in ("frozen_original_W_CLIP", "orthogonal_adapter", "ridge_projection")
+    }
+    artifact = {
+        "schema_version": 2,
+        "probe": "projection_refit_control",
+        "selection_metric": None,
+        "fit_split": None,
+        "seed": 3407,
+        "official_unseen_used": False,
+        "provenance": {"status": "valid"},
+        "source_artifacts": [{"path": str(source), "sha256": digest}],
+        "values": [{
+            "experiment_role": "freeze_optimizer_source",
+            "experiment_campaign": "transport_corrected_2026-09-02_v2",
+            "checkpoint_step": 73,
+            "fit_split": "pseudo_train only",
+            "evaluation_split": "pseudo-unseen only",
+            "methods": methods,
+            "checkpoint": str(source),
+            "checkpoint_sha256": digest,
+        }],
+    }
+    path = tmp_path / "projection.json"
+    path.write_text(json.dumps(artifact))
+    assert _projection_refit(path)["status"] == "completed"
+    source.write_bytes(b"tampered")
+    with pytest.raises(ArtifactIntegrityError, match="hash/path"):
+        _projection_refit(path)
 
 
 def test_summary_contains_raw_values_not_only_conclusions(tmp_path: Path) -> None:

@@ -88,7 +88,10 @@ pseudo_val_seed: 3407
 
 max_steps: 100
 log_every: 10
-probe_steps: [100, 500, 1000, 1800, 5400]
+probe_steps: [100]
+# When set, these offsets are added to the loaded checkpoint step.  They are
+# intentionally separate from absolute global probe_steps.
+probe_step_offsets: null
 run_probes: true
 eval_batch_size: 128
 prediction_batch_size: 128
@@ -103,7 +106,11 @@ resume_checkpoint_path: null
 reset_optimizer_on_resume: false
 optimizer_reset_scope: none
 reset_transport_head_on_resume: false
+# Semantic Stage-2 control: freeze immediately after loading the resume state.
+freeze_encoder_on_resume: false
 freeze_encoder_at_step: null
+# Stage-1 selection manifest consumed by corrected two-stage runs.
+stage1_selection_manifest_path: null
 # Gradient conflict is intentionally sparse; these are not per-iteration logs.
 gradient_conflict_steps: [15, 73, 500]
 seed: 42

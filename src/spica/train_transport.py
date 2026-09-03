@@ -7,6 +7,7 @@ loss-only frozen text bank live in this training/evaluation harness.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -25,7 +26,11 @@ from torch.utils.data import DataLoader
 from .config.data import load_data_config
 from .data.datasets import MultiPositiveRetrievalTrainDataset, RetrievalEvalDataset
 from .data.manifest import read_class_map, read_manifest
-from .data.splits import ClasswiseRetrievalSplit, make_classwise_retrieval_split
+from .data.splits import (
+    ClasswiseRetrievalSplit,
+    make_classwise_retrieval_split,
+    split_manifest_identity,
+)
 from .evaluation.embeddings import EncodedRetrievalSet, encode_retrieval_loader, load_encoded_retrieval_set
 from .evaluation.transport import (
     TransportFeatureSet,
@@ -275,10 +280,21 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("num_workers must be non-negative")
     if int(args.max_steps) <= 0 or int(args.log_every) <= 0:
         raise ValueError("max_steps and log_every must be positive")
+    if not isinstance(args.freeze_encoder_on_resume, bool):
+        raise ValueError("freeze_encoder_on_resume must be boolean")
+    if args.freeze_encoder_on_resume and args.resume_checkpoint_path is None:
+        raise ValueError("freeze_encoder_on_resume requires a resume checkpoint")
     if args.freeze_encoder_at_step is not None:
         freeze_step = int(args.freeze_encoder_at_step)
         if freeze_step < 0 or freeze_step > int(args.max_steps):
             raise ValueError("freeze_encoder_at_step must be between 0 and max_steps")
+        if bool(args.freeze_encoder_on_resume):
+            raise ValueError("choose freeze_encoder_on_resume or freeze_encoder_at_step, not both")
+    offsets = args.probe_step_offsets
+    if offsets is not None:
+        for offset in offsets:
+            if int(offset) != float(offset) or int(offset) < 0:
+                raise ValueError("probe_step_offsets must contain non-negative integers")
     if any(int(step) < 0 or int(step) > int(args.max_steps) for step in args.gradient_conflict_steps):
         raise ValueError("gradient conflict steps must be within training range")
     if int(args.query_chunk_size) <= 0:
@@ -329,7 +345,9 @@ def _validate_options(args: DictConfig) -> None:
         "freeze_optimizer_C": (False, True),
         "freeze_optimizer_D": (True, True),
     }
-    if role == "optimizer_reset_only" and args.freeze_encoder_at_step is not None:
+    if role == "optimizer_reset_only" and (
+        args.freeze_encoder_at_step is not None or bool(args.freeze_encoder_on_resume)
+    ):
         raise ValueError("optimizer_reset_only cannot freeze the encoder")
     if role in branches:
         expected_freeze, expected_reset = branches[role]
@@ -340,12 +358,23 @@ def _validate_options(args: DictConfig) -> None:
         if (
             observed_freeze != expected_freeze
             or bool(args.reset_optimizer_on_resume) != expected_reset
+            or bool(args.freeze_encoder_on_resume)
         ):
             raise ValueError(
                 f"{role} requires freeze={expected_freeze}, reset={expected_reset}"
             )
         if args.resume_checkpoint_path is None:
             raise ValueError(f"{role} requires a common step-73 resume checkpoint")
+    corrected_roles = set(branches) | {
+        "freeze_optimizer_source",
+        "two_stage_stage1",
+        "two_stage_S1",
+        "two_stage_S2",
+        "two_stage_S3",
+        "two_stage_S4",
+    }
+    if role in corrected_roles and str(args.experiment_campaign) != "transport_corrected_2026-09-02_v2":
+        raise ValueError("corrected transport roles require the corrected campaign")
     if role == "freeze_optimizer_source" and (
         int(args.max_steps) != 73
         or not bool(args.save_optimizer)
@@ -363,28 +392,38 @@ def _validate_options(args: DictConfig) -> None:
         and str(args.train_class_scope) == "pseudo_train"
     ):
         raise ValueError("two_stage_stage1 must train rank(z0)+CE(z0) on pseudo-train")
-    if role in {
-        "two_stage_S1",
-        "two_stage_S2",
-        "two_stage_S3",
-        "two_stage_S4",
-    } and not (
-        bool(args.transport_enabled)
-        and int(args.K) == 1
-        and not bool(args.use_vmf)
-        and str(args.rho_strategy) == "fixed"
-        and float(args.fixed_rho_degrees) == 15.0
-        and float(args.lambda_endpoint) == 0.0
-        and float(args.lambda_dist) == 0.0
-        and args.freeze_encoder_at_step is not None
-        and int(args.freeze_encoder_at_step) == 73
-        and bool(args.reset_transport_head_on_resume)
-        and args.resume_checkpoint_path is not None
-        and str(args.train_class_scope) == "pseudo_train"
-    ):
-        raise ValueError(
-            "two-stage transport must use a fresh K=1 fixed-15 head and frozen step-73 origin"
-        )
+    two_stage_roles = {
+        "two_stage_S1": ("none", 0.0),
+        "two_stage_S2": ("class_centroid", 1.0),
+        "two_stage_S3": ("moving", 1.0),
+        "two_stage_S4": ("fixed_reference", 1.0),
+    }
+    if role in two_stage_roles:
+        expected_direction, expected_lambda = two_stage_roles[role]
+        if not (
+            bool(args.transport_enabled)
+            and int(args.K) == 1
+            and not bool(args.use_vmf)
+            and str(args.rho_strategy) == "fixed"
+            and float(args.fixed_rho_degrees) == 15.0
+            and float(args.lambda_endpoint) == 0.0
+            and float(args.lambda_dist) == 0.0
+            and str(args.direction_target) == expected_direction
+            and float(args.lambda_dir) == expected_lambda
+            and str(args.text_loss_location) == "q"
+            and bool(args.freeze_encoder_on_resume)
+            and args.freeze_encoder_at_step is None
+            and bool(args.reset_optimizer_on_resume)
+            and str(args.optimizer_reset_scope) == "all"
+            and bool(args.reset_transport_head_on_resume)
+            and args.resume_checkpoint_path is not None
+            and args.stage1_selection_manifest_path is not None
+            and args.probe_step_offsets is not None
+            and str(args.train_class_scope) == "pseudo_train"
+        ):
+            raise ValueError(
+                f"{role} must use its exact direction target, immediate freeze, fresh K=1 fixed-15 head, and selected Stage-1 origin"
+            )
     if str(args.wandb_mode) not in {"online", "offline", "disabled"}:
         raise ValueError("wandb_mode must be online, offline, or disabled")
 
@@ -626,6 +665,143 @@ def _freeze_encoder(model: SpicaPredictiveTransport) -> None:
     """Freeze gradients and state updates for the sketch encoder."""
     model.sketch_context_encoder.requires_grad_(False)
     model.sketch_context_encoder.eval()
+    for parameter in model.sketch_context_encoder.parameters():
+        parameter.grad = None
+
+
+def _apply_resume_controls(
+    model: SpicaPredictiveTransport,
+    optimizer: torch.optim.Optimizer,
+    *,
+    resume_step: int,
+    freeze_encoder_on_resume: bool,
+    freeze_encoder_at_step: int | None,
+) -> tuple[torch.optim.Optimizer, int | None, bool]:
+    """Apply continuation freeze semantics before the first new update."""
+    if freeze_encoder_on_resume and freeze_encoder_at_step is not None:
+        raise ValueError("resume freeze and scheduled freeze cannot both be enabled")
+    if freeze_encoder_on_resume:
+        _freeze_encoder(model)
+        return _rebuild_optimizer_without_encoder(optimizer, model), resume_step, True
+    if freeze_encoder_at_step is not None and resume_step >= freeze_encoder_at_step:
+        _freeze_encoder(model)
+        return _rebuild_optimizer_without_encoder(optimizer, model), freeze_encoder_at_step, True
+    return optimizer, freeze_encoder_at_step, False
+
+
+def _effective_probe_steps(
+    *,
+    resume_step: int,
+    absolute_steps: object,
+    relative_offsets: object,
+    max_steps: int,
+    run_probes: bool,
+) -> list[int]:
+    """Resolve global probe steps while retaining resume-relative offsets."""
+    values = {int(step) for step in absolute_steps} if run_probes else set()
+    if relative_offsets is not None and run_probes:
+        values.update(resume_step + int(offset) for offset in relative_offsets)
+    if run_probes:
+        values.add(int(max_steps))
+        if resume_step == 0:
+            values.add(0)
+    invalid = sorted(step for step in values if step < resume_step or step > max_steps)
+    if invalid:
+        raise ValueError(
+            f"effective probe steps must be between resume step {resume_step} and max_steps {max_steps}: {invalid}"
+        )
+    return sorted(values)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _load_stage1_selection(
+    manifest_path: Path,
+    *,
+    resume_path: Path,
+    payload: dict[str, Any],
+    data_split_identity: dict[str, Any],
+    expected_campaign: str,
+    expected_manifest_identity: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate the immutable pseudo-unseen Stage-1 selection contract."""
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read Stage-1 selection manifest: {manifest_path}") from error
+    if not isinstance(manifest, dict):
+        raise ValueError("Stage-1 selection manifest must be a JSON object")
+    if manifest.get("schema_version") != 1:
+        raise ValueError("unsupported Stage-1 selection manifest schema")
+    if manifest.get("official_unseen_used") is not False:
+        raise ValueError("Stage-1 selection manifest permits official-unseen selection")
+    if manifest.get("selection_metric") != "pseudo_unseen_validation_mAP":
+        raise ValueError("Stage-1 selection must use pseudo-unseen validation mAP")
+    if manifest.get("source_campaign") != expected_campaign:
+        raise ValueError("Stage-1 selection campaign differs from this run")
+    manifest_identity = manifest.get("data_manifest_identity")
+    if manifest_identity is not None and manifest_identity != expected_manifest_identity:
+        raise ValueError("Stage-1 selection manifest entries differ from this run")
+    if manifest.get("source_role") != "two_stage_stage1":
+        raise ValueError("Stage-1 selection source role is invalid")
+    selected = manifest.get("selected")
+    candidates = manifest.get("candidates")
+    if not isinstance(selected, dict) or not isinstance(candidates, list):
+        raise ValueError("Stage-1 selection manifest is missing selected/candidates")
+    if int(selected.get("step", -1)) not in {44, 73}:
+        raise ValueError("Stage-1 selection must select checkpoint step 44 or 73")
+    if manifest.get("data_split_identity") != data_split_identity:
+        raise ValueError("Stage-1 selection split identity differs from this run")
+    selected_path = _resolve_project_path(selected.get("checkpoint"))
+    if selected_path.resolve() != resume_path.resolve():
+        raise ValueError("resume checkpoint is not the selected Stage-1 checkpoint")
+    if not selected_path.is_file():
+        raise FileNotFoundError(f"selected Stage-1 checkpoint not found: {selected_path}")
+    if selected.get("checkpoint_sha256") != _sha256_file(selected_path):
+        raise ValueError("selected Stage-1 checkpoint hash differs from manifest")
+    if int(payload.get("step", -1)) != int(selected["step"]):
+        raise ValueError("selected Stage-1 checkpoint step differs from payload")
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict) or metadata.get("experiment_role") != "two_stage_stage1":
+        raise ValueError("resume checkpoint is not a Stage-1 semantic-origin checkpoint")
+    if metadata.get("experiment_campaign") != manifest.get("source_campaign"):
+        raise ValueError("Stage-1 source campaign differs from selection manifest")
+    if metadata.get("transport_enabled") is not False:
+        raise ValueError("Stage-1 selection source must have transport disabled")
+    if metadata.get("data_split_identity") != data_split_identity:
+        raise ValueError("Stage-1 checkpoint split identity differs from this run")
+    checkpoint_manifest_identity = payload.get("data_manifest_identity")
+    if checkpoint_manifest_identity is not None and checkpoint_manifest_identity != expected_manifest_identity:
+        raise ValueError("Stage-1 checkpoint entries differ from this run")
+    if len(candidates) != 2 or any(not isinstance(candidate, dict) for candidate in candidates):
+        raise ValueError("Stage-1 selection must contain exactly two candidate objects")
+    candidate_steps = sorted(int(candidate.get("step", -1)) for candidate in candidates)
+    if candidate_steps != [44, 73]:
+        raise ValueError("Stage-1 selection must contain exactly candidates 44 and 73")
+    selected_candidate = next(candidate for candidate in candidates if int(candidate["step"]) == int(selected["step"]))
+    if any(selected.get(key) != selected_candidate.get(key) for key in ("checkpoint", "checkpoint_sha256", "mAP")):
+        raise ValueError("selected Stage-1 candidate does not match its candidate record")
+    return {
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": _sha256_file(manifest_path),
+        "selection_metric": manifest["selection_metric"],
+        "source_role": manifest["source_role"],
+        "source_campaign": manifest.get("source_campaign"),
+        "source_run_result": manifest.get("source_run_result"),
+        "candidates": candidates,
+        "selected": selected,
+        "data_split_identity": data_split_identity,
+        "data_manifest_identity": manifest_identity,
+        "manifest_identity_verified": manifest_identity is not None and checkpoint_manifest_identity is not None,
+        "official_unseen_used": False,
+        "provenance": manifest.get("provenance"),
+    }
 
 
 def _rebuild_optimizer_without_encoder(
@@ -662,8 +838,10 @@ def _save_checkpoint(
     provenance: dict[str, Any],
     resolved_config: dict[str, Any],
     data_split_identity: dict[str, Any],
+    data_manifest_identity: dict[str, Any],
     generator: torch.Generator | None,
     include_optimizer: bool = False,
+    continuation_metadata: dict[str, Any] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     rho_max = math.radians(float(args.rho_max_degrees))
@@ -707,6 +885,8 @@ def _save_checkpoint(
         "global_step": int(step),
         "resolved_config": resolved_config,
         "data_split_identity": data_split_identity,
+        "data_manifest_identity": data_manifest_identity,
+        "continuation": continuation_metadata or {},
         "metadata": {
             "dataset": data_name,
             "split": "train",
@@ -755,12 +935,18 @@ def _save_checkpoint(
             "checkpoint_contains_scheduler": False,
             "checkpoint_contains_rng": True,
             "data_split_identity": data_split_identity,
+            "data_manifest_identity": data_manifest_identity,
             "experiment_role": None
             if args.experiment_role is None
             else str(args.experiment_role),
             "experiment_campaign": None
             if args.experiment_campaign is None
             else str(args.experiment_campaign),
+            "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
+            "stage1_selection_manifest_path": None
+            if args.stage1_selection_manifest_path is None
+            else str(args.stage1_selection_manifest_path),
+            "continuation": continuation_metadata or {},
             "provenance": provenance,
         },
     }
@@ -1028,6 +1214,16 @@ def run(args: DictConfig) -> None:
         **data_split_payload,
         "sha256": hash_json(data_split_payload),
     }
+    data_manifest_identity = split_manifest_identity(
+        split,
+        dataset_name=data.name,
+        dataset_root=data.root,
+        manifest_paths={
+            "train_sketch": data.train.sketch_manifest,
+            "train_photo": data.train.photo_manifest,
+            "class_map": data.train.class_map,
+        },
+    )
     if str(args.train_class_scope) == "pseudo_train":
         train_sketch_entries = split.train_sketch_entries
         train_photo_entries = split.train_photo_entries
@@ -1155,6 +1351,7 @@ def run(args: DictConfig) -> None:
     optimizer = torch.optim.AdamW(parameter_groups, weight_decay=float(args.weight_decay))
     resume_step = 0
     payload: dict[str, Any] | None = None
+    stage1_selection: dict[str, Any] | None = None
     resume_path = None if args.resume_checkpoint_path is None else _resolve_project_path(args.resume_checkpoint_path)
     if resume_path is not None:
         loaded = torch.load(resume_path, map_location="cpu", weights_only=True)
@@ -1163,19 +1360,34 @@ def run(args: DictConfig) -> None:
         ):
             raise ValueError("resume checkpoint is not a predictive transport checkpoint")
         payload = loaded
-        if (
-            str(args.experiment_role)
-            in {
-                "freeze_optimizer_A",
-                "freeze_optimizer_B",
-                "freeze_optimizer_C",
-                "freeze_optimizer_D",
-            }
-            and int(payload.get("step", -1)) != 73
-        ):
-            raise ValueError(
-                "freeze × optimizer branches must fork the same step-73 checkpoint"
-            )
+        branch_roles = {
+            "freeze_optimizer_A",
+            "freeze_optimizer_B",
+            "freeze_optimizer_C",
+            "freeze_optimizer_D",
+        }
+        if str(args.experiment_role) in branch_roles:
+            if int(payload.get("step", -1)) != 73:
+                raise ValueError(
+                    "freeze × optimizer branches must fork the same step-73 checkpoint"
+                )
+            source_metadata = payload.get("metadata")
+            if not isinstance(source_metadata, dict):
+                raise ValueError("freeze × optimizer source metadata is missing")
+            if source_metadata.get("experiment_role") != "freeze_optimizer_source":
+                raise ValueError("freeze × optimizer branches must fork a semantic source checkpoint")
+            if source_metadata.get("experiment_campaign") != args.experiment_campaign:
+                raise ValueError("freeze × optimizer source campaign differs from branch")
+            if source_metadata.get("data_split_identity") != data_split_identity:
+                raise ValueError("freeze × optimizer source split differs from branch")
+            source_manifest_identity = payload.get("data_manifest_identity")
+            if source_manifest_identity is not None and source_manifest_identity != data_manifest_identity:
+                raise ValueError("freeze × optimizer source entries differ from branch")
+            if payload.get("optimizer_state_dict") is None:
+                raise ValueError("freeze × optimizer branches require the source optimizer state")
+            source_config = payload.get("resolved_config")
+            if not isinstance(source_config, dict) or source_config.get("train_class_scope") != "pseudo_train":
+                raise ValueError("freeze × optimizer source must use pseudo-train classes")
         fresh_head = (
             _cpu_state_dict(model.transport_head)
             if bool(args.reset_transport_head_on_resume)
@@ -1191,6 +1403,8 @@ def run(args: DictConfig) -> None:
             restore_rng=True,
             generator=train_loader.generator,
         )
+        if resume_step > int(args.max_steps):
+            raise ValueError("resume checkpoint step cannot exceed max_steps")
         if fresh_head is not None:
             model.transport_head.load_state_dict(fresh_head, strict=True)
         if restore_optimizer and scope in {"encoder", "head"}:
@@ -1201,19 +1415,77 @@ def run(args: DictConfig) -> None:
             )
             for parameter in reset_parameters:
                 optimizer.state.pop(parameter, None)
+        if str(args.experiment_role) in {
+            "two_stage_S1",
+            "two_stage_S2",
+            "two_stage_S3",
+            "two_stage_S4",
+        }:
+            stage1_selection = _load_stage1_selection(
+                _resolve_project_path(args.stage1_selection_manifest_path),
+                resume_path=resume_path,
+                payload=payload,
+                data_split_identity=data_split_identity,
+                expected_campaign=str(args.experiment_campaign),
+                expected_manifest_identity=data_manifest_identity,
+            )
         print(
             f"Resumed transport checkpoint at step {resume_step}: {resume_path} (optimizer reset scope={scope})"
         )
     freeze_step = None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step)
-    if freeze_step is not None and resume_step >= freeze_step:
-        _freeze_encoder(model)
-        optimizer = _rebuild_optimizer_without_encoder(optimizer, model)
-        print(f"Sketch encoder frozen at resumed step {resume_step}")
+    optimizer, effective_freeze_step, freeze_applied_before_first_step = _apply_resume_controls(
+        model,
+        optimizer,
+        resume_step=resume_step,
+        freeze_encoder_on_resume=bool(args.freeze_encoder_on_resume) and resume_path is not None,
+        freeze_encoder_at_step=freeze_step,
+    )
+    if freeze_applied_before_first_step:
+        print(f"Sketch encoder frozen before first update at resumed step {resume_step}")
     model.set_schedule_step(resume_step)
     parameter_counts = _parameter_counts(model, photo_clip.encoder)
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     equivalent_epochs_per_step = int(args.batch_size) / len(train_loader.dataset)
+    effective_probe_steps = _effective_probe_steps(
+        resume_step=resume_step,
+        absolute_steps=args.probe_steps,
+        relative_offsets=args.probe_step_offsets,
+        max_steps=int(args.max_steps),
+        run_probes=bool(args.run_probes),
+    )
+    optimizer_state_restored = bool(
+        resume_path is not None
+        and payload is not None
+        and payload.get("optimizer_state_dict") is not None
+        and str(args.optimizer_reset_scope) != "all"
+        and not bool(args.reset_optimizer_on_resume)
+    )
+    optimizer_state_reset = bool(
+        resume_path is not None
+        and (bool(args.reset_optimizer_on_resume) or str(args.optimizer_reset_scope) in {"encoder", "head"})
+    )
+    continuation_metadata: dict[str, Any] = {
+        "resumed": resume_path is not None,
+        "source_checkpoint": None if resume_path is None else str(resume_path),
+        "starting_step": resume_step,
+        "steps_since_resume_definition": "global_step - starting_step",
+        "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
+        "freeze_applied_before_first_update": freeze_applied_before_first_step,
+        "effective_freeze_step": effective_freeze_step,
+        "encoder_frozen_at_start": not any(
+            parameter.requires_grad for parameter in model.sketch_context_encoder.parameters()
+        ),
+        "transport_head_reinitialized": bool(args.reset_transport_head_on_resume),
+        "optimizer_state_restored": optimizer_state_restored,
+        "optimizer_state_reset": optimizer_state_reset,
+        "optimizer_reset_scope": str(args.optimizer_reset_scope),
+        "probe_step_offsets": None
+        if args.probe_step_offsets is None
+        else [int(value) for value in args.probe_step_offsets],
+        "effective_probe_steps": effective_probe_steps,
+        "stage1_selection": stage1_selection,
+    }
     provenance = _git_provenance(resolved_config)
     run_config: dict[str, Any] = {
         "experiment_role": None
@@ -1274,9 +1546,14 @@ def run(args: DictConfig) -> None:
         "reset_optimizer_on_resume": bool(args.reset_optimizer_on_resume),
         "optimizer_reset_scope": str(args.optimizer_reset_scope),
         "reset_transport_head_on_resume": bool(args.reset_transport_head_on_resume),
+        "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
         "freeze_encoder_at_step": None
         if args.freeze_encoder_at_step is None
         else int(args.freeze_encoder_at_step),
+        "effective_freeze_step": effective_freeze_step,
+        "stage1_selection_manifest_path": None
+        if args.stage1_selection_manifest_path is None
+        else str(args.stage1_selection_manifest_path),
         "gradient_conflict_steps": [
             int(value) for value in args.gradient_conflict_steps
         ],
@@ -1292,6 +1569,10 @@ def run(args: DictConfig) -> None:
         "pseudo_train_classes": len(split.train_class_ids),
         "pseudo_validation_classes": len(split.validation_class_ids),
         "probe_steps": [int(value) for value in args.probe_steps],
+        "probe_step_offsets": None
+        if args.probe_step_offsets is None
+        else [int(value) for value in args.probe_step_offsets],
+        "effective_probe_steps": effective_probe_steps,
         "map_at_k_denominator": str(args.map_at_k_denominator),
         "text_conditioning": False,
         "text_enters_predictor": False,
@@ -1302,10 +1583,7 @@ def run(args: DictConfig) -> None:
         "provenance": provenance,
     }
     initial_parameters = _capture_initial_parameters(model)
-    probe_steps = {0} if resume_step == 0 else set()
-    if bool(args.run_probes):
-        probe_steps.update(int(step) for step in args.probe_steps)
-        probe_steps.add(int(args.max_steps))
+    probe_steps = set(effective_probe_steps)
     history: list[dict[str, object]] = []
     training_history: list[dict[str, object]] = []
     experiment_mode = str(args.wandb_mode)
@@ -1333,6 +1611,95 @@ def run(args: DictConfig) -> None:
             f"Training Predictive Semantic Transport: mode={args.transport_mode}, "
             f"K={args.K}, encoder={args.encoder_mode}, steps={args.max_steps}"
         )
+
+        def record_probe(
+            global_step: int,
+            *,
+            training_losses: dict[str, float] | None = None,
+            origin: str = "scheduled",
+        ) -> dict[str, object]:
+            """Save one globally named probe with explicit resume coordinates."""
+            checkpoint_path = output_dir / "checkpoints" / f"transport_step{global_step}.pt"
+            _save_checkpoint(
+                path=checkpoint_path,
+                model=model,
+                optimizer=optimizer,
+                step=global_step,
+                data_name=data.name,
+                args=args,
+                split=split,
+                parameter_counts=parameter_counts,
+                provenance=provenance,
+                resolved_config=resolved_config,
+                data_split_identity=data_split_identity,
+                data_manifest_identity=data_manifest_identity,
+                generator=train_loader.generator,
+                include_optimizer=bool(args.save_optimizer),
+                continuation_metadata=continuation_metadata,
+            )
+            model.set_schedule_step(global_step)
+            if initial_val is None or initial_test is None:
+                raise RuntimeError("probe reference features are not initialized")
+            probe, _, _ = _probe(
+                model=model,
+                val_loader=val_loader,
+                val_gallery=val_gallery,
+                test_loader=test_loader,
+                test_gallery=test_gallery,
+                val_reference=val_reference,
+                test_reference=test_reference,
+                val_hidden_reference=val_hidden_reference,
+                test_hidden_reference=test_hidden_reference,
+                initial_val=initial_val,
+                initial_test=initial_test,
+                device=device,
+                args=args,
+            )
+            probe.update(
+                {
+                    "step": global_step,
+                    "global_step": global_step,
+                    "steps_since_resume": global_step - resume_step,
+                    "equivalent_epochs": global_step * equivalent_epochs_per_step,
+                    "checkpoint": str(checkpoint_path),
+                    "probe_origin": origin,
+                    "parameter_drift": _parameter_drift(model, initial_parameters),
+                    "training_losses_at_checkpoint": training_losses or {},
+                }
+            )
+            (output_dir / f"probe_step{global_step}.json").write_text(
+                json.dumps(probe, indent=2, sort_keys=True) + "\n"
+            )
+            probe_metrics = _flatten_probe_metrics(probe)
+            probe_metrics.update(
+                {
+                    "effective_rank": probe_metrics.get("effective_rank", 0.0),
+                    "mean_rho": probe_metrics.get("mean_rho", 0.0),
+                    "std_rho": probe_metrics.get("std_rho", 0.0),
+                    "p95_rho": probe_metrics.get("p95_rho", 0.0),
+                    "mean_direction_cosine": probe_metrics.get("mean_direction_cosine", 0.0),
+                    "endpoint_photo_cosine": probe_metrics.get("endpoint_photo_cosine", 0.0),
+                    "base_photo_cosine": probe_metrics.get("base_photo_cosine", 0.0),
+                    "semantic_margin": probe_metrics.get("semantic_margin", 0.0),
+                    "base_reference_cosine": probe_metrics.get("base_reference_cosine", 0.0),
+                    "query_reference_cosine": probe_metrics.get("query_reference_cosine", 0.0),
+                    "mean_kappa": probe_metrics.get("mean_kappa", 0.0),
+                    "gate_entropy": probe_metrics.get("gate_entropy", 0.0),
+                    "responsibility_entropy": probe_metrics.get("responsibility_entropy", 0.0),
+                    "global_step": global_step,
+                    "steps_since_resume": global_step - resume_step,
+                }
+            )
+            experiment.log_metrics(
+                {**probe_metrics, "step": global_step}, step=global_step
+            )
+            print(
+                f"  pseudo_val_mAP={probe_metrics['pseudo_val_mAP']:.6f} "
+                f"test_mAP={probe_metrics['diagnostic_test_mAP']:.6f} "
+                f"mean_rho={probe_metrics['mean_rho']:.5f} "
+                f"direction={probe_metrics['mean_direction_cosine']:.4f}"
+            )
+            return probe
 
         # Step zero is a mandatory pretrained-origin evaluation.
         initial_val: TransportFeatureSet | None = None
@@ -1363,9 +1730,13 @@ def run(args: DictConfig) -> None:
                 },
                 "protocol": {"val_is_pseudo_unseen": str(args.train_class_scope) == "pseudo_train", "official_test_is_diagnostic_only": True, "text_used_for_evaluation": False, "photo_gallery_reencoded": False, "map_at_k_denominator": str(args.map_at_k_denominator)},
                 "step": 0,
+                "global_step": 0,
+                "steps_since_resume": 0,
+                "probe_origin": "initial",
                 "equivalent_epochs": 0.0,
                 "checkpoint": None,
                 "parameter_drift": {},
+                "training_losses_at_checkpoint": {},
             }
             step0_probe["val_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
             step0_probe["diagnostic_test_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
@@ -1385,6 +1756,9 @@ def run(args: DictConfig) -> None:
         if initial_val is None or initial_test is None:
             initial_val = encode_transport_loader(model, val_loader, device=device)
             initial_test = encode_transport_loader(model, test_loader, device=device)
+
+        if resume_path is not None and resume_step in probe_steps:
+            history.append(record_probe(resume_step, origin="resume_boundary"))
 
         step = resume_step
         window: dict[str, float] = {
@@ -1607,6 +1981,8 @@ def run(args: DictConfig) -> None:
                     gradient_conflict = {
                         "checkpoint": step + 1,
                         "step": step + 1,
+                        "global_step": step + 1,
+                        "steps_since_resume": step + 1 - resume_step,
                         "seed": seed,
                         "batch_identity": {
                             **batch_identity,
@@ -1627,6 +2003,16 @@ def run(args: DictConfig) -> None:
                             "L_dir": dir_weight,
                             "L_endpoint": float(args.lambda_endpoint),
                         },
+                        "optimized_loss_names": [
+                            name
+                            for name, weight in {
+                                "L_cls": float(args.lambda_cls),
+                                "L_rank": float(args.lambda_rank),
+                                "L_dir": dir_weight,
+                                "L_endpoint": float(args.lambda_endpoint),
+                            }.items()
+                            if weight != 0.0
+                        ],
                         "diagnostic_only": [
                             name
                             for name, weight in {
@@ -1713,31 +2099,9 @@ def run(args: DictConfig) -> None:
                     window = dict.fromkeys(window, 0.0)
                     window_count = 0
                 if bool(args.run_probes) and step in probe_steps:
-                    checkpoint_path = output_dir / "checkpoints" / f"transport_step{step}.pt"
-                    _save_checkpoint(
-                        path=checkpoint_path,
-                        model=model,
-                        optimizer=optimizer,
-                        step=step,
-                        data_name=data.name,
-                        args=args,
-                        split=split,
-                        parameter_counts=parameter_counts,
-                        provenance=provenance,
-                        resolved_config=resolved_config,
-                        data_split_identity=data_split_identity,
-                        generator=train_loader.generator,
-                        include_optimizer=bool(args.save_optimizer),
+                    history.append(
+                        record_probe(step, training_losses=current, origin="scheduled")
                     )
-                    model.set_schedule_step(step)
-                    probe, _, _ = _probe(model=model, val_loader=val_loader, val_gallery=val_gallery, test_loader=test_loader, test_gallery=test_gallery, val_reference=val_reference, test_reference=test_reference, val_hidden_reference=val_hidden_reference, test_hidden_reference=test_hidden_reference, initial_val=initial_val, initial_test=initial_test, device=device, args=args)
-                    probe.update({"step": step, "equivalent_epochs": step * equivalent_epochs_per_step, "checkpoint": str(checkpoint_path), "parameter_drift": _parameter_drift(model, initial_parameters), "training_losses_at_checkpoint": current})
-                    history.append(probe)
-                    (output_dir / f"probe_step{step}.json").write_text(json.dumps(probe, indent=2, sort_keys=True) + "\n")
-                    probe_metrics = _flatten_probe_metrics(probe)
-                    probe_metrics.update({"effective_rank": probe_metrics.get("effective_rank", 0.0), "mean_rho": probe_metrics.get("mean_rho", 0.0), "std_rho": probe_metrics.get("std_rho", 0.0), "p95_rho": probe_metrics.get("p95_rho", 0.0), "mean_direction_cosine": probe_metrics.get("mean_direction_cosine", 0.0), "endpoint_photo_cosine": probe_metrics.get("endpoint_photo_cosine", 0.0), "base_photo_cosine": probe_metrics.get("base_photo_cosine", 0.0), "semantic_margin": probe_metrics.get("semantic_margin", 0.0), "base_reference_cosine": probe_metrics.get("base_reference_cosine", 0.0), "query_reference_cosine": probe_metrics.get("query_reference_cosine", 0.0), "mean_kappa": probe_metrics.get("mean_kappa", 0.0), "gate_entropy": probe_metrics.get("gate_entropy", 0.0), "responsibility_entropy": probe_metrics.get("responsibility_entropy", 0.0)} )
-                    experiment.log_metrics(probe_metrics, step=step)
-                    print(f"  pseudo_val_mAP={probe_metrics['pseudo_val_mAP']:.6f} test_mAP={probe_metrics['diagnostic_test_mAP']:.6f} mean_rho={probe_metrics['mean_rho']:.5f} direction={probe_metrics['mean_direction_cosine']:.4f}")
                 if step >= int(args.max_steps):
                     break
 
@@ -1754,8 +2118,10 @@ def run(args: DictConfig) -> None:
             provenance=provenance,
             resolved_config=resolved_config,
             data_split_identity=data_split_identity,
+            data_manifest_identity=data_manifest_identity,
             generator=train_loader.generator,
             include_optimizer=bool(args.save_optimizer),
+            continuation_metadata=continuation_metadata,
         )
         report = {
             "config": run_config,
@@ -1765,6 +2131,7 @@ def run(args: DictConfig) -> None:
             "parameter_counts": parameter_counts,
             "resolved_config": resolved_config,
             "data_split_identity": data_split_identity,
+            "data_manifest_identity": data_manifest_identity,
             "pseudo_split": {
                 "seed": split.seed,
                 "train_class_ids": list(split.train_class_ids),
@@ -1777,6 +2144,8 @@ def run(args: DictConfig) -> None:
             "training_history": training_history,
             "probe_history": history,
             "gradient_conflicts": gradient_conflicts,
+            "continuation": continuation_metadata,
+            "stage1_selection": stage1_selection,
             "training_target_angles": {
                 "theta_train": {
                     **training_angle_summary(torch.tensor(training_angle_values)),
@@ -1803,21 +2172,22 @@ def run(args: DictConfig) -> None:
             "resume": {
                 "checkpoint": None if resume_path is None else str(resume_path),
                 "starting_step": resume_step,
+                "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
+                "freeze_applied_before_first_update": freeze_applied_before_first_step,
+                "encoder_frozen_immediately": continuation_metadata["encoder_frozen_at_start"],
+                "effective_freeze_step": effective_freeze_step,
                 "freeze_encoder_at_step": freeze_step,
-                "optimizer_state_restored": bool(
-                    resume_path is not None
-                    and payload is not None
-                    and payload.get("optimizer_state_dict") is not None
-                    and str(args.optimizer_reset_scope) != "all"
-                    and not bool(args.reset_optimizer_on_resume)
-                ),
-                "optimizer_state_reset": bool(args.reset_optimizer_on_resume),
+                "optimizer_state_restored": optimizer_state_restored,
+                "optimizer_state_reset": optimizer_state_reset,
                 "optimizer_reset_scope": str(args.optimizer_reset_scope),
                 "scheduler_state_restored": False,
                 "rng_state_restored": resume_path is not None,
                 "transport_head_reinitialized": bool(
                     args.reset_transport_head_on_resume
                 ),
+                "steps_since_resume_definition": "global_step - starting_step",
+                "effective_probe_steps": effective_probe_steps,
+                "probe_step_offsets": continuation_metadata["probe_step_offsets"],
             },
             "photo_sampling": {
                 "num_positive_photos_per_step": int(args.num_positive_photos),

@@ -1,6 +1,9 @@
 """Deterministic class-level splits for zero-shot validation diagnostics."""
 
 from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path
 import random
 from collections.abc import Mapping, Sequence
 
@@ -16,6 +19,56 @@ class ClasswiseRetrievalSplit:
     validation_sketch_entries: tuple[ManifestEntry, ...]
     validation_photo_entries: tuple[ManifestEntry, ...]
     seed: int
+
+
+def split_manifest_identity(
+    split: ClasswiseRetrievalSplit,
+    *,
+    dataset_name: str,
+    dataset_root: Path,
+    manifest_paths: Mapping[str, Path],
+) -> dict[str, object]:
+    """Hash the manifest files and every path/label identity in each split."""
+    root = dataset_root.resolve()
+
+    def entries_hash(entries: Sequence[ManifestEntry]) -> str:
+        digest = hashlib.sha256()
+        for entry in entries:
+            relative = entry.path.resolve().relative_to(root).as_posix()
+            digest.update(relative.encode())
+            digest.update(b"\\0")
+            digest.update(str(int(entry.label)).encode())
+            digest.update(b"\\n")
+        return digest.hexdigest()
+
+    payload = {
+        "dataset": dataset_name,
+        "pseudo_validation_seed": split.seed,
+        "manifest_sha256": {
+            name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for name, path in sorted(manifest_paths.items())
+        },
+        "entry_identity": {
+            "train_sketch": {
+                "count": len(split.train_sketch_entries),
+                "sha256": entries_hash(split.train_sketch_entries),
+            },
+            "train_photo": {
+                "count": len(split.train_photo_entries),
+                "sha256": entries_hash(split.train_photo_entries),
+            },
+            "validation_sketch": {
+                "count": len(split.validation_sketch_entries),
+                "sha256": entries_hash(split.validation_sketch_entries),
+            },
+            "validation_photo": {
+                "count": len(split.validation_photo_entries),
+                "sha256": entries_hash(split.validation_photo_entries),
+            },
+        },
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return {**payload, "sha256": hashlib.sha256(encoded).hexdigest()}
 
 
 def _partition_entries(
