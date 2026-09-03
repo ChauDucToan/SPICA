@@ -1,0 +1,71 @@
+{
+  "campaign": "frozen_prompt_probe_v2_2026-09-04",
+  "candidates": [
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP0/checkpoints/frozen_prompt_step0.pt",
+      "checkpoint_sha256": "f004711cf31bb68916d9a5f82e5aa050ec0136e3e4dbb644f691883b85b6ed4a",
+      "full_pseudo_unseen_mAP": 0.26961808496734296,
+      "role": "frozen_prompt_v2_FP0",
+      "training_global_step": 0
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP1/checkpoints/frozen_prompt_step250.pt",
+      "checkpoint_sha256": "2eff122e2fddb7cf301ec7ddb83f78f6c9ad54182ceefe659bce0515952edb12",
+      "full_pseudo_unseen_mAP": 0.6293079771334581,
+      "role": "frozen_prompt_v2_FP1",
+      "training_global_step": 250
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP1S_continuation/checkpoints/frozen_prompt_step5400.pt",
+      "checkpoint_sha256": "d5632548cee1e106d107fc438b90d15a3c2b5d7507257d086669656093bc6a8a",
+      "full_pseudo_unseen_mAP": 0.6333361297917539,
+      "role": "frozen_prompt_v2_FP1S",
+      "training_global_step": 5400
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP2_continuation/checkpoints/frozen_prompt_step5400.pt",
+      "checkpoint_sha256": "ef89e0967a6bcacfa658c2cb8656e45da383ca6f2c28a00beee931ac13be48e8",
+      "full_pseudo_unseen_mAP": 0.6465140474522029,
+      "role": "frozen_prompt_v2_FP2",
+      "training_global_step": 5400
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP3_continuation/checkpoints/frozen_prompt_step5400.pt",
+      "checkpoint_sha256": "a3c44c3d128d4d3f479b272adc1c0adc972e02ef6e0f796178f28711033e8602",
+      "full_pseudo_unseen_mAP": 0.6727519489712296,
+      "role": "frozen_prompt_v2_FP3",
+      "training_global_step": 5400
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP4/checkpoints/frozen_prompt_step0.pt",
+      "checkpoint_sha256": "f48331f1a3f2afa1e05d6bfd62213fbf7d738168b6293ef096e32c12a7e202ac",
+      "full_pseudo_unseen_mAP": 0.26961808496734296,
+      "role": "frozen_prompt_v2_FP4",
+      "training_global_step": 0
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP5/checkpoints/frozen_prompt_step73.pt",
+      "checkpoint_sha256": "18fc69cd800243ae1d3506ed8b9e9c297f505fdb527b5ba3eb9d74c0e8ecaf0f",
+      "full_pseudo_unseen_mAP": 0.6414487059727212,
+      "role": "frozen_prompt_v2_FP5",
+      "training_global_step": 73
+    },
+    {
+      "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP_LN_continuation/checkpoints/frozen_prompt_step5400.pt",
+      "checkpoint_sha256": "791456fa5bdce3f143108ca6109abb545f30a10c7080ab593c52857a842fd0a9",
+      "full_pseudo_unseen_mAP": 0.6522664097556135,
+      "role": "frozen_prompt_v2_FP_LN",
+      "training_global_step": 5400
+    }
+  ],
+  "official_unseen_used_for_selection": false,
+  "schema_version": 2,
+  "selected_prompt": {
+    "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP3_continuation/checkpoints/frozen_prompt_step5400.pt",
+    "checkpoint_sha256": "a3c44c3d128d4d3f479b272adc1c0adc972e02ef6e0f796178f28711033e8602",
+    "full_pseudo_unseen_mAP": 0.6727519489712296,
+    "role": "frozen_prompt_v2_FP3",
+    "training_global_step": 5400
+  },
+  "selection_metric": "full_pseudo_unseen_mAP"
+}

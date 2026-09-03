@@ -1,0 +1,146 @@
+{
+  "bootstrap_draws": 2000,
+  "bootstrap_seed": 20260904,
+  "campaign": "frozen_prompt_probe_v2_2026-09-04",
+  "comparisons": {
+    "FP1S_vs_FP1": {
+      "bootstrap_draws": 2000,
+      "bootstrap_seed": 20260905,
+      "ci_95": [
+        0.07552845917362117,
+        0.08298959584374392
+      ],
+      "left": {
+        "role": "frozen_prompt_v2_FP1S",
+        "training_global_step": 5400
+      },
+      "num_queries": 10963,
+      "observed_delta_mAP": 0.07932352721704723,
+      "p_two_sided": 0.0,
+      "right": {
+        "role": "frozen_prompt_v2_FP1",
+        "training_global_step": 5400
+      }
+    },
+    "FP1_vs_FP0": {
+      "bootstrap_draws": 2000,
+      "bootstrap_seed": 20260904,
+      "ci_95": [
+        0.2791011988103708,
+        0.2899046296021501
+      ],
+      "left": {
+        "role": "frozen_prompt_v2_FP1",
+        "training_global_step": 5400
+      },
+      "num_queries": 10963,
+      "observed_delta_mAP": 0.28439451760736373,
+      "p_two_sided": 0.0,
+      "right": {
+        "role": "frozen_prompt_v2_FP0",
+        "training_global_step": 0
+      }
+    },
+    "FP2_vs_FP1": {
+      "bootstrap_draws": 2000,
+      "bootstrap_seed": 20260906,
+      "ci_95": [
+        0.08893966456734781,
+        0.0959903017394977
+      ],
+      "left": {
+        "role": "frozen_prompt_v2_FP2",
+        "training_global_step": 5400
+      },
+      "num_queries": 10963,
+      "observed_delta_mAP": 0.09250144487749613,
+      "p_two_sided": 0.0,
+      "right": {
+        "role": "frozen_prompt_v2_FP1",
+        "training_global_step": 5400
+      }
+    },
+    "FP3_vs_FP2": {
+      "bootstrap_draws": 2000,
+      "bootstrap_seed": 20260907,
+      "ci_95": [
+        0.024460344967804155,
+        0.02806577575912074
+      ],
+      "left": {
+        "role": "frozen_prompt_v2_FP3",
+        "training_global_step": 5400
+      },
+      "num_queries": 10963,
+      "observed_delta_mAP": 0.026237901519026774,
+      "p_two_sided": 0.0,
+      "right": {
+        "role": "frozen_prompt_v2_FP2",
+        "training_global_step": 5400
+      }
+    },
+    "FP3_vs_FP5": {
+      "bootstrap_draws": 2000,
+      "bootstrap_seed": 20260908,
+      "ci_95": [
+        0.02836231865364459,
+        0.03425693277235706
+      ],
+      "left": {
+        "role": "frozen_prompt_v2_FP3",
+        "training_global_step": 5400
+      },
+      "num_queries": 10963,
+      "observed_delta_mAP": 0.031303242998508424,
+      "p_two_sided": 0.0,
+      "right": {
+        "role": "frozen_prompt_v2_FP5",
+        "training_global_step": 5400
+      }
+    }
+  },
+  "experiment_code_commit": "35f625635f692a8700a7b7cc32112af1ff0660e5",
+  "experiment_kind": "statistical",
+  "interpretation": "These are paired query-level uncertainty intervals, not independent-seed confirmation.",
+  "method": "paired bootstrap over per-query pseudo-unseen average precision",
+  "official_unseen_used_for_selection": false,
+  "schema_version": 1,
+  "selection_metric": "full_pseudo_unseen_mAP",
+  "selection_policy": "all checkpoints and contrasts are fixed from pseudo-unseen validation; official unseen is not read",
+  "source_runs": {
+    "frozen_prompt_v2_FP0": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP0/run_result.json",
+      "sha256": "84261afc0ad3d48889173ab96c61f0c5c30aea8522b62b1d18d202e99245f968"
+    },
+    "frozen_prompt_v2_FP1": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP1_continuation_retry/run_result.json",
+      "sha256": "1bd6240ea67ab93cd0a7b8459f04e89dd9e3fcf2b3b14f3e28de17fb1867bcfd"
+    },
+    "frozen_prompt_v2_FP1S": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP1S_continuation/run_result.json",
+      "sha256": "8c51b866f6c63fd0fdd4590dc42230e49e8699ddf9b82a10a1d140e118564d60"
+    },
+    "frozen_prompt_v2_FP2": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP2_continuation/run_result.json",
+      "sha256": "aca18932a6382970bbdf3bc3ac5cadb23ebb49f5976c7cb48fc4259a7241e905"
+    },
+    "frozen_prompt_v2_FP3": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP3_continuation/run_result.json",
+      "sha256": "fa74a491ffdbe9152439beec765096079e81ae4c3801d8c74d3f53c36a29495d"
+    },
+    "frozen_prompt_v2_FP4": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP4_continuation/run_result.json",
+      "sha256": "12a842037573315ed644cfb09e55a4dff46c63d7365e392d41190e74bb31155c"
+    },
+    "frozen_prompt_v2_FP5": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP5/run_result.json",
+      "sha256": "13c07bdabaf52b6bea95911fa0484f4f0873b8e4123c1147d60017bff35c0ded"
+    },
+    "frozen_prompt_v2_FP_LN": {
+      "path": "outputs/experiments/frozen_prompt_v2/frozen_prompt_v2_FP_LN_continuation/run_result.json",
+      "sha256": "a91925022023812d5124bd87ad829d85c66cfbd3c74813cd220229d07dc77b4f"
+    }
+  },
+  "status": "completed",
+  "working_tree_state": "dirty"
+}
