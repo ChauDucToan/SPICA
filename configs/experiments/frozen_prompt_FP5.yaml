@@ -1,7 +1,14 @@
 # @package _global_
-experiment_role: frozen_prompt_FP5
+experiment_role: frozen_prompt_v2_FP5
 prompt_mode: early_adapt_then_freeze
 text_mode: hard
 visual_prompt_length: 0
+train_sketch_prompt: false
+train_photo_prompt: false
 max_steps: 73
+lambda_rank: 1.0
 lambda_cls: 1.0
+classification_location: z0
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+encoder_train_ln_post: false

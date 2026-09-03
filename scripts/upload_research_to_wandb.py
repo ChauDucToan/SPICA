@@ -1,4 +1,5 @@
 """Upload SPICA research experiments as individually grouped W&B runs."""
+
 from __future__ import annotations
 
 import argparse
@@ -21,9 +22,7 @@ def _numeric_metrics(experiment: dict[str, Any]) -> dict[str, float]:
         if isinstance(value, (int, float)):
             metrics[key] = float(value)
     denominator = experiment.get("map_at_k_denominator")
-    explicit_key = (
-        f"mAP@200_{denominator}" if isinstance(denominator, str) else None
-    )
+    explicit_key = f"mAP@200_{denominator}" if isinstance(denominator, str) else None
     for key in (explicit_key, "mAP@200_prefix_positive", "mAP@200_all_relevant"):
         if key is None:
             continue
@@ -170,25 +169,34 @@ def upload(summary_path: Path, *, project: str, group: str, entity: str | None) 
             ],
             config=run_config,
         )
-        run.log({f"retrieval/{key}": value for key, value in _numeric_metrics(experiment).items()})
-        run.summary.update({
-            "model": experiment["model"],
-            "K": experiment["K"],
-            "M": experiment["M"],
-            "scoring": experiment["scoring"],
-            "mAP": experiment.get("mAP"),
-            "mAP@200_prefix_positive": _prefix_positive_map_at_200(
-                experiment
-            ),
-            "P@200": experiment.get("P@200"),
-            "diagnostic_test_evaluation": True,
-        })
+        run.log(
+            {
+                f"retrieval/{key}": value
+                for key, value in _numeric_metrics(experiment).items()
+            }
+        )
+        run.summary.update(
+            {
+                "model": experiment["model"],
+                "K": experiment["K"],
+                "M": experiment["M"],
+                "scoring": experiment["scoring"],
+                "mAP": experiment.get("mAP"),
+                "mAP@200_prefix_positive": _prefix_positive_map_at_200(experiment),
+                "P@200": experiment.get("P@200"),
+                "diagnostic_test_evaluation": True,
+            }
+        )
 
         artifact = wandb.Artifact(
             name=f"spica-{index:02d}-{_safe_name(experiment['model'])}-{_safe_name(experiment['scoring'])}",
             type="experiment-logs",
             description=f"Logs, metrics, and Hydra configuration for {experiment['model']} ({experiment['scoring']}).",
-            metadata={"group": group, "source_commit": summary["repository"]["commit"], "checkpoints_included": False},
+            metadata={
+                "group": group,
+                "source_commit": summary["repository"]["commit"],
+                "checkpoints_included": False,
+            },
         )
         for path in _experiment_files(root, metrics_path):
             artifact.add_file(str(path), name=path.relative_to(root).as_posix())
@@ -196,13 +204,20 @@ def upload(summary_path: Path, *, project: str, group: str, entity: str | None) 
         run.finish()
         print(f"{run_name}: {run.url}")
 
-        overview_rows.append([
-            experiment["model"], experiment["K"], experiment["M"], experiment["kappa"],
-            experiment["scoring"], experiment["params"], experiment["steps"],
-            experiment.get("mAP"),
-            _prefix_positive_map_at_200(experiment),
-            experiment.get("P@200"),
-        ])
+        overview_rows.append(
+            [
+                experiment["model"],
+                experiment["K"],
+                experiment["M"],
+                experiment["kappa"],
+                experiment["scoring"],
+                experiment["params"],
+                experiment["steps"],
+                experiment.get("mAP"),
+                _prefix_positive_map_at_200(experiment),
+                experiment.get("P@200"),
+            ]
+        )
 
     overview = wandb.init(
         project=project,
@@ -218,21 +233,34 @@ def upload(summary_path: Path, *, project: str, group: str, entity: str | None) 
             "diagnostic_test_evaluation": True,
         },
     )
-    overview.log({
-        "research/experiment_table": wandb.Table(
-            columns=["model", "K", "M", "kappa", "scoring", "params", "steps_epochs", "mAP", "mAP@200_prefix_positive", "P@200"],
-            # Keep mixed metadata columns homogeneous for W&B's inferred schema.
-            data=[
-                [
-                    *map(str, row[:7]),
-                    row[7],
-                    row[8] if isinstance(row[8], (int, float)) else None,
-                    row[9],
-                ]
-                for row in overview_rows
-            ],
-        )
-    })
+    overview.log(
+        {
+            "research/experiment_table": wandb.Table(
+                columns=[
+                    "model",
+                    "K",
+                    "M",
+                    "kappa",
+                    "scoring",
+                    "params",
+                    "steps_epochs",
+                    "mAP",
+                    "mAP@200_prefix_positive",
+                    "P@200",
+                ],
+                # Keep mixed metadata columns homogeneous for W&B's inferred schema.
+                data=[
+                    [
+                        *map(str, row[:7]),
+                        row[7],
+                        row[8] if isinstance(row[8], (int, float)) else None,
+                        row[9],
+                    ]
+                    for row in overview_rows
+                ],
+            )
+        }
+    )
     overview.summary["group"] = group
     overview.summary["experiment_count"] = len(overview_rows)
     summary_artifact = wandb.Artifact(
@@ -241,7 +269,9 @@ def upload(summary_path: Path, *, project: str, group: str, entity: str | None) 
         metadata={"group": group, "source_commit": summary["repository"]["commit"]},
     )
     summary_artifact.add_file(str(summary_path), name="outputs/research_summary.json")
-    summary_artifact.add_file(str(summary_path.with_suffix(".md")), name="outputs/research_summary.md")
+    summary_artifact.add_file(
+        str(summary_path.with_suffix(".md")), name="outputs/research_summary.md"
+    )
     overview.log_artifact(summary_artifact, aliases=["latest", "research"])
     overview.finish()
     print(f"overview: {overview.url}")
@@ -249,9 +279,16 @@ def upload(summary_path: Path, *, project: str, group: str, entity: str | None) 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--summary", type=Path, default=Path("outputs/research_summary.json"))
+    parser.add_argument(
+        "--summary", type=Path, default=Path("outputs/research_summary.json")
+    )
     parser.add_argument("--project", default="spica")
     parser.add_argument("--group", default="spica-research-2026-09-01")
     parser.add_argument("--entity", default=None)
     arguments = parser.parse_args()
-    upload(arguments.summary, project=arguments.project, group=arguments.group, entity=arguments.entity)
+    upload(
+        arguments.summary,
+        project=arguments.project,
+        group=arguments.group,
+        entity=arguments.entity,
+    )

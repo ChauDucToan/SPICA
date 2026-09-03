@@ -13,7 +13,11 @@ from .config.data import load_data_config
 from .data.datasets import RetrievalEvalDataset
 from .data.manifest import read_manifest
 from .evaluation.embeddings import load_encoded_retrieval_set
-from .evaluation.jepa import encode_jepa_loader, evaluate_jepa_features, feature_probe_dict
+from .evaluation.jepa import (
+    encode_jepa_loader,
+    evaluate_jepa_features,
+    feature_probe_dict,
+)
 from .evaluate_deterministic import (
     _resolve_device,
     _validate_cache_against_manifest,
@@ -62,9 +66,18 @@ def _load_model(
     config = payload["model_config"]
     metadata = payload["metadata"]
     state = payload["model_state_dict"]
-    if not isinstance(config, dict) or not isinstance(metadata, dict) or not isinstance(state, dict):
-        raise TypeError("JEPA checkpoint config, metadata, and state must be dictionaries")
-    if metadata.get("text_enters_predictor") is not False or metadata.get("text_conditioning") is not False:
+    if (
+        not isinstance(config, dict)
+        or not isinstance(metadata, dict)
+        or not isinstance(state, dict)
+    ):
+        raise TypeError(
+            "JEPA checkpoint config, metadata, and state must be dictionaries"
+        )
+    if (
+        metadata.get("text_enters_predictor") is not False
+        or metadata.get("text_conditioning") is not False
+    ):
         raise ValueError("JEPA checkpoint violates the text-free predictor contract")
     try:
         mode = str(config["encoder_mode"])
@@ -85,13 +98,17 @@ def _load_model(
         unfreeze_depth=depth,
     )
     if sketch_bundle.encoder.embedding_dim != embedding_dim:
-        raise ValueError("Checkpoint embedding dimension does not match CLIP visual output")
+        raise ValueError(
+            "Checkpoint embedding dimension does not match CLIP visual output"
+        )
     predictor = SpicaJepaPredictor(embedding_dim=embedding_dim, hidden_dim=hidden_dim)
     model = SketchPhotoJepa(sketch_bundle.encoder, predictor)
     try:
         model.load_state_dict(state, strict=True)
     except RuntimeError as error:
-        raise ValueError("JEPA checkpoint state does not match its model configuration") from error
+        raise ValueError(
+            "JEPA checkpoint state does not match its model configuration"
+        ) from error
     for name, parameter in model.named_parameters():
         if not torch.isfinite(parameter).all().item():
             raise ValueError(f"JEPA checkpoint contains a non-finite parameter: {name}")

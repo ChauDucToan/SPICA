@@ -42,7 +42,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def _safe_spearman(left: torch.Tensor, right: torch.Tensor) -> float | None:
     if left.numel() == 0 or right.numel() != left.numel():
         return None
-    if left.double().std(unbiased=False) == 0 or right.double().std(unbiased=False) == 0:
+    if (
+        left.double().std(unbiased=False) == 0
+        or right.double().std(unbiased=False) == 0
+    ):
         return None
     return _pearson_correlation(_average_ranks(left), _average_ranks(right))
 
@@ -91,10 +94,7 @@ def _finish_metrics(
         "P@10": precision["10"],
         "P@100": precision["100"],
         "P@200": precision["200"],
-        "top1_accuracy": torch.cat(accumulator["top1_correct"])
-        .double()
-        .mean()
-        .item(),
+        "top1_accuracy": torch.cat(accumulator["top1_correct"]).double().mean().item(),
         "num_queries": num_queries,
         "num_gallery_items": num_gallery_items,
     }
@@ -104,10 +104,12 @@ def _component_pair_cosines(directions: torch.Tensor) -> torch.Tensor:
     pairs = []
     for first in range(directions.shape[1]):
         for second in range(first + 1, directions.shape[1]):
-            pairs.append(
-                (directions[:, first] * directions[:, second]).sum(dim=-1)
-            )
-    return torch.stack(pairs, dim=-1) if pairs else directions.new_ones((directions.shape[0], 1))
+            pairs.append((directions[:, first] * directions[:, second]).sum(dim=-1))
+    return (
+        torch.stack(pairs, dim=-1)
+        if pairs
+        else directions.new_ones((directions.shape[0], 1))
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -297,7 +299,9 @@ def main() -> None:
     pairwise_sum = torch.zeros(num_components, dtype=torch.float64)
     pairwise_count = 0
 
-    rank_positions = torch.arange(1, gallery_count + 1, device=device, dtype=torch.float32)
+    rank_positions = torch.arange(
+        1, gallery_count + 1, device=device, dtype=torch.float32
+    )
     with torch.inference_mode():
         for start in range(0, query_count, args.query_chunk_size):
             stop = min(start + args.query_chunk_size, query_count)
@@ -306,15 +310,19 @@ def main() -> None:
             score_batches: dict[str, torch.Tensor] = {
                 "mu0": d[:, 0] @ gallery.T,
                 "gate_barycenter": gate_barycenter[start:stop].to(device) @ gallery.T,
-                "uniform_barycenter": uniform_barycenter[start:stop].to(device) @ gallery.T,
+                "uniform_barycenter": uniform_barycenter[start:stop].to(device)
+                @ gallery.T,
             }
             for component in range(1, num_components):
                 score_batches[f"mu{component}"] = d[:, component] @ gallery.T
             component_cosines = torch.einsum("bkd,gd->bkg", d, gallery)
             score_batches["max_component"] = component_cosines.max(dim=1).values
-            score_batches["angular_logsumexp"] = args.angular_logsumexp_temperature * torch.logsumexp(
-                component_cosines / args.angular_logsumexp_temperature,
-                dim=1,
+            score_batches["angular_logsumexp"] = (
+                args.angular_logsumexp_temperature
+                * torch.logsumexp(
+                    component_cosines / args.angular_logsumexp_temperature,
+                    dim=1,
+                )
             )
             if is_movmf:
                 movmf_chunk = MoVmfPrediction(
@@ -334,14 +342,19 @@ def main() -> None:
                 relevant = gallery_labels[ranked].eq(labels[:, None])
                 positives = relevant.sum(dim=1).float()
                 precision_at_rank = relevant.float().cumsum(dim=1) / rank_positions
-                ap = (precision_at_rank * relevant.float()).sum(dim=1) / positives.clamp_min(1)
+                ap = (precision_at_rank * relevant.float()).sum(
+                    dim=1
+                ) / positives.clamp_min(1)
                 prefix = relevant[:, :200].float()
                 prefix_precision = precision_at_rank[:, :200]
                 prefix_hits = prefix.sum(dim=1)
                 values = {
-                    "prefix_positive": (prefix_precision * prefix).sum(dim=1) / prefix_hits.clamp_min(1),
-                    "all_relevant": (prefix_precision * prefix).sum(dim=1) / positives.clamp_min(1),
-                    "min_relevant_k": (prefix_precision * prefix).sum(dim=1) / torch.minimum(
+                    "prefix_positive": (prefix_precision * prefix).sum(dim=1)
+                    / prefix_hits.clamp_min(1),
+                    "all_relevant": (prefix_precision * prefix).sum(dim=1)
+                    / positives.clamp_min(1),
+                    "min_relevant_k": (prefix_precision * prefix).sum(dim=1)
+                    / torch.minimum(
                         positives, torch.full_like(positives, 200)
                     ).clamp_min(1),
                 }
@@ -350,7 +363,9 @@ def main() -> None:
                 for name, value in values.items():
                     accumulator["map_at_200"][name].append(value.cpu())
                 for k in accumulator["precision"]:
-                    accumulator["precision"][k].append(relevant[:, :k].float().mean(dim=1).cpu())
+                    accumulator["precision"][k].append(
+                        relevant[:, :k].float().mean(dim=1).cpu()
+                    )
                 accumulator["top1_correct"].append(relevant[:, 0].float().cpu())
                 if mode == "gate_barycenter":
                     ranked_scores = scores.gather(dim=1, index=ranked)
@@ -375,7 +390,8 @@ def main() -> None:
                 1.0 - component_pairwise.mean(dim=-1)
             ).cpu()
             sketch_similarity_sum += (
-                (d * sketch_embeddings[start:stop].to(device)[:, None, :]).sum(dim=-1)
+                (d * sketch_embeddings[start:stop].to(device)[:, None, :])
+                .sum(dim=-1)
                 .double()
                 .sum(dim=0)
                 .cpu()
@@ -396,7 +412,9 @@ def main() -> None:
                     d[local, :, None, :] * class_gallery[None, None, :, :]
                 ).sum(dim=-1)
                 if is_movmf:
-                    concentration = prediction.concentrations[start:stop].to(device)[local]
+                    concentration = prediction.concentrations[start:stop].to(device)[
+                        local
+                    ]
                     log_weights = torch.log(p[local].clamp_min(1e-12))
                     log_norm = log_vmf_normalizer(
                         concentration,
@@ -418,24 +436,34 @@ def main() -> None:
                     responsibilities * responsibilities.clamp_min(1e-12).log()
                 ).sum(dim=-1)
                 query_mean = responsibilities.mean(dim=1)
-                query_entropy = -(
-                    query_mean * query_mean.clamp_min(1e-12).log()
-                ).sum(dim=-1)
+                query_entropy = -(query_mean * query_mean.clamp_min(1e-12).log()).sum(
+                    dim=-1
+                )
                 query_posterior_entropy[local] = entropy.mean(dim=1)
                 query_posterior_effective[local] = query_entropy.exp()
                 query_usage_max[local] = query_mean.max(dim=-1).values
                 class_size_per_query[start + local.cpu()] = class_gallery.shape[0]
-                positive_responsibility_sum += responsibilities.sum(dim=(0, 1)).double().cpu()
-                positive_hard_counts += torch.bincount(
-                    responsibilities.argmax(dim=-1).flatten(),
-                    minlength=num_components,
-                ).double().cpu()
+                positive_responsibility_sum += (
+                    responsibilities.sum(dim=(0, 1)).double().cpu()
+                )
+                positive_hard_counts += (
+                    torch.bincount(
+                        responsibilities.argmax(dim=-1).flatten(),
+                        minlength=num_components,
+                    )
+                    .double()
+                    .cpu()
+                )
                 positive_entropy_sum += entropy.double().sum().item()
                 positive_effective_sum += entropy.exp().double().sum().item()
-                positive_max_sum += responsibilities.max(dim=-1).values.double().sum().item()
+                positive_max_sum += (
+                    responsibilities.max(dim=-1).values.double().sum().item()
+                )
                 positive_pair_count += entropy.numel()
                 query_usage_effective_sum += query_entropy.exp().double().sum().item()
-                query_usage_max_sum += query_mean.max(dim=-1).values.double().sum().item()
+                query_usage_max_sum += (
+                    query_mean.max(dim=-1).values.double().sum().item()
+                )
                 positive_similarity_sum += class_cosines.double().sum(dim=(0, 2)).cpu()
                 centroid = F.normalize(class_gallery.mean(dim=0), dim=-1)
                 positive_centroid_similarity_sum += (
@@ -447,7 +475,9 @@ def main() -> None:
             # The mean concentration is the uncertainty feature for Mo-vMF;
             # deterministic controls have no concentration head.
             if is_movmf:
-                kappa_per_query[start:stop] = prediction.concentrations[start:stop].mean(dim=-1)
+                kappa_per_query[start:stop] = prediction.concentrations[
+                    start:stop
+                ].mean(dim=-1)
             else:
                 kappa_per_query[start:stop] = float("nan")
 
@@ -468,8 +498,12 @@ def main() -> None:
         else "posthoc_positive_gallery_angular_softmax",
         "assignment_temperature": None if is_movmf else args.assignment_temperature,
         "num_positive_pairs": positive_pair_count,
-        "mean_responsibilities": (positive_responsibility_sum / positive_pair_count).tolist(),
-        "hard_assignment_fractions": (positive_hard_counts / positive_pair_count).tolist(),
+        "mean_responsibilities": (
+            positive_responsibility_sum / positive_pair_count
+        ).tolist(),
+        "hard_assignment_fractions": (
+            positive_hard_counts / positive_pair_count
+        ).tolist(),
         "mean_entropy": positive_entropy_sum / positive_pair_count,
         "normalized_mean_entropy": (
             0.0
@@ -478,7 +512,8 @@ def main() -> None:
         ),
         "mean_effective_components": positive_effective_sum / positive_pair_count,
         "mean_max_responsibility": positive_max_sum / positive_pair_count,
-        "mean_query_usage_effective_components": query_usage_effective_sum / query_count,
+        "mean_query_usage_effective_components": query_usage_effective_sum
+        / query_count,
         "mean_query_max_component_usage": query_usage_max_sum / query_count,
     }
     correlation_features = {
@@ -515,9 +550,13 @@ def main() -> None:
             {
                 "component": component,
                 "mean_gate_weight": mean_prior[component].item(),
-                "mean_positive_responsibility": responsibility_stats["mean_responsibilities"][component],
+                "mean_positive_responsibility": responsibility_stats[
+                    "mean_responsibilities"
+                ][component],
                 "retrieval": metrics[f"mu{component}"],
-                "mean_cosine_to_raw_sketch": (sketch_similarity_sum[component] / query_count).item(),
+                "mean_cosine_to_raw_sketch": (
+                    sketch_similarity_sum[component] / query_count
+                ).item(),
                 "mean_cosine_to_individual_positive": (
                     positive_similarity_sum[component] / positive_pair_count
                 ).item(),
@@ -595,15 +634,16 @@ def main() -> None:
                 .tolist(),
                 "fraction_near_upper_bound": prediction.concentrations.ge(
                     max_concentration - 0.01 * max_concentration
-                ).double().mean().item(),
+                )
+                .double()
+                .mean()
+                .item(),
             }
             if is_movmf
             else None
         ),
         "cosine_advantage_threshold_log_prior_ratio_over_kappa": thresholds,
-        "assignment_temperature": (
-            None if is_movmf else args.assignment_temperature
-        ),
+        "assignment_temperature": (None if is_movmf else args.assignment_temperature),
         "angular_logsumexp_temperature": args.angular_logsumexp_temperature,
     }
     output = Path(args.output).expanduser()
@@ -611,7 +651,11 @@ def main() -> None:
         output = PROJECT_ROOT / output
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-    print(json.dumps({"output": str(output), "metrics": metrics}, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {"output": str(output), "metrics": metrics}, indent=2, sort_keys=True
+        )
+    )
 
 
 if __name__ == "__main__":

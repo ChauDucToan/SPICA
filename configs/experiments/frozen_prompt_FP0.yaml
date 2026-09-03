@@ -1,7 +1,15 @@
 # @package _global_
-experiment_role: frozen_prompt_FP0
+experiment_role: frozen_prompt_v2_FP0
 visual_prompt_length: 0
 prompt_mode: vanilla
 text_mode: none
+train_sketch_prompt: false
+train_photo_prompt: false
+lambda_rank: 0.0
+lambda_cls: 0.0
+classification_location: none
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
 max_steps: 0
+probe_steps: [0]
 save_optimizer: false

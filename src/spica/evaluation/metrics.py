@@ -86,7 +86,11 @@ def _average_precision_from_relevance(
     variants are useful for auditing benchmark protocols; the default is kept
     for backward compatibility with existing artifacts.
     """
-    if map_at_k_denominator not in {"prefix_positive", "all_relevant", "min_relevant_k"}:
+    if map_at_k_denominator not in {
+        "prefix_positive",
+        "all_relevant",
+        "min_relevant_k",
+    }:
         raise ValueError(
             "map_at_k_denominator must be 'prefix_positive', 'all_relevant', "
             f"or 'min_relevant_k', got {map_at_k_denominator!r}"

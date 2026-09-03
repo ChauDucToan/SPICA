@@ -177,7 +177,12 @@ def _validate_cache_against_manifest(
             f"manifest: {len(encoded_set.paths)} != {len(manifest_entries)}"
         )
     for index, (cached_path, cached_label, entry) in enumerate(
-        zip(encoded_set.paths, encoded_set.labels.tolist(), manifest_entries, strict=True)
+        zip(
+            encoded_set.paths,
+            encoded_set.labels.tolist(),
+            manifest_entries,
+            strict=True,
+        )
     ):
         expected_path = Path(entry.path).resolve()
         observed_path = Path(cached_path).expanduser().resolve()
@@ -188,9 +193,7 @@ def _validate_cache_against_manifest(
                 f"({observed_path}, {int(cached_label)}), expected "
                 f"({expected_path}, {int(entry.label)})"
             )
-    cache_identity = _retrieval_set_identity(
-        encoded_set.paths, encoded_set.labels
-    )
+    cache_identity = _retrieval_set_identity(encoded_set.paths, encoded_set.labels)
     manifest_paths = tuple(str(entry.path) for entry in manifest_entries)
     manifest_labels = torch.tensor(
         [int(entry.label) for entry in manifest_entries], dtype=torch.long
@@ -235,12 +238,8 @@ def _validate_zero_shot_split(
             f"{sorted(unknown_labels)}"
         )
 
-    sketch_manifest = read_manifest(
-        data_config.test.sketch_manifest, data_config.root
-    )
-    photo_manifest = read_manifest(
-        data_config.test.photo_manifest, data_config.root
-    )
+    sketch_manifest = read_manifest(data_config.test.sketch_manifest, data_config.root)
+    photo_manifest = read_manifest(data_config.test.photo_manifest, data_config.root)
     return {
         "sketch_manifest_sha256": _validate_cache_against_manifest(
             modality="sketch",

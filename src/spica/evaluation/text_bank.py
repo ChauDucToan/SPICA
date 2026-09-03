@@ -92,7 +92,9 @@ class SoftPromptTextBank(nn.Module):
         names = [name.replace("_", " ") for name in self.class_names]
         class_tokens = tokenizer(names)
         if not isinstance(class_tokens, Tensor) or class_tokens.ndim != 2:
-            raise TypeError("The selected OpenCLIP tokenizer must return [classes, context]")
+            raise TypeError(
+                "The selected OpenCLIP tokenizer must return [classes, context]"
+            )
         if class_tokens.shape[0] != len(names):
             raise ValueError("Tokenizer changed the number of class names")
 
@@ -113,7 +115,9 @@ class SoftPromptTextBank(nn.Module):
             try:
                 eot_position = row.index(eot_id)
             except ValueError as error:
-                raise ValueError("Tokenizer output does not contain an EOT token") from error
+                raise ValueError(
+                    "Tokenizer output does not contain an EOT token"
+                ) from error
             content = row[1:eot_position]
             if len(content) + prompt_length + 2 > context_length:
                 raise ValueError(
@@ -132,9 +136,11 @@ class SoftPromptTextBank(nn.Module):
         prefix_row = prefix_tokens[0]
         prefix_eot = int(getattr(tokenizer, "eot_token_id", prefix_row.max().item()))
         prefix_position = (prefix_row == prefix_eot).nonzero(as_tuple=False)
-        prefix_content = prefix_row[1:int(prefix_position[0].item())]
+        prefix_content = prefix_row[1 : int(prefix_position[0].item())]
         with torch.no_grad():
-            prefix_embedding = token_embedding(prefix_content.to(encoder.device)).float()
+            prefix_embedding = token_embedding(
+                prefix_content.to(encoder.device)
+            ).float()
         model_width = int(token_embedding.embedding_dim)
         initialized = torch.empty(
             prompt_length,
@@ -179,8 +185,10 @@ class SoftPromptTextBank(nn.Module):
         tokens = self.token_ids.to(device=self.device)
         cast_dtype = model.transformer.get_cast_dtype()
         fixed = model.token_embedding(tokens).to(cast_dtype)
-        learned = self.context.to(dtype=cast_dtype).unsqueeze(0).expand(
-            tokens.shape[0], -1, -1
+        learned = (
+            self.context.to(dtype=cast_dtype)
+            .unsqueeze(0)
+            .expand(tokens.shape[0], -1, -1)
         )
         values = torch.cat(
             (fixed[:, :1], learned, fixed[:, 1 + self.prompt_length :]), dim=1

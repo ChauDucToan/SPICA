@@ -110,9 +110,7 @@ class TrainableSketchContextEncoder(nn.Module):
         if embedding_dim <= 0:
             raise ValueError(f"embedding_dim must be positive, got {embedding_dim}")
         if mode not in self.MODES:
-            raise ValueError(
-                f"mode must be one of {sorted(self.MODES)}, got {mode!r}"
-            )
+            raise ValueError(f"mode must be one of {sorted(self.MODES)}, got {mode!r}")
         if unfreeze_depth < 0:
             raise ValueError("unfreeze_depth must be non-negative")
         self.visual = visual
@@ -197,16 +195,23 @@ class TrainableSketchContextEncoder(nn.Module):
                 f"got {tuple(images.shape)}"
             )
         if images.shape[1] != 3:
-            raise ValueError(f"Sketch encoder expects three RGB channels, got {images.shape[1]}")
+            raise ValueError(
+                f"Sketch encoder expects three RGB channels, got {images.shape[1]}"
+            )
         if not images.is_floating_point():
-            raise TypeError(f"Sketch encoder expects floating-point images, got {images.dtype}")
+            raise TypeError(
+                f"Sketch encoder expects floating-point images, got {images.dtype}"
+            )
         embeddings = self.visual(images)
         if not isinstance(embeddings, Tensor) or embeddings.ndim != 2:
             raise RuntimeError(
                 "The CLIP visual tower must return [batch, embedding_dim], "
                 f"got {getattr(embeddings, 'shape', type(embeddings))}"
             )
-        if embeddings.shape[0] != images.shape[0] or embeddings.shape[1] != self.embedding_dim:
+        if (
+            embeddings.shape[0] != images.shape[0]
+            or embeddings.shape[1] != self.embedding_dim
+        ):
             raise RuntimeError(
                 "Unexpected sketch context shape: expected "
                 f"[{images.shape[0]}, {self.embedding_dim}], got {tuple(embeddings.shape)}"
@@ -321,8 +326,7 @@ def _visual_projection_parameters(
         bias = None
     else:
         raise TypeError(
-            "Unsupported CLIP visual projection type: "
-            f"{type(projection).__name__}"
+            f"Unsupported CLIP visual projection type: {type(projection).__name__}"
         )
     return matrix.float(), None if bias is None else bias.float()
 
@@ -377,7 +381,9 @@ class FrozenVisualProjection(nn.Module):
             raise TypeError("hidden must be floating-point")
         projected = hidden @ self.matrix.to(device=hidden.device, dtype=hidden.dtype)
         if self.bias is not None:
-            projected = projected + self.bias.to(device=hidden.device, dtype=hidden.dtype)
+            projected = projected + self.bias.to(
+                device=hidden.device, dtype=hidden.dtype
+            )
         return projected
 
 
@@ -428,20 +434,22 @@ class TrainableSketchHiddenEncoder(nn.Module):
         hidden_dim: int,
         mode: str,
         unfreeze_depth: int = 0,
+        train_ln_post: bool = True,
     ) -> None:
         super().__init__()
         if hidden_dim <= 0:
             raise ValueError(f"hidden_dim must be positive, got {hidden_dim}")
         if mode not in self.MODES:
-            raise ValueError(
-                f"mode must be one of {sorted(self.MODES)}, got {mode!r}"
-            )
+            raise ValueError(f"mode must be one of {sorted(self.MODES)}, got {mode!r}")
         if unfreeze_depth < 0:
             raise ValueError("unfreeze_depth must be non-negative")
+        if not isinstance(train_ln_post, bool):
+            raise TypeError("train_ln_post must be a bool")
         self.visual = visual
         self.hidden_dim = hidden_dim
         self.mode = mode
         self.unfreeze_depth = unfreeze_depth
+        self.train_ln_post = train_ln_post
         self._trainable_modules: tuple[nn.Module, ...] = ()
         self._configure_trainability()
 
@@ -460,6 +468,10 @@ class TrainableSketchHiddenEncoder(nn.Module):
             return
         if self.mode == "full":
             self.visual.requires_grad_(True)
+            if not self.train_ln_post:
+                ln_post = getattr(self.visual, "ln_post", None)
+                if ln_post is not None:
+                    ln_post.requires_grad_(False)
             self._freeze_visual_projection()
             self._trainable_modules = (self.visual,)
             return
@@ -480,7 +492,7 @@ class TrainableSketchHiddenEncoder(nn.Module):
             block.requires_grad_(True)
             trainable_modules.append(block)
         ln_post = getattr(self.visual, "ln_post", None)
-        if ln_post is not None:
+        if self.train_ln_post and ln_post is not None:
             ln_post.requires_grad_(True)
             trainable_modules.append(ln_post)
         self._freeze_visual_projection()
@@ -545,6 +557,7 @@ def load_trainable_sketch_hidden_encoder(
     cache_dir: Path | None = None,
     mode: str = "full",
     unfreeze_depth: int = 0,
+    train_ln_post: bool = True,
 ) -> SketchHiddenContextBundle:
     """Load a raw-sketch encoder whose output is the pre-projection CLIP state."""
     model, _, eval_transform = open_clip.create_model_and_transforms(
@@ -561,6 +574,7 @@ def load_trainable_sketch_hidden_encoder(
         hidden_dim=projection.hidden_dim,
         mode=mode,
         unfreeze_depth=unfreeze_depth,
+        train_ln_post=train_ln_post,
     )
     del model
     encoder.train(mode != "frozen")

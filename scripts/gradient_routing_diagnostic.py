@@ -48,8 +48,7 @@ def _group_gradient_norms(
     groups: dict[str, list[torch.Tensor]] = {
         "direction_branch": [],
         **{
-            f"direction_component_{index}_output": []
-            for index in range(num_components)
+            f"direction_component_{index}_output": [] for index in range(num_components)
         },
         "gate_or_mixture_branch": [],
         "kappa_branch": [],
@@ -143,7 +142,9 @@ def main() -> None:
         raise TypeError("All gradient diagnostic checkpoints must be dictionaries")
     metadata = [payload.get("metadata", {}) for payload in payloads]
     if not all(isinstance(values, dict) for values in metadata):
-        raise TypeError("All gradient diagnostic checkpoint metadata must be dictionaries")
+        raise TypeError(
+            "All gradient diagnostic checkpoint metadata must be dictionaries"
+        )
     positive_counts = {
         int(values.get("positives_per_anchor_per_step", 3)) for values in metadata
     }
@@ -207,9 +208,7 @@ def main() -> None:
         warmup_concentration=float(
             movmf_metadata.get("initial_concentration", movmf.initial_concentration)
         ),
-        gate_temperature_start=float(
-            movmf_metadata.get("gate_temperature_start", 1.0)
-        ),
+        gate_temperature_start=float(movmf_metadata.get("gate_temperature_start", 1.0)),
         gate_temperature_anneal_steps=int(
             movmf_metadata.get("gate_temperature_anneal_steps", 1)
         ),
@@ -269,9 +268,10 @@ def main() -> None:
                 margin=margin,
                 assignment_temperature=assignment_temperature,
             )
-            loss_map["angular_assignment"] = float(
-                checkpoint_metadata.get("angular_assignment_weight", 1.0)
-            ) * routing.total
+            loss_map["angular_assignment"] = (
+                float(checkpoint_metadata.get("angular_assignment_weight", 1.0))
+                * routing.total
+            )
         else:
             # Report the actual shared Stage-E ranking gradient.  The arm has
             # no separate positive-to-component routing loss to attribute.

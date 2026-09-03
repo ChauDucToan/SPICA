@@ -76,10 +76,14 @@ def explicit_transport_enabled(result: dict[str, Any]) -> bool | None:
     if isinstance(config.get("transport_enabled"), bool):
         return bool(config["transport_enabled"])
     metadata = result.get("metadata", {})
-    if isinstance(metadata, dict) and isinstance(metadata.get("transport_enabled"), bool):
+    if isinstance(metadata, dict) and isinstance(
+        metadata.get("transport_enabled"), bool
+    ):
         return bool(metadata["transport_enabled"])
     checkpoint_metadata = result.get("checkpoint_metadata", {})
-    if isinstance(checkpoint_metadata, dict) and isinstance(checkpoint_metadata.get("transport_enabled"), bool):
+    if isinstance(checkpoint_metadata, dict) and isinstance(
+        checkpoint_metadata.get("transport_enabled"), bool
+    ):
         return bool(checkpoint_metadata["transport_enabled"])
     return None
 
@@ -120,8 +124,14 @@ def number_at(point: dict[str, Any] | None, *path: str) -> float | None:
 
 
 def best_point(result: dict[str, Any]) -> dict[str, Any] | None:
-    candidates = [point for point in points(result) if number_at(point, "val", "mAP") is not None]
-    return max(candidates, key=lambda point: number_at(point, "val", "mAP") or float("-inf"), default=None)
+    candidates = [
+        point for point in points(result) if number_at(point, "val", "mAP") is not None
+    ]
+    return max(
+        candidates,
+        key=lambda point: number_at(point, "val", "mAP") or float("-inf"),
+        default=None,
+    )
 
 
 def run_dir_name(path: Path) -> str:
@@ -144,7 +154,11 @@ def select_best_run(
     records: Iterable[tuple[Path, dict[str, Any]]],
     predicate: Callable[[dict[str, Any]], bool],
 ) -> tuple[Path, dict[str, Any]] | None:
-    candidates = [record for record in records if predicate(record[1]) and best_point(record[1]) is not None]
+    candidates = [
+        record
+        for record in records
+        if predicate(record[1]) and best_point(record[1]) is not None
+    ]
 
     def key(record: tuple[Path, dict[str, Any]]) -> tuple[float, int, int]:
         result = record[1]
@@ -162,8 +176,12 @@ def source_run_provenance(path: Path, result: dict[str, Any]) -> dict[str, Any]:
     """Read provenance without attributing the current report commit to a run."""
     for candidate in (
         result.get("provenance"),
-        result.get("metadata", {}).get("provenance") if isinstance(result.get("metadata"), dict) else None,
-        result.get("checkpoint_metadata", {}).get("provenance") if isinstance(result.get("checkpoint_metadata"), dict) else None,
+        result.get("metadata", {}).get("provenance")
+        if isinstance(result.get("metadata"), dict)
+        else None,
+        result.get("checkpoint_metadata", {}).get("provenance")
+        if isinstance(result.get("checkpoint_metadata"), dict)
+        else None,
     ):
         if isinstance(candidate, dict):
             return {
@@ -184,15 +202,26 @@ def source_run_provenance(path: Path, result: dict[str, Any]) -> dict[str, Any]:
 def repository_provenance() -> dict[str, Any]:
     try:
         commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
-            capture_output=True, text=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.strip()
         status = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=ROOT, check=True,
-            capture_output=True, text=True,
+            ["git", "status", "--porcelain"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
         ).stdout.splitlines()
     except (OSError, subprocess.CalledProcessError) as error:
-        return {"current_commit": None, "working_tree_state": "unavailable", "dirty_files": [], "error": str(error)}
+        return {
+            "current_commit": None,
+            "working_tree_state": "unavailable",
+            "dirty_files": [],
+            "error": str(error),
+        }
     return {
         "current_commit": commit,
         "working_tree_state": "clean" if not status else "dirty",
@@ -215,6 +244,7 @@ def matched_transport_predicate(
     Missing flags do not pass.  This prevents the historical base-only run
     from becoming the K=1 transport control merely because it has K=1.
     """
+
     def predicate(result: dict[str, Any]) -> bool:
         config = config_of(result)
         if not is_transport_run(result, require_explicit=True):
@@ -235,11 +265,18 @@ def matched_transport_predicate(
             return False
         if rho_strategy is not None and config.get("rho_strategy") != rho_strategy:
             return False
-        if direction_target is not None and config.get("direction_target") != direction_target:
+        if (
+            direction_target is not None
+            and config.get("direction_target") != direction_target
+        ):
             return False
-        if num_positive_photos is not None and config.get("num_positive_photos") != num_positive_photos:
+        if (
+            num_positive_photos is not None
+            and config.get("num_positive_photos") != num_positive_photos
+        ):
             return False
         return True
+
     return predicate
 
 
@@ -254,6 +291,7 @@ def matched_base_predicate(*, text: bool) -> Callable[[dict[str, Any]], bool]:
             and float(config.get("lambda_endpoint", 0.0)) == 0.0
             and config.get("num_positive_photos", 1) == 1
         )
+
     return predicate
 
 
@@ -317,7 +355,9 @@ def assert_same_run_conditions(
     """Require two records to share all non-treatment training conditions."""
     mismatches = _condition_mismatches(first, second)
     if mismatches:
-        raise ArtifactIntegrityError(f"{label} are not matched: " + "; ".join(mismatches))
+        raise ArtifactIntegrityError(
+            f"{label} are not matched: " + "; ".join(mismatches)
+        )
 
 
 def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None:
@@ -329,7 +369,10 @@ def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None
     if transport_config.get("transport_enabled") is not True:
         raise ArtifactIntegrityError("z0_T/q_T must have transport_enabled=true")
     for label, config in (("base", base_config), ("transport", transport_config)):
-        if config.get("use_text_cls") is not True or float(config.get("lambda_cls", 0.0)) <= 0:
+        if (
+            config.get("use_text_cls") is not True
+            or float(config.get("lambda_cls", 0.0)) <= 0
+        ):
             raise ArtifactIntegrityError(f"{label} run is not a text-supervised run")
         if float(config.get("lambda_endpoint", 1.0)) != 0.0:
             raise ArtifactIntegrityError(f"{label} run does not use endpoint=0")
@@ -391,7 +434,10 @@ def validate_freeze_optimizer_role(config: dict[str, Any]) -> dict[str, bool]:
             f"{role} requires freeze={expected_freeze}, reset={expected_reset}; "
             f"observed freeze={observed_freeze}, reset={observed_reset}"
         )
-    if not isinstance(config.get("resume_checkpoint_path"), str) or not config["resume_checkpoint_path"]:
+    if (
+        not isinstance(config.get("resume_checkpoint_path"), str)
+        or not config["resume_checkpoint_path"]
+    ):
         raise ArtifactIntegrityError(
             f"{role} requires the common step-73 resume checkpoint"
         )
@@ -406,7 +452,9 @@ def validate_freeze_optimizer_artifact(
     source_path = _resolved_artifact_path(source.get("checkpoint"))
     resume = result.get("resume")
     if not source_path.is_file() or not isinstance(resume, dict):
-        raise ArtifactIntegrityError("P1 source/checkpoint or resume metadata is missing")
+        raise ArtifactIntegrityError(
+            "P1 source/checkpoint or resume metadata is missing"
+        )
     resume_path = _resolved_artifact_path(resume.get("checkpoint"))
     if resume_path != source_path:
         raise ArtifactIntegrityError("P1 branch does not resume the source checkpoint")
@@ -438,13 +486,19 @@ def validate_freeze_optimizer_artifact(
         raise ArtifactIntegrityError("P1 continuation flags have invalid types")
     expected_freeze = semantics["freeze"]
     if resume["freeze_applied_before_first_update"] is not expected_freeze:
-        raise ArtifactIntegrityError("P1 freeze was not recorded before the first update")
+        raise ArtifactIntegrityError(
+            "P1 freeze was not recorded before the first update"
+        )
     if resume["encoder_frozen_immediately"] is not expected_freeze:
         raise ArtifactIntegrityError("P1 encoder immediate-freeze state is invalid")
     if resume["optimizer_state_restored"] is not (not semantics["reset"]):
-        raise ArtifactIntegrityError("P1 optimizer restore state is inconsistent with reset")
+        raise ArtifactIntegrityError(
+            "P1 optimizer restore state is inconsistent with reset"
+        )
     if resume["optimizer_state_reset"] is not semantics["reset"]:
-        raise ArtifactIntegrityError("P1 optimizer reset state is inconsistent with role")
+        raise ArtifactIntegrityError(
+            "P1 optimizer reset state is inconsistent with role"
+        )
     if resume["transport_head_reinitialized"] is not False:
         raise ArtifactIntegrityError("P1 transport head must be preserved")
     source_hash = str(source["checkpoint_sha256"])
@@ -453,9 +507,15 @@ def validate_freeze_optimizer_artifact(
     if resume["checkpoint_sha256"] != source_hash:
         raise ArtifactIntegrityError("P1 resume checkpoint hash differs from source")
     result_path = _resolved_artifact_path(result.get("checkpoint"))
-    if not result_path.is_file() or result["checkpoint_sha256"] != _sha256_file(result_path):
+    if not result_path.is_file() or result["checkpoint_sha256"] != _sha256_file(
+        result_path
+    ):
         raise ArtifactIntegrityError("P1 result checkpoint hash is invalid")
-    return {"status": "validated", "freeze": expected_freeze, "reset": semantics["reset"]}
+    return {
+        "status": "validated",
+        "freeze": expected_freeze,
+        "reset": semantics["reset"],
+    }
 
 
 def missing_result(reason: str) -> dict[str, str]:

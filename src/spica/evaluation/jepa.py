@@ -168,9 +168,9 @@ def feature_geometry(
     if features.shape[0] > max_samples:
         sample_generator = torch.Generator(device="cpu")
         sample_generator.manual_seed(17)
-        sample_indices = torch.randperm(
-            features.shape[0], generator=sample_generator
-        )[:max_samples]
+        sample_indices = torch.randperm(features.shape[0], generator=sample_generator)[
+            :max_samples
+        ]
         sampled = features[sample_indices].float()
     else:
         sampled = features.float()
@@ -183,11 +183,11 @@ def feature_geometry(
         effective_rank = 0.0
         anisotropy = 0.0
     else:
-        effective_rank = (eigenvalue_sum.square() / eigenvalues.square().sum().clamp_min(1e-12)).item()
+        effective_rank = (
+            eigenvalue_sum.square() / eigenvalues.square().sum().clamp_min(1e-12)
+        ).item()
         anisotropy = (eigenvalues[0] / eigenvalue_sum).item()
-    mask = ~torch.eye(
-        covariance.shape[0], dtype=torch.bool, device=covariance.device
-    )
+    mask = ~torch.eye(covariance.shape[0], dtype=torch.bool, device=covariance.device)
     off_diagonal = covariance[mask]
 
     normalized = F.normalize(sampled, dim=-1)
@@ -211,7 +211,10 @@ def feature_geometry(
         effective_rank=effective_rank,
         mean_variance=variances.mean().item(),
         minimum_variance=variances.min().item(),
-        near_zero_variance_fraction=(variances <= near_zero_threshold).float().mean().item(),
+        near_zero_variance_fraction=(variances <= near_zero_threshold)
+        .float()
+        .mean()
+        .item(),
         covariance_offdiag=off_diagonal.abs().mean().item(),
         mean_pairwise_cosine=pairwise.mean().item(),
         global_anisotropy=anisotropy,
@@ -253,9 +256,9 @@ def semantic_query_diagnostics(
     intra = (query * own_centroid).sum(dim=-1).mean()
     if query_centroids.shape[0] > 1:
         centroid_cosines = query_centroids @ query_centroids.T
-        off_diagonal = centroid_cosines[~torch.eye(
-            centroid_cosines.shape[0], dtype=torch.bool
-        )]
+        off_diagonal = centroid_cosines[
+            ~torch.eye(centroid_cosines.shape[0], dtype=torch.bool)
+        ]
         inter = off_diagonal.mean()
     else:
         inter = query_centroids.new_tensor(0.0)
@@ -284,7 +287,9 @@ def photo_target_alignment_diagnostics(
         positive_mask = gallery.labels == label
         negative_mask = ~positive_mask
         if not positive_mask.any().item() or not negative_mask.any().item():
-            raise ValueError("Every query class needs positive and negative gallery items")
+            raise ValueError(
+                "Every query class needs positive and negative gallery items"
+            )
         class_queries = query[query_mask]
         class_positives = photos[positive_mask]
         positive_cosines = class_queries @ class_positives.T

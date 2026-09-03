@@ -76,14 +76,14 @@ def geometry_block(value: dict[str, Any]) -> dict[str, Any]:
 
 def compact_geometry(value: dict[str, Any]) -> dict[str, Any]:
     result = {
-        key: geometry_block(value[key])
-        for key in ("h", "u", "q")
-        if key in value
+        key: geometry_block(value[key]) for key in ("h", "u", "q") if key in value
     }
     for key in ("semantic", "photo_targets"):
         if key in value:
             result[key] = {
-                subkey: float(subvalue) if isinstance(subvalue, (int, float)) else subvalue
+                subkey: float(subvalue)
+                if isinstance(subvalue, (int, float))
+                else subvalue
                 for subkey, subvalue in value[key].items()
                 if subkey not in {"num_classes"}
             }
@@ -119,9 +119,21 @@ def load_ablation() -> dict[str, Any]:
         "J1": ("jepa_v2_j1_partial_m1", "jepa_v2_eval_j1", "partial encoder, M=1"),
         "J2": ("jepa_v2_j2_full_m1", "jepa_v2_eval_j2", "full encoder, M=1"),
         "J3": ("jepa_v2_j3_partial_m3", "jepa_v2_eval_j3", "partial encoder, M=3"),
-        "J4": ("jepa_v2_j4_partial_m3_text", "jepa_v2_eval_j4", "partial encoder, M=3 + frozen text classification"),
-        "J5": ("jepa_v2_j5_partial_m3_vicreg", "jepa_v2_eval_j5", "J4 objective + VICReg"),
-        "J6": ("jepa_v2_j6_partial_m3_sigreg", "jepa_v2_eval_j6", "J4 objective + SIGReg"),
+        "J4": (
+            "jepa_v2_j4_partial_m3_text",
+            "jepa_v2_eval_j4",
+            "partial encoder, M=3 + frozen text classification",
+        ),
+        "J5": (
+            "jepa_v2_j5_partial_m3_vicreg",
+            "jepa_v2_eval_j5",
+            "J4 objective + VICReg",
+        ),
+        "J6": (
+            "jepa_v2_j6_partial_m3_sigreg",
+            "jepa_v2_eval_j6",
+            "J4 objective + SIGReg",
+        ),
     }
     result: dict[str, Any] = {}
     for ablation, (run_name, eval_name, description) in definitions.items():
@@ -214,11 +226,15 @@ def build_summary() -> dict[str, Any]:
         "step_100_diagnostic": metric_block(selected_eval["metrics"]),
         "step_5400_diagnostic": metric_block(selected_probes[5400]["diagnostic_test"]),
         "step_100_geometry": compact_geometry(selected_eval["feature_geometry"]),
-        "step_5400_geometry": compact_geometry(selected_probes[5400]["diagnostic_test_geometry"]),
+        "step_5400_geometry": compact_geometry(
+            selected_probes[5400]["diagnostic_test_geometry"]
+        ),
         "validation_is_diagnostic_after_retraining": True,
         "artifacts": {
             "run_result": rel(selected_dir / "run_result.json"),
-            "checkpoint_step_100": rel(selected_dir / "checkpoints" / "jepa_step100.pt"),
+            "checkpoint_step_100": rel(
+                selected_dir / "checkpoints" / "jepa_step100.pt"
+            ),
             "checkpoint_final_step_5400": rel(Path(str(selected_run["checkpoint"]))),
             "step_100_evaluation": rel(selected_eval_path),
         },
@@ -266,15 +282,23 @@ def build_summary() -> dict[str, Any]:
         "ablations_J0_J6": ablations,
         "multi_seed_J4": {
             "seeds": seed_results,
-            "pseudo_validation_aggregate": aggregate_seed(seed_results, "pseudo_validation"),
-            "diagnostic_test_aggregate": aggregate_seed(seed_results, "diagnostic_test"),
+            "pseudo_validation_aggregate": aggregate_seed(
+                seed_results, "pseudo_validation"
+            ),
+            "diagnostic_test_aggregate": aggregate_seed(
+                seed_results, "diagnostic_test"
+            ),
             "note": "These are independent 100-step pseudo-train runs with the same fixed 20-class pseudo-validation split.",
         },
         "long_training": {
             "selected_J4_pseudo_train": load_long_run("jepa_selected_j4_pseudo_long"),
             "no_text_J3_pseudo_train": load_long_run("jepa_no_text_j3_pseudo_long"),
-            "selected_J4_all_seen_retrain": load_long_run("jepa_selected_j4_all_seen_long"),
-            "no_text_J3_all_seen_diagnostic": load_long_run("jepa_no_text_j3_all_seen_long"),
+            "selected_J4_all_seen_retrain": load_long_run(
+                "jepa_selected_j4_all_seen_long"
+            ),
+            "no_text_J3_all_seen_diagnostic": load_long_run(
+                "jepa_no_text_j3_all_seen_long"
+            ),
             "interpretation": "Long-run validation is valid only for the pseudo_train runs; all_seen validation is labeled diagnostic because all 104 classes were fitted.",
         },
         "selected_retrain": selected_retrain,
@@ -299,7 +323,9 @@ def build_summary() -> dict[str, Any]:
                 "source": "outputs/sketchy_104_21/clip_openai_quickgelu/sketches.pt",
             },
             "selected_J4_step_100": compact_geometry(selected_eval["feature_geometry"]),
-            "selected_J4_step_5400": compact_geometry(selected_probes[5400]["diagnostic_test_geometry"]),
+            "selected_J4_step_5400": compact_geometry(
+                selected_probes[5400]["diagnostic_test_geometry"]
+            ),
         },
         "historical_baselines": {
             "matched_stageE_no_vmf_control": {
@@ -402,7 +428,11 @@ def write_markdown(summary: dict[str, Any]) -> None:
         probes = summary["long_training"][run_key]["probes"]
         by_step = {probe["step"]: probe["pseudo_validation"]["mAP"] for probe in probes}
         lines.append(
-            f"| {label} | " + " | ".join(f"{by_step[step]:.4f}" for step in (100, 500, 1000, 1800, 5400)) + " |"
+            f"| {label} | "
+            + " | ".join(
+                f"{by_step[step]:.4f}" for step in (100, 500, 1000, 1800, 5400)
+            )
+            + " |"
         )
     lines += [
         "",
@@ -444,9 +474,27 @@ def write_plots(summary: dict[str, Any]) -> None:
     ):
         probes = summary["long_training"][key]["probes"]
         steps = [probe["step"] for probe in probes]
-        axes[0].plot(steps, [probe["pseudo_validation"]["mAP"] for probe in probes], "o-", label=label, color=color)
-        axes[1].plot(steps, [probe["q_effective_rank"] for probe in probes], "o-", label=label, color=color)
-        axes[2].plot(steps, [probe["semantic_margin"] for probe in probes], "o-", label=label, color=color)
+        axes[0].plot(
+            steps,
+            [probe["pseudo_validation"]["mAP"] for probe in probes],
+            "o-",
+            label=label,
+            color=color,
+        )
+        axes[1].plot(
+            steps,
+            [probe["q_effective_rank"] for probe in probes],
+            "o-",
+            label=label,
+            color=color,
+        )
+        axes[2].plot(
+            steps,
+            [probe["semantic_margin"] for probe in probes],
+            "o-",
+            label=label,
+            color=color,
+        )
     for axis, title, ylabel in (
         (axes[0], "Valid pseudo-unseen retrieval", "mAP"),
         (axes[1], "Query geometry", "effective rank"),
@@ -464,8 +512,15 @@ def write_plots(summary: dict[str, Any]) -> None:
 
     figure, axes = plt.subplots(1, 2, figsize=(10, 4.2))
     names = list(summary["ablations_J0_J6"])
-    maps = [summary["ablations_J0_J6"][name]["pseudo_validation"]["mAP"] for name in names]
-    ranks = [summary["ablations_J0_J6"][name]["geometry"]["q"].get("effective_rank", float("nan")) for name in names]
+    maps = [
+        summary["ablations_J0_J6"][name]["pseudo_validation"]["mAP"] for name in names
+    ]
+    ranks = [
+        summary["ablations_J0_J6"][name]["geometry"]["q"].get(
+            "effective_rank", float("nan")
+        )
+        for name in names
+    ]
     axes[0].bar(names, maps, color="slateblue")
     axes[0].set_title("Ablation pseudo-validation mAP")
     axes[0].set_ylabel("mAP")

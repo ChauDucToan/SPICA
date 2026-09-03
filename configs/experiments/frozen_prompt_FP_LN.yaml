@@ -1,7 +1,11 @@
 # @package _global_
-experiment_role: frozen_prompt_FP_LN
+experiment_role: frozen_prompt_v2_FP_LN
 visual_prompt_length: 3
 prompt_mode: prompt_plus_layernorm
 train_visual_layernorm: true
 text_mode: hard
+lambda_rank: 1.0
 lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0

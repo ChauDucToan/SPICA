@@ -61,7 +61,9 @@ def effective_config(path: Path, result: dict[str, Any]) -> dict[str, Any]:
         config["direction_target"] = "moving"
         config["direction_target_inferred_from_legacy_default"] = True
     if "text_loss_location" not in config:
-        config["text_loss_location"] = "q" if bool(config.get("use_text_cls")) else "none"
+        config["text_loss_location"] = (
+            "q" if bool(config.get("use_text_cls")) else "none"
+        )
         config["text_loss_location_inferred_from_legacy_default"] = True
     return config
 
@@ -86,7 +88,11 @@ def _selection_key(item: dict[str, Any]) -> tuple[float, int, int]:
     result = item["result"]
     peak = best_point(result)
     points = result.get("probe_history", [])
-    steps = [int(point["step"]) for point in points if isinstance(point, dict) and "step" in point]
+    steps = [
+        int(point["step"])
+        for point in points
+        if isinstance(point, dict) and "step" in point
+    ]
     return (
         number_at(peak, "val", "mAP") or float("-inf"),
         len(steps),
@@ -154,7 +160,13 @@ def strict_transport(item: dict[str, Any], **expected: Any) -> bool:
 def strict_base(item: dict[str, Any], *, text: bool) -> bool:
     return (
         explicit_transport_enabled(item["result"]) is False
-        and config_matches(item, transport_mode="tangent", K=1, lambda_endpoint=0.0, num_positive_photos=1)
+        and config_matches(
+            item,
+            transport_mode="tangent",
+            K=1,
+            lambda_endpoint=0.0,
+            num_positive_photos=1,
+        )
         and bool(item["config"].get("use_text_cls")) is text
     )
 
@@ -177,7 +189,10 @@ def compact_artifact_value(value: Any, *, max_list_items: int = 64) -> Any:
     if isinstance(value, list):
         if len(value) > max_list_items:
             return {"omitted_items": len(value)}
-        return [compact_artifact_value(item, max_list_items=max_list_items) for item in value]
+        return [
+            compact_artifact_value(item, max_list_items=max_list_items)
+            for item in value
+        ]
     return value
 
 
@@ -195,7 +210,9 @@ def run_ref(item: dict[str, Any] | None) -> dict[str, Any] | None:
         "provenance": item["provenance"],
         "peak": compact_artifact_value(best_point(result)),
         "probe_history": compact_artifact_value(result.get("probe_history", [])),
-        "gradient_conflicts": compact_artifact_value(result.get("gradient_conflicts", [])),
+        "gradient_conflicts": compact_artifact_value(
+            result.get("gradient_conflicts", [])
+        ),
         "resume": compact_artifact_value(result.get("resume", {})),
     }
 
@@ -208,18 +225,24 @@ def raw_index(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "config": item["config"],
             "transport_enabled_recorded": explicit_transport_enabled(item["result"]),
             "peak_mAP": metric(best_point(item["result"]), "val", "mAP"),
-            "peak_step": None if best_point(item["result"]) is None else best_point(item["result"]).get("step"),
+            "peak_step": None
+            if best_point(item["result"]) is None
+            else best_point(item["result"]).get("step"),
             "provenance": item["provenance"],
         }
         for item in items
     ]
 
 
-def causal_decomposition(base: dict[str, Any] | None, transport: dict[str, Any] | None) -> dict[str, Any]:
+def causal_decomposition(
+    base: dict[str, Any] | None, transport: dict[str, Any] | None
+) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for step in STEPS:
         base_point = None if base is None else point_at_result(base["result"], step)
-        transport_point = None if transport is None else point_at_result(transport["result"], step)
+        transport_point = (
+            None if transport is None else point_at_result(transport["result"], step)
+        )
         base_b = metric(base_point, "val", "mAP")
         z0_t = metric(transport_point, "base_val", "mAP")
         q_t = metric(transport_point, "val", "mAP")
@@ -229,7 +252,9 @@ def causal_decomposition(base: dict[str, Any] | None, transport: dict[str, Any] 
                 "mAP_z0_B": base_b,
                 "mAP_z0_T": z0_t,
                 "mAP_q_T": q_t,
-                "encoder_effect": None if z0_t is None or base_b is None else z0_t - base_b,
+                "encoder_effect": None
+                if z0_t is None or base_b is None
+                else z0_t - base_b,
                 "head_effect": None if q_t is None or z0_t is None else q_t - z0_t,
                 "total_effect": None if q_t is None or base_b is None else q_t - base_b,
             }
@@ -251,7 +276,9 @@ def causal_decomposition(base: dict[str, Any] | None, transport: dict[str, Any] 
     }
 
 
-def factorial_cell(item: dict[str, Any] | None, *, label: str, transport: bool, text: bool) -> dict[str, Any]:
+def factorial_cell(
+    item: dict[str, Any] | None, *, label: str, transport: bool, text: bool
+) -> dict[str, Any]:
     result = None if item is None else item["result"]
     peak = None if result is None else best_point(result)
     return {
@@ -263,7 +290,9 @@ def factorial_cell(item: dict[str, Any] | None, *, label: str, transport: bool, 
         "peak_mAP": metric(peak, "val", "mAP"),
         "peak_step": None if peak is None else int(peak["step"]),
         "mAP_at": {
-            str(step): metric(None if result is None else point_at_result(result, step), "val", "mAP")
+            str(step): metric(
+                None if result is None else point_at_result(result, step), "val", "mAP"
+            )
             for step in STEPS
         },
         "raw": None if item is None else run_ref(item),
@@ -274,21 +303,53 @@ def factorial_report(items: list[dict[str, Any]]) -> dict[str, Any]:
     cells = {
         "A": selected_effective(items, lambda item: strict_base(item, text=False)),
         "B": selected_effective(items, lambda item: strict_base(item, text=True)),
-        "C": selected_effective(items, lambda item: strict_transport(item, text=False, K=1, lambda_endpoint=0.0, use_vmf=False, num_positive_photos=1, rho_strategy="learned", direction_target="moving", text_loss_location="none")),
-        "D": selected_effective(items, lambda item: strict_transport(item, text=True, K=1, lambda_endpoint=0.0, use_vmf=False, num_positive_photos=1, rho_strategy="learned", direction_target="moving", text_loss_location="q")),
+        "C": selected_effective(
+            items,
+            lambda item: strict_transport(
+                item,
+                text=False,
+                K=1,
+                lambda_endpoint=0.0,
+                use_vmf=False,
+                num_positive_photos=1,
+                rho_strategy="learned",
+                direction_target="moving",
+                text_loss_location="none",
+            ),
+        ),
+        "D": selected_effective(
+            items,
+            lambda item: strict_transport(
+                item,
+                text=True,
+                K=1,
+                lambda_endpoint=0.0,
+                use_vmf=False,
+                num_positive_photos=1,
+                rho_strategy="learned",
+                direction_target="moving",
+                text_loss_location="q",
+            ),
+        ),
     }
     table = {
-        "A": factorial_cell(cells["A"], label="no transport / no text", transport=False, text=False),
-        "B": factorial_cell(cells["B"], label="no transport / text", transport=False, text=True),
-        "C": factorial_cell(cells["C"], label="transport / no text", transport=True, text=False),
-        "D": factorial_cell(cells["D"], label="transport / text", transport=True, text=True),
+        "A": factorial_cell(
+            cells["A"], label="no transport / no text", transport=False, text=False
+        ),
+        "B": factorial_cell(
+            cells["B"], label="no transport / text", transport=False, text=True
+        ),
+        "C": factorial_cell(
+            cells["C"], label="transport / no text", transport=True, text=False
+        ),
+        "D": factorial_cell(
+            cells["D"], label="transport / text", transport=True, text=True
+        ),
     }
     common_steps = set(STEPS)
     for cell in table.values():
         common_steps &= {
-            int(step)
-            for step, value_ in cell["mAP_at"].items()
-            if value_ is not None
+            int(step) for step, value_ in cell["mAP_at"].items() if value_ is not None
         }
     # Anchor the factorial contrast to the selected D (transport+text)
     # validation peak when that checkpoint is present in every cell.  If a
@@ -300,14 +361,18 @@ def factorial_report(items: list[dict[str, Any]]) -> dict[str, Any]:
     elif common_steps:
         common_step = max(
             common_steps,
-            key=lambda step: sum(table[name]["mAP_at"][str(step)] for name in table) / 4.0,
+            key=lambda step: (
+                sum(table[name]["mAP_at"][str(step)] for name in table) / 4.0
+            ),
         )
+
     def contrast(step: int | None, left: str, right: str) -> float | None:
         if step is None:
             return None
         lhs = table[left]["mAP_at"].get(str(step))
         rhs = table[right]["mAP_at"].get(str(step))
         return None if lhs is None or rhs is None else lhs - rhs
+
     contrasts: dict[str, dict[str, float | None]] = {}
     for label, step in (("peak", common_step), ("late", 5400)):
         text_without = contrast(step, "B", "A")
@@ -320,7 +385,9 @@ def factorial_report(items: list[dict[str, Any]]) -> dict[str, Any]:
             "text_with_transport": text_with,
             "transport_without_text": transport_without,
             "transport_with_text": transport_with,
-            "interaction": None if text_without is None or text_with is None else text_with - text_without,
+            "interaction": None
+            if text_without is None or text_with is None
+            else text_with - text_without,
         }
     return {
         "cells": table,
@@ -354,31 +421,63 @@ def rho_report(items: list[dict[str, Any]]) -> dict[str, Any]:
         result = item["result"]
         peak = best_point(result)
         peak_geometry = {} if peak is None else peak.get("val_geometry", {})
-        transport = peak_geometry.get("transport", {}) if isinstance(peak_geometry, dict) else {}
-        correlations = transport.get("rho_correlations", {}) if isinstance(transport, dict) else {}
+        transport = (
+            peak_geometry.get("transport", {})
+            if isinstance(peak_geometry, dict)
+            else {}
+        )
+        correlations = (
+            transport.get("rho_correlations", {}) if isinstance(transport, dict) else {}
+        )
         runs[strategy] = {
             "run": str(item["path"].relative_to(ROOT)),
             "config": item["config"],
             "provenance": item["provenance"],
             "peak_mAP": metric(peak, "val", "mAP"),
             "peak_step": None if peak is None else peak.get("step"),
-            "mAP_at": {str(step): metric(point_at_result(result, step), "val", "mAP") for step in STEPS},
-            "semantic_margin": metric(peak, "val_geometry", "semantic", "semantic_margin"),
-            "query_reference_cosine": metric(peak, "val_geometry", "reference", "query_reference_cosine"),
-            "rho": {key: transport.get(key) for key in ("mean_rho_degrees", "std_rho_degrees", "p05_rho_degrees", "p50_rho_degrees", "p95_rho_degrees")},
+            "mAP_at": {
+                str(step): metric(point_at_result(result, step), "val", "mAP")
+                for step in STEPS
+            },
+            "semantic_margin": metric(
+                peak, "val_geometry", "semantic", "semantic_margin"
+            ),
+            "query_reference_cosine": metric(
+                peak, "val_geometry", "reference", "query_reference_cosine"
+            ),
+            "rho": {
+                key: transport.get(key)
+                for key in (
+                    "mean_rho_degrees",
+                    "std_rho_degrees",
+                    "p05_rho_degrees",
+                    "p50_rho_degrees",
+                    "p95_rho_degrees",
+                )
+            },
             "correlations": correlations,
             "raw": run_ref(item),
         }
-    observed = [(name, value) for name, value in runs.items() if value is not None and value.get("peak_mAP") is not None]
-    best_strategy, best_value = max(observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None))
+    observed = [
+        (name, value)
+        for name, value in runs.items()
+        if value is not None and value.get("peak_mAP") is not None
+    ]
+    best_strategy, best_value = max(
+        observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None)
+    )
     verdict = "not measured"
     if best_strategy is not None and best_value is not None:
         verdict = f"{best_strategy} has the highest matched pseudo-unseen peak ({best_value['peak_mAP']:.6f}); learned rho is not required by this sweep"
     learned = runs.get("learned")
     return {
         "runs": runs,
-        "learned_rho_distribution_at_peak": None if learned is None else learned.get("rho"),
-        "learned_rho_correlations_at_peak": None if learned is None else learned.get("correlations"),
+        "learned_rho_distribution_at_peak": None
+        if learned is None
+        else learned.get("rho"),
+        "learned_rho_correlations_at_peak": None
+        if learned is None
+        else learned.get("correlations"),
         "best_strategy": best_strategy,
         "verdict": verdict,
     }
@@ -415,22 +514,39 @@ def direction_report(items: list[dict[str, Any]]) -> dict[str, Any]:
         result = item["result"]
         peak = best_point(result)
         geometry = geometry_at_peak(item)
-        angles = geometry.get("transport", {}).get("target_angles", {}) if isinstance(geometry.get("transport"), dict) else {}
+        angles = (
+            geometry.get("transport", {}).get("target_angles", {})
+            if isinstance(geometry.get("transport"), dict)
+            else {}
+        )
         variants[target] = {
             "run": str(item["path"].relative_to(ROOT)),
             "config": item["config"],
             "peak_mAP": metric(peak, "val", "mAP"),
             "peak_step": None if peak is None else peak.get("step"),
-            "mAP_at": {str(step): metric(point_at_result(result, step), "val", "mAP") for step in STEPS},
-            "semantic_margin": metric(peak, "val_geometry", "semantic", "semantic_margin"),
-            "query_reference_cosine": metric(peak, "val_geometry", "reference", "query_reference_cosine"),
+            "mAP_at": {
+                str(step): metric(point_at_result(result, step), "val", "mAP")
+                for step in STEPS
+            },
+            "semantic_margin": metric(
+                peak, "val_geometry", "semantic", "semantic_margin"
+            ),
+            "query_reference_cosine": metric(
+                peak, "val_geometry", "reference", "query_reference_cosine"
+            ),
             "moving_target_alignment": angles.get("moving_target_alignment"),
             "fixed_target_alignment": angles.get("fixed_target_alignment"),
             "target_frame_agreement": angles.get("target_frame_agreement"),
             "raw": run_ref(item),
         }
-    observed = [(name, value) for name, value in variants.items() if value is not None and value.get("peak_mAP") is not None]
-    best_target, best_value = max(observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None))
+    observed = [
+        (name, value)
+        for name, value in variants.items()
+        if value is not None and value.get("peak_mAP") is not None
+    ]
+    best_target, best_value = max(
+        observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None)
+    )
     no_direction = variants.get("none")
     moving = variants.get("moving")
     if moving is not None and no_direction is not None:
@@ -475,17 +591,37 @@ def text_report(items: list[dict[str, Any]]) -> dict[str, Any]:
             "late_mAP": metric(late, "val", "mAP"),
             "peak_mAP_z0": metric(peak, "base_val", "mAP"),
             "late_mAP_z0": metric(late, "base_val", "mAP"),
-            "peak_semantic_margin_z0": metric(peak, "val_geometry", "z0", "semantic_margin"),
-            "peak_semantic_margin_q": metric(peak, "val_geometry", "semantic", "semantic_margin"),
-            "seen_classification_accuracy_latest": latest_accuracy.get("classification_accuracy"),
-            "seen_classification_accuracy_q_latest": latest_accuracy.get("classification_accuracy_q"),
-            "seen_classification_accuracy_z0_latest": latest_accuracy.get("classification_accuracy_z0"),
-            "peak_query_reference_cosine": metric(peak, "val_geometry", "reference", "query_reference_cosine"),
-            "peak_base_reference_cosine": metric(peak, "val_geometry", "reference", "base_reference_cosine"),
+            "peak_semantic_margin_z0": metric(
+                peak, "val_geometry", "z0", "semantic_margin"
+            ),
+            "peak_semantic_margin_q": metric(
+                peak, "val_geometry", "semantic", "semantic_margin"
+            ),
+            "seen_classification_accuracy_latest": latest_accuracy.get(
+                "classification_accuracy"
+            ),
+            "seen_classification_accuracy_q_latest": latest_accuracy.get(
+                "classification_accuracy_q"
+            ),
+            "seen_classification_accuracy_z0_latest": latest_accuracy.get(
+                "classification_accuracy_z0"
+            ),
+            "peak_query_reference_cosine": metric(
+                peak, "val_geometry", "reference", "query_reference_cosine"
+            ),
+            "peak_base_reference_cosine": metric(
+                peak, "val_geometry", "reference", "base_reference_cosine"
+            ),
             "raw": run_ref(item),
         }
-    observed = [(name, value) for name, value in variants.items() if value is not None and value.get("peak_mAP") is not None]
-    best_location, best_value = max(observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None))
+    observed = [
+        (name, value)
+        for name, value in variants.items()
+        if value is not None and value.get("peak_mAP") is not None
+    ]
+    best_location, best_value = max(
+        observed, key=lambda pair: pair[1]["peak_mAP"], default=(None, None)
+    )
     verdict = "not measured"
     if best_location is not None and best_value is not None:
         verdict = f"CE({best_location}) has the highest matched peak ({best_value['peak_mAP']:.6f})"
@@ -497,14 +633,26 @@ def hidden_report(items: list[dict[str, Any]]) -> dict[str, Any]:
     # Do not silently substitute an explicit but differently configured run.
     item = selected_effective(
         items,
-        lambda candidate: strict_transport(candidate, text=True, K=1, lambda_endpoint=0.0, use_vmf=False, rho_strategy="learned", direction_target="moving", text_loss_location="q", num_positive_photos=1),
+        lambda candidate: strict_transport(
+            candidate,
+            text=True,
+            K=1,
+            lambda_endpoint=0.0,
+            use_vmf=False,
+            rho_strategy="learned",
+            direction_target="moving",
+            text_loss_location="q",
+            num_positive_photos=1,
+        ),
     )
     rows: list[dict[str, Any]] = []
     if item is not None:
         for point in item["result"].get("probe_history", []):
             if not isinstance(point, dict):
                 continue
-            compatibility = point.get("val_geometry", {}).get("hidden_space_compatibility", {})
+            compatibility = point.get("val_geometry", {}).get(
+                "hidden_space_compatibility", {}
+            )
             if isinstance(compatibility, dict) and compatibility:
                 rows.append({"step": point.get("step"), **compatibility})
             else:
@@ -531,13 +679,27 @@ def hidden_report(items: list[dict[str, Any]]) -> dict[str, Any]:
 def freeze_report(items: list[dict[str, Any]]) -> dict[str, Any]:
     variants: dict[str, dict[str, Any] | None] = {}
     for label, needles in {
-        "continue_normal": ("deep_freeze_normal", "deep_freeze_continue_normal", "freeze_optimizer_normal"),
-        "freeze_73": ("deep_freeze_preserve", "deep_freeze_continue_freeze73", "freeze_optimizer_freeze73"),
-        "optimizer_reset_only": ("deep_freeze_reset", "deep_freeze_continue_optimizer_reset", "freeze_optimizer_reset"),
+        "continue_normal": (
+            "deep_freeze_normal",
+            "deep_freeze_continue_normal",
+            "freeze_optimizer_normal",
+        ),
+        "freeze_73": (
+            "deep_freeze_preserve",
+            "deep_freeze_continue_freeze73",
+            "freeze_optimizer_freeze73",
+        ),
+        "optimizer_reset_only": (
+            "deep_freeze_reset",
+            "deep_freeze_continue_optimizer_reset",
+            "freeze_optimizer_reset",
+        ),
     }.items():
         item = None
         for needle in needles:
-            item = selected_effective(items, lambda candidate, needle=needle: needle in candidate["name"])
+            item = selected_effective(
+                items, lambda candidate, needle=needle: needle in candidate["name"]
+            )
             if item is not None:
                 break
         if item is None:
@@ -547,12 +709,35 @@ def freeze_report(items: list[dict[str, Any]]) -> dict[str, Any]:
         variants[label] = {
             "run": str(item["path"].relative_to(ROOT)),
             "config": item["config"],
-            "optimizer_state_restored": result.get("resume", {}).get("optimizer_state_restored"),
-            "optimizer_state_reset": result.get("resume", {}).get("optimizer_state_reset"),
-            "mAP_at": {str(step): metric(point_at_result(result, step), "val", "mAP") for step in (500, 1800, 5400)},
-            "mAP_z0_at": {str(step): metric(point_at_result(result, step), "base_val", "mAP") for step in (500, 1800, 5400)},
-            "semantic_margin_at": {str(step): metric(point_at_result(result, step), "val_geometry", "semantic", "semantic_margin") for step in (500, 1800, 5400)},
-            "hidden_compatibility_at": {str(step): (point_at_result(result, step) or {}).get("val_geometry", {}).get("hidden_space_compatibility") for step in (500, 1800, 5400)},
+            "optimizer_state_restored": result.get("resume", {}).get(
+                "optimizer_state_restored"
+            ),
+            "optimizer_state_reset": result.get("resume", {}).get(
+                "optimizer_state_reset"
+            ),
+            "mAP_at": {
+                str(step): metric(point_at_result(result, step), "val", "mAP")
+                for step in (500, 1800, 5400)
+            },
+            "mAP_z0_at": {
+                str(step): metric(point_at_result(result, step), "base_val", "mAP")
+                for step in (500, 1800, 5400)
+            },
+            "semantic_margin_at": {
+                str(step): metric(
+                    point_at_result(result, step),
+                    "val_geometry",
+                    "semantic",
+                    "semantic_margin",
+                )
+                for step in (500, 1800, 5400)
+            },
+            "hidden_compatibility_at": {
+                str(step): (point_at_result(result, step) or {})
+                .get("val_geometry", {})
+                .get("hidden_space_compatibility")
+                for step in (500, 1800, 5400)
+            },
             "raw": run_ref(item),
         }
     return {"variants": variants, "mandatory_fork_step": 73}
@@ -568,8 +753,13 @@ def gradient_report(items: list[dict[str, Any]]) -> dict[str, Any]:
             # Old artifacts had parameter-space fields at the top level. Keep
             # them under the correct namespace rather than calling them query
             # gradients.
-            if "parameter_space" not in entry and any(key in entry for key in ("endpoint_cls", "endpoint_rank", "cls_rank")):
-                entry["parameter_space"] = {key: entry.get(key) for key in ("endpoint_cls", "endpoint_rank", "cls_rank")}
+            if "parameter_space" not in entry and any(
+                key in entry for key in ("endpoint_cls", "endpoint_rank", "cls_rank")
+            ):
+                entry["parameter_space"] = {
+                    key: entry.get(key)
+                    for key in ("endpoint_cls", "endpoint_rank", "cls_rank")
+                }
             entries.append(entry)
     return {
         "entries": entries,
@@ -614,19 +804,35 @@ def deterministic_k_report(items: list[dict[str, Any]]) -> dict[str, Any]:
             "late_mAP": metric(point_at_result(result, 5400), "val", "mAP"),
             "component_usage": mixture.get("component_usage"),
             "gate_entropy": mixture.get("gate_entropy"),
-            "pairwise_direction_cosine": mixture.get("component_pairwise_direction_cosine"),
-            "class_direction_alignment": mixture.get("mean_direction_cosine_by_component"),
+            "pairwise_direction_cosine": mixture.get(
+                "component_pairwise_direction_cosine"
+            ),
+            "class_direction_alignment": mixture.get(
+                "mean_direction_cosine_by_component"
+            ),
             "instance_residual_alignment": None,
             "config": item["config"],
             "raw": run_ref(item),
         }
-    observed = [(int(k), value) for k, value in values.items() if value is not None and value.get("peak_mAP") is not None]
-    best_k = max(observed, key=lambda pair: pair[1]["peak_mAP"])[0] if observed else None
-    return {"family": "matched deterministic tangent aggregation; no kappa/vMF", "values": values, "best_deterministic_K": best_k}
+    observed = [
+        (int(k), value)
+        for k, value in values.items()
+        if value is not None and value.get("peak_mAP") is not None
+    ]
+    best_k = (
+        max(observed, key=lambda pair: pair[1]["peak_mAP"])[0] if observed else None
+    )
+    return {
+        "family": "matched deterministic tangent aggregation; no kappa/vMF",
+        "values": values,
+        "best_deterministic_K": best_k,
+    }
 
 
 def multi_photo_report() -> dict[str, Any]:
-    candidates = sorted(OUTPUTS.glob("*multi_photo*.json")) + sorted(OUTPUTS.glob("transport_multi_photo_probe_*.json"))
+    candidates = sorted(OUTPUTS.glob("*multi_photo*.json")) + sorted(
+        OUTPUTS.glob("transport_multi_photo_probe_*.json")
+    )
     for path in candidates:
         try:
             value = load(path)
@@ -636,7 +842,9 @@ def multi_photo_report() -> dict[str, Any]:
             continue
         # The dedicated probe stores K-indexed rows under ``values``.  Keep the
         # complete artifact while exposing K=2 as the default plot/decision row.
-        indexed = value.get("values") if isinstance(value.get("values"), dict) else value
+        indexed = (
+            value.get("values") if isinstance(value.get("values"), dict) else value
+        )
         summary = None
         if isinstance(indexed, dict):
             row = indexed.get("2") or indexed.get(2)
@@ -660,33 +868,53 @@ def seed_replication_report(items: list[dict[str, Any]]) -> dict[str, Any]:
     """
     groups: dict[str, dict[str, Any]] = {
         "baseline_q_moving": {
-            "text": True, "K": 1, "lambda_endpoint": 0.0,
-            "use_vmf": False, "rho_strategy": "learned",
-            "direction_target": "moving", "text_loss_location": "q",
+            "text": True,
+            "K": 1,
+            "lambda_endpoint": 0.0,
+            "use_vmf": False,
+            "rho_strategy": "learned",
+            "direction_target": "moving",
+            "text_loss_location": "q",
             "num_positive_photos": 1,
         },
         "rho_cosine_q_moving": {
-            "text": True, "K": 1, "lambda_endpoint": 0.0,
-            "use_vmf": False, "rho_strategy": "cosine_warmup",
-            "direction_target": "moving", "text_loss_location": "q",
+            "text": True,
+            "K": 1,
+            "lambda_endpoint": 0.0,
+            "use_vmf": False,
+            "rho_strategy": "cosine_warmup",
+            "direction_target": "moving",
+            "text_loss_location": "q",
             "num_positive_photos": 1,
         },
         "K2_q_moving": {
-            "text": True, "K": 2, "lambda_endpoint": 0.0,
-            "use_vmf": False, "rho_strategy": "learned",
-            "direction_target": "moving", "text_loss_location": "q",
+            "text": True,
+            "K": 2,
+            "lambda_endpoint": 0.0,
+            "use_vmf": False,
+            "rho_strategy": "learned",
+            "direction_target": "moving",
+            "text_loss_location": "q",
             "num_positive_photos": 1,
         },
         "direction_none_q": {
-            "text": True, "K": 1, "lambda_endpoint": 0.0,
-            "use_vmf": False, "rho_strategy": "learned",
-            "direction_target": "none", "text_loss_location": "q",
+            "text": True,
+            "K": 1,
+            "lambda_endpoint": 0.0,
+            "use_vmf": False,
+            "rho_strategy": "learned",
+            "direction_target": "none",
+            "text_loss_location": "q",
             "num_positive_photos": 1,
         },
         "text_none_moving": {
-            "text": False, "K": 1, "lambda_endpoint": 0.0,
-            "use_vmf": False, "rho_strategy": "learned",
-            "direction_target": "moving", "text_loss_location": "none",
+            "text": False,
+            "K": 1,
+            "lambda_endpoint": 0.0,
+            "use_vmf": False,
+            "rho_strategy": "learned",
+            "direction_target": "moving",
+            "text_loss_location": "none",
             "num_positive_photos": 1,
         },
     }
@@ -722,8 +950,13 @@ def seed_replication_report(items: list[dict[str, Any]]) -> dict[str, Any]:
                 "peak_mAP": peak_value,
                 "peak_step": int(peak["step"]),
                 "late_mAP": late_value,
-                "retention_ratio": None if late_value is None else late_value / peak_value,
-                "mAP_at": {str(step): metric(point_at_result(result, step), "val", "mAP") for step in STEPS},
+                "retention_ratio": None
+                if late_value is None
+                else late_value / peak_value,
+                "mAP_at": {
+                    str(step): metric(point_at_result(result, step), "val", "mAP")
+                    for step in STEPS
+                },
                 "provenance": item["provenance"],
             }
     contrasts: dict[str, dict[str, Any]] = {}
@@ -743,10 +976,18 @@ def seed_replication_report(items: list[dict[str, Any]]) -> dict[str, Any]:
             delta = None
             if left is not None and right is not None:
                 preferred = int(left["peak_step"])
-                if left["mAP_at"].get(str(preferred)) is not None and right["mAP_at"].get(str(preferred)) is not None:
+                if (
+                    left["mAP_at"].get(str(preferred)) is not None
+                    and right["mAP_at"].get(str(preferred)) is not None
+                ):
                     step = preferred
                 else:
-                    common = [candidate for candidate in STEPS if left["mAP_at"].get(str(candidate)) is not None and right["mAP_at"].get(str(candidate)) is not None]
+                    common = [
+                        candidate
+                        for candidate in STEPS
+                        if left["mAP_at"].get(str(candidate)) is not None
+                        and right["mAP_at"].get(str(candidate)) is not None
+                    ]
                     step = common[0] if common else None
                 if step is not None:
                     delta = left["mAP_at"][str(step)] - right["mAP_at"][str(step)]
@@ -778,9 +1019,15 @@ def stability_report(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "peak_mAP": peak_value,
                 "peak_step": peak.get("step") if peak else None,
                 "late_mAP": late_value,
-                "retention_ratio": None if late_value is None else late_value / peak_value,
-                "absolute_decay": None if late_value is None else peak_value - late_value,
-                "transport_enabled_recorded": explicit_transport_enabled(item["result"]),
+                "retention_ratio": None
+                if late_value is None
+                else late_value / peak_value,
+                "absolute_decay": None
+                if late_value is None
+                else peak_value - late_value,
+                "transport_enabled_recorded": explicit_transport_enabled(
+                    item["result"]
+                ),
             }
         )
     return answer
@@ -788,7 +1035,8 @@ def stability_report(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def training_angles(items: list[dict[str, Any]]) -> dict[str, Any]:
     candidates = [
-        item for item in items
+        item
+        for item in items
         if item["result"].get("training_target_angles")
         and strict_transport(
             item,
@@ -803,7 +1051,9 @@ def training_angles(items: list[dict[str, Any]]) -> dict[str, Any]:
         )
     ]
     if not candidates:
-        candidates = [item for item in items if item["result"].get("training_target_angles")]
+        candidates = [
+            item for item in items if item["result"].get("training_target_angles")
+        ]
     selected_item = max(
         candidates,
         key=_selection_key,
@@ -824,7 +1074,11 @@ def official_diagnostics() -> list[dict[str, Any]]:
             result = load(path)
         except (OSError, ValueError, json.JSONDecodeError):
             continue
-        if result.get("model_family") != "predictive_semantic_transport" or not result.get("diagnostic_test_evaluation"):
+        if result.get(
+            "model_family"
+        ) != "predictive_semantic_transport" or not result.get(
+            "diagnostic_test_evaluation"
+        ):
             continue
         metrics = result.get("metrics", {})
         answer.append(
@@ -839,7 +1093,11 @@ def official_diagnostics() -> list[dict[str, Any]]:
     return answer
 
 
-def _series(item: dict[str, Any] | None, path: tuple[str, ...] = ("val", "mAP"), steps: Iterable[int] = STEPS) -> list[tuple[int, float]]:
+def _series(
+    item: dict[str, Any] | None,
+    path: tuple[str, ...] = ("val", "mAP"),
+    steps: Iterable[int] = STEPS,
+) -> list[tuple[int, float]]:
     if item is None:
         return []
     answer = []
@@ -850,22 +1108,50 @@ def _series(item: dict[str, Any] | None, path: tuple[str, ...] = ("val", "mAP"),
     return answer
 
 
-def save_plot(path: Path, title: str, ylabel: str, series: list[tuple[str, list[tuple[int, float]]]], *, kind: str = "line") -> None:
+def save_plot(
+    path: Path,
+    title: str,
+    ylabel: str,
+    series: list[tuple[str, list[tuple[int, float]]]],
+    *,
+    kind: str = "line",
+) -> None:
     plt.figure(figsize=(8, 5))
     if kind == "bar":
-        nonempty = [(label, values[-1][1] if values else None) for label, values in series]
+        nonempty = [
+            (label, values[-1][1] if values else None) for label, values in series
+        ]
         plotted = [(label, value) for label, value in nonempty if value is not None]
         if plotted:
             plt.bar([label for label, _ in plotted], [value for _, value in plotted])
             plt.xticks(rotation=25, ha="right")
         else:
-            plt.text(0.5, 0.5, "not measured in retained artifacts", ha="center", va="center", transform=plt.gca().transAxes)
+            plt.text(
+                0.5,
+                0.5,
+                "not measured in retained artifacts",
+                ha="center",
+                va="center",
+                transform=plt.gca().transAxes,
+            )
     else:
         for label, values in series:
             if values:
-                plt.plot([x for x, _ in values], [y for _, y in values], marker="o", label=label)
+                plt.plot(
+                    [x for x, _ in values],
+                    [y for _, y in values],
+                    marker="o",
+                    label=label,
+                )
         if not any(values for _, values in series):
-            plt.text(0.5, 0.5, "not measured in retained artifacts", ha="center", va="center", transform=plt.gca().transAxes)
+            plt.text(
+                0.5,
+                0.5,
+                "not measured in retained artifacts",
+                ha="center",
+                va="center",
+                transform=plt.gca().transAxes,
+            )
         if any(values for _, values in series):
             plt.legend(fontsize=7)
     plt.xlabel("training step")
@@ -894,11 +1180,14 @@ def make_plots(
 ) -> dict[str, str]:
     OUTPUTS.mkdir(parents=True, exist_ok=True)
     paths = {
-        "causal_transport_decomposition": OUTPUTS / "causal_transport_decomposition.png",
+        "causal_transport_decomposition": OUTPUTS
+        / "causal_transport_decomposition.png",
         "endpoint0_factorial": OUTPUTS / "endpoint0_factorial.png",
         "rho_schedule_ablation": OUTPUTS / "rho_schedule_ablation.png",
-        "training_target_angle_histogram": OUTPUTS / "training_target_angle_histogram.png",
-        "direction_supervision_ablation": OUTPUTS / "direction_supervision_ablation.png",
+        "training_target_angle_histogram": OUTPUTS
+        / "training_target_angle_histogram.png",
+        "direction_supervision_ablation": OUTPUTS
+        / "direction_supervision_ablation.png",
         "text_anchor_location": OUTPUTS / "text_anchor_location.png",
         "hidden_space_compatibility": OUTPUTS / "hidden_space_compatibility.png",
         "freeze_optimizer_control": OUTPUTS / "freeze_optimizer_control.png",
@@ -909,20 +1198,72 @@ def make_plots(
         "seed_replication": OUTPUTS / "seed_replication_controls.png",
     }
     rows = decomposition.get("steps", [])
-    save_plot(paths["causal_transport_decomposition"], "Causal transport decomposition", "pseudo-unseen mAP", [
-        ("z0_B", [(row["step"], row["mAP_z0_B"]) for row in rows if row["mAP_z0_B"] is not None]),
-        ("z0_T", [(row["step"], row["mAP_z0_T"]) for row in rows if row["mAP_z0_T"] is not None]),
-        ("q_T", [(row["step"], row["mAP_q_T"]) for row in rows if row["mAP_q_T"] is not None]),
-    ])
-    save_plot(paths["endpoint0_factorial"], "Endpoint=0 text × transport factorial", "pseudo-unseen mAP", [
-        (name, [(int(step), value_) for step, value_ in cell["mAP_at"].items() if value_ is not None])
-        for name, cell in factorial["cells"].items()
-    ])
+    save_plot(
+        paths["causal_transport_decomposition"],
+        "Causal transport decomposition",
+        "pseudo-unseen mAP",
+        [
+            (
+                "z0_B",
+                [
+                    (row["step"], row["mAP_z0_B"])
+                    for row in rows
+                    if row["mAP_z0_B"] is not None
+                ],
+            ),
+            (
+                "z0_T",
+                [
+                    (row["step"], row["mAP_z0_T"])
+                    for row in rows
+                    if row["mAP_z0_T"] is not None
+                ],
+            ),
+            (
+                "q_T",
+                [
+                    (row["step"], row["mAP_q_T"])
+                    for row in rows
+                    if row["mAP_q_T"] is not None
+                ],
+            ),
+        ],
+    )
+    save_plot(
+        paths["endpoint0_factorial"],
+        "Endpoint=0 text × transport factorial",
+        "pseudo-unseen mAP",
+        [
+            (
+                name,
+                [
+                    (int(step), value_)
+                    for step, value_ in cell["mAP_at"].items()
+                    if value_ is not None
+                ],
+            )
+            for name, cell in factorial["cells"].items()
+        ],
+    )
     rho_series = []
     for strategy, run in rho["runs"].items():
         if run is not None:
-            rho_series.append((strategy, [(int(step), value_) for step, value_ in run["mAP_at"].items() if value_ is not None]))
-    save_plot(paths["rho_schedule_ablation"], "Rho strategy ablation", "pseudo-unseen mAP", rho_series)
+            rho_series.append(
+                (
+                    strategy,
+                    [
+                        (int(step), value_)
+                        for step, value_ in run["mAP_at"].items()
+                        if value_ is not None
+                    ],
+                )
+            )
+    save_plot(
+        paths["rho_schedule_ablation"],
+        "Rho strategy ablation",
+        "pseudo-unseen mAP",
+        rho_series,
+    )
     angle_values = []
     angle_source = angles.get("values") if isinstance(angles, dict) else None
     if isinstance(angle_source, dict):
@@ -930,7 +1271,11 @@ def make_plots(
             summary = angle_source.get(key, {})
             raw = summary.get("values_degrees", []) if isinstance(summary, dict) else []
             if isinstance(raw, list):
-                angle_values.extend((key, float(value_)) for value_ in raw if isinstance(value_, (int, float)))
+                angle_values.extend(
+                    (key, float(value_))
+                    for value_ in raw
+                    if isinstance(value_, (int, float))
+                )
     plt.figure(figsize=(8, 5))
     if angle_values:
         for label in ("theta_train", "theta_train_fixed"):
@@ -939,35 +1284,102 @@ def make_plots(
                 plt.hist(values, bins=30, alpha=0.55, label=label)
         plt.legend(fontsize=8)
     else:
-        plt.text(0.5, 0.5, "not measured in retained artifacts", ha="center", va="center", transform=plt.gca().transAxes)
+        plt.text(
+            0.5,
+            0.5,
+            "not measured in retained artifacts",
+            ha="center",
+            va="center",
+            transform=plt.gca().transAxes,
+        )
     plt.xlabel("actual sampled target angle (degrees)")
     plt.ylabel("count")
     plt.title("Actual training sketch/photo target angles")
     plt.tight_layout()
     plt.savefig(paths["training_target_angle_histogram"], dpi=160)
     plt.close()
-    save_plot(paths["direction_supervision_ablation"], "Direction supervision ablation", "pseudo-unseen mAP", [
-        (name, [(int(step), value_) for step, value_ in run["mAP_at"].items() if value_ is not None])
-        for name, run in direction["variants"].items() if run is not None
-    ])
+    save_plot(
+        paths["direction_supervision_ablation"],
+        "Direction supervision ablation",
+        "pseudo-unseen mAP",
+        [
+            (
+                name,
+                [
+                    (int(step), value_)
+                    for step, value_ in run["mAP_at"].items()
+                    if value_ is not None
+                ],
+            )
+            for name, run in direction["variants"].items()
+            if run is not None
+        ],
+    )
     # The text report already stores exact curves in its raw run records.
     text_series = []
     for name, run in text["variants"].items():
         if run is not None:
             raw = run.get("raw", {})
             text_series.append((name, _series_from_raw(raw)))
-    save_plot(paths["text_anchor_location"], "Text semantic anchor location", "pseudo-unseen mAP", text_series)
+    save_plot(
+        paths["text_anchor_location"],
+        "Text semantic anchor location",
+        "pseudo-unseen mAP",
+        text_series,
+    )
     hidden_rows = hidden.get("checkpoints", [])
-    save_plot(paths["hidden_space_compatibility"], "Hidden-space compatibility with frozen W_CLIP", "score / residual", [
-        ("linear CKA", [(int(row["step"]), row["linear_cka"]) for row in hidden_rows if isinstance(row.get("linear_cka"), (int, float))]),
-        ("frozen projection cosine", [(int(row["step"]), row["frozen_projection_mean_cosine"]) for row in hidden_rows if isinstance(row.get("frozen_projection_mean_cosine"), (int, float))]),
-        ("Procrustes residual", [(int(row["step"]), row["procrustes_residual"]) for row in hidden_rows if isinstance(row.get("procrustes_residual"), (int, float))]),
-    ])
+    save_plot(
+        paths["hidden_space_compatibility"],
+        "Hidden-space compatibility with frozen W_CLIP",
+        "score / residual",
+        [
+            (
+                "linear CKA",
+                [
+                    (int(row["step"]), row["linear_cka"])
+                    for row in hidden_rows
+                    if isinstance(row.get("linear_cka"), (int, float))
+                ],
+            ),
+            (
+                "frozen projection cosine",
+                [
+                    (int(row["step"]), row["frozen_projection_mean_cosine"])
+                    for row in hidden_rows
+                    if isinstance(
+                        row.get("frozen_projection_mean_cosine"), (int, float)
+                    )
+                ],
+            ),
+            (
+                "Procrustes residual",
+                [
+                    (int(row["step"]), row["procrustes_residual"])
+                    for row in hidden_rows
+                    if isinstance(row.get("procrustes_residual"), (int, float))
+                ],
+            ),
+        ],
+    )
     freeze_series = []
     for name, run in freeze["variants"].items():
         if run is not None:
-            freeze_series.append((name, [(int(step), value_) for step, value_ in run["mAP_at"].items() if value_ is not None]))
-    save_plot(paths["freeze_optimizer_control"], "Optimizer-preserved freeze control", "pseudo-unseen mAP", freeze_series)
+            freeze_series.append(
+                (
+                    name,
+                    [
+                        (int(step), value_)
+                        for step, value_ in run["mAP_at"].items()
+                        if value_ is not None
+                    ],
+                )
+            )
+    save_plot(
+        paths["freeze_optimizer_control"],
+        "Optimizer-preserved freeze control",
+        "pseudo-unseen mAP",
+        freeze_series,
+    )
     conflict_entries = gradients.get("entries", [])
     plt.figure(figsize=(8, 5))
     labels: list[str] = []
@@ -976,14 +1388,21 @@ def make_plots(
         representation = entry.get("representation_space", {})
         q = representation.get("q", {}) if isinstance(representation, dict) else {}
         if isinstance(q, dict) and isinstance(q.get("endpoint_cls"), (int, float)):
-            labels.append(f"{entry.get('run','?')}@{entry.get('step','?')}")
+            labels.append(f"{entry.get('run', '?')}@{entry.get('step', '?')}")
             values.append(float(q["endpoint_cls"]))
     if values:
         plt.bar(range(len(values)), values)
         plt.xticks(range(len(values)), labels, rotation=75, ha="right", fontsize=6)
         plt.axhline(0.0, color="black", linewidth=0.8)
     else:
-        plt.text(0.5, 0.5, "representation-space gradients not measured", ha="center", va="center", transform=plt.gca().transAxes)
+        plt.text(
+            0.5,
+            0.5,
+            "representation-space gradients not measured",
+            ha="center",
+            va="center",
+            transform=plt.gca().transAxes,
+        )
     plt.ylabel("cos(dL_endpoint/dq, dL_cls/dq)")
     plt.title("Query-space gradient conflict")
     plt.tight_layout()
@@ -993,24 +1412,69 @@ def make_plots(
     for key, run in deterministic["values"].items():
         if run is not None and run.get("peak_mAP") is not None:
             k_series.append((key, [(0, run["peak_mAP"])]))
-    save_plot(paths["matched_K_ablation"], "Matched deterministic K ablation", "peak pseudo-unseen mAP", k_series, kind="bar")
+    save_plot(
+        paths["matched_K_ablation"],
+        "Matched deterministic K ablation",
+        "peak pseudo-unseen mAP",
+        k_series,
+        kind="bar",
+    )
     multi_values = multi_photo.get("values") or {}
     alignment = multi_photo.get("summary") or {}
     if not alignment and isinstance(multi_values, dict):
         alignment = multi_values.get("alignment", multi_values)
-    save_plot(paths["K_class_vs_instance_residual"], "K class versus instance-residual alignment", "alignment", [
-        ("class", [(int(index), value_) for index, value_ in enumerate(alignment.get("class_alignment_by_component", [])) if isinstance(value_, (int, float))]),
-        ("instance residual", [(int(index), value_) for index, value_ in enumerate(alignment.get("instance_residual_alignment_by_component", [])) if isinstance(value_, (int, float))]),
-    ])
-    save_plot(paths["stability_retention"], "Peak-to-late stability retention", "retention ratio", [
-        (row["name"], [(0, row["retention_ratio"])]) for row in stability if row.get("retention_ratio") is not None
-    ], kind="bar")
+    save_plot(
+        paths["K_class_vs_instance_residual"],
+        "K class versus instance-residual alignment",
+        "alignment",
+        [
+            (
+                "class",
+                [
+                    (int(index), value_)
+                    for index, value_ in enumerate(
+                        alignment.get("class_alignment_by_component", [])
+                    )
+                    if isinstance(value_, (int, float))
+                ],
+            ),
+            (
+                "instance residual",
+                [
+                    (int(index), value_)
+                    for index, value_ in enumerate(
+                        alignment.get("instance_residual_alignment_by_component", [])
+                    )
+                    if isinstance(value_, (int, float))
+                ],
+            ),
+        ],
+    )
+    save_plot(
+        paths["stability_retention"],
+        "Peak-to-late stability retention",
+        "retention ratio",
+        [
+            (row["name"], [(0, row["retention_ratio"])])
+            for row in stability
+            if row.get("retention_ratio") is not None
+        ],
+        kind="bar",
+    )
     replication_series = []
     for seed, contrasts in sorted((replication.get("contrasts") or {}).items()):
         for label, row in contrasts.items():
             if isinstance(row, dict) and isinstance(row.get("delta_mAP"), (int, float)):
-                replication_series.append((f"{seed}:{label}", [(0, float(row["delta_mAP"]))]))
-    save_plot(paths["seed_replication"], "Independent-seed matched control deltas", "mAP delta", replication_series, kind="bar")
+                replication_series.append(
+                    (f"{seed}:{label}", [(0, float(row["delta_mAP"]))])
+                )
+    save_plot(
+        paths["seed_replication"],
+        "Independent-seed matched control deltas",
+        "mAP delta",
+        replication_series,
+        kind="bar",
+    )
     return {key: str(path.relative_to(ROOT)) for key, path in paths.items()}
 
 
@@ -1019,7 +1483,9 @@ def _series_from_raw(raw: dict[str, Any]) -> list[tuple[int, float]]:
     answer = []
     for point in probes:
         if isinstance(point, dict) and metric(point, "val", "mAP") is not None:
-            answer.append((int(point.get("step", 0)), float(metric(point, "val", "mAP"))))
+            answer.append(
+                (int(point.get("step", 0)), float(metric(point, "val", "mAP")))
+            )
     return answer
 
 
@@ -1049,15 +1515,27 @@ def verdicts(
     stability: list[dict[str, Any]],
 ) -> dict[str, Any]:
     eligible = [
-        item for item in items
-        if explicit_transport_enabled(item["result"]) is True and best_point(item["result"]) is not None
+        item
+        for item in items
+        if explicit_transport_enabled(item["result"]) is True
+        and best_point(item["result"]) is not None
     ]
-    best_item = max(eligible, key=lambda item: metric(best_point(item["result"]), "val", "mAP") or -1, default=None)
+    best_item = max(
+        eligible,
+        key=lambda item: metric(best_point(item["result"]), "val", "mAP") or -1,
+        default=None,
+    )
     endpoint_runs = []
     for item in items:
-        if explicit_transport_enabled(item["result"]) is True and config_matches(item, lambda_endpoint=0.0):
+        if explicit_transport_enabled(item["result"]) is True and config_matches(
+            item, lambda_endpoint=0.0
+        ):
             endpoint_runs.append(item)
-    best_endpoint = max(endpoint_runs, key=lambda item: metric(best_point(item["result"]), "val", "mAP") or -1, default=None)
+    best_endpoint = max(
+        endpoint_runs,
+        key=lambda item: metric(best_point(item["result"]), "val", "mAP") or -1,
+        default=None,
+    )
     strict_mainline_default = selected_effective(
         items,
         lambda item: strict_transport(
@@ -1073,7 +1551,8 @@ def verdicts(
         ),
     )
     strict_r1_candidates = [
-        item for item in items
+        item
+        for item in items
         if strict_transport(
             item,
             text=True,
@@ -1083,7 +1562,8 @@ def verdicts(
             direction_target="moving",
             text_loss_location="q",
             num_positive_photos=1,
-        ) and best_point(item["result"]) is not None
+        )
+        and best_point(item["result"]) is not None
     ]
     strict_r1_best = max(
         strict_r1_candidates,
@@ -1092,9 +1572,19 @@ def verdicts(
     )
     peak = decomposition.get("peak") or {}
     late = decomposition.get("late") or {}
-    direction_values = [run.get("peak_mAP") for run in direction["variants"].values() if run is not None and run.get("peak_mAP") is not None]
-    text_values = {key: value.get("peak_mAP") if value is not None else None for key, value in text["variants"].items()}
-    rho_values = {key: value.get("peak_mAP") if value is not None else None for key, value in rho["runs"].items()}
+    direction_values = [
+        run.get("peak_mAP")
+        for run in direction["variants"].values()
+        if run is not None and run.get("peak_mAP") is not None
+    ]
+    text_values = {
+        key: value.get("peak_mAP") if value is not None else None
+        for key, value in text["variants"].items()
+    }
+    rho_values = {
+        key: value.get("peak_mAP") if value is not None else None
+        for key, value in rho["runs"].items()
+    }
     return {
         "best_item": best_item,
         "strict_mainline_default_item": strict_mainline_default,
@@ -1108,7 +1598,9 @@ def verdicts(
         "best_deterministic_K": deterministic.get("best_deterministic_K"),
         "hidden_peak": hidden.get("at_peak"),
         "hidden_late": hidden.get("at_5400"),
-        "stability_best": max(stability, key=lambda row: row.get("peak_mAP", -1), default=None),
+        "stability_best": max(
+            stability, key=lambda row: row.get("peak_mAP", -1), default=None
+        ),
         "multi_photo": multi_photo.get("summary"),
     }
 
@@ -1137,16 +1629,28 @@ def build_markdown(
     best_item = decisions["best_item"]
     best_result = None if best_item is None else best_point(best_item["result"])
     strict_mainline_item = decisions.get("strict_mainline_default_item")
-    strict_mainline_result = None if strict_mainline_item is None else best_point(strict_mainline_item["result"])
+    strict_mainline_result = (
+        None
+        if strict_mainline_item is None
+        else best_point(strict_mainline_item["result"])
+    )
     strict_r1_best_item = decisions.get("strict_r1_best_item")
-    strict_r1_best_result = None if strict_r1_best_item is None else best_point(strict_r1_best_item["result"])
+    strict_r1_best_result = (
+        None
+        if strict_r1_best_item is None
+        else best_point(strict_r1_best_item["result"])
+    )
     best_endpoint = decisions["best_endpoint_item"]
-    best_endpoint_point = None if best_endpoint is None else best_point(best_endpoint["result"])
+    best_endpoint_point = (
+        None if best_endpoint is None else best_point(best_endpoint["result"])
+    )
     hidden_peak = hidden.get("at_peak") or {}
     hidden_late = hidden.get("at_5400") or {}
     peak_projection_cosine = hidden_peak.get("frozen_projection_mean_cosine")
     late_projection_cosine = hidden_late.get("frozen_projection_mean_cosine")
-    if isinstance(peak_projection_cosine, (int, float)) and isinstance(late_projection_cosine, (int, float)):
+    if isinstance(peak_projection_cosine, (int, float)) and isinstance(
+        late_projection_cosine, (int, float)
+    ):
         hidden_verdict = f"YES: frozen-projection cosine falls from {peak_projection_cosine:.4f} at peak to {late_projection_cosine:.4f} at 5400 despite CKA remaining measurable"
     else:
         hidden_verdict = "not measured"
@@ -1156,7 +1660,10 @@ def build_markdown(
         for name, value in freeze_values.items()
         if isinstance(value, dict)
     }
-    if freeze_late.get("freeze_73") is not None and freeze_late.get("continue_normal") is not None:
+    if (
+        freeze_late.get("freeze_73") is not None
+        and freeze_late.get("continue_normal") is not None
+    ):
         freeze_verdict = f"freeze@73 changes late mAP by {freeze_late['freeze_73'] - freeze_late['continue_normal']:+.6f} versus the optimizer-restored normal fork"
     else:
         freeze_verdict = "not measured"
@@ -1197,10 +1704,21 @@ def build_markdown(
         "| ---: | --------: | --------: | -------: | -------------: | ----------: | -----------: |",
     ]
     for row in decomposition["steps"]:
-        lines.append("| " + " | ".join([
-            str(row["step"]), fmt(row["mAP_z0_B"]), fmt(row["mAP_z0_T"]), fmt(row["mAP_q_T"]),
-            fmt(row["encoder_effect"]), fmt(row["head_effect"]), fmt(row["total_effect"]),
-        ]) + " |")
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row["step"]),
+                    fmt(row["mAP_z0_B"]),
+                    fmt(row["mAP_z0_T"]),
+                    fmt(row["mAP_q_T"]),
+                    fmt(row["encoder_effect"]),
+                    fmt(row["head_effect"]),
+                    fmt(row["total_effect"]),
+                ]
+            )
+            + " |"
+        )
     lines += [
         f"- Peak decomposition: encoder-training effect={fmt(peak.get('encoder_effect'))}, inference-head effect={fmt(peak.get('head_effect'))}, total system effect={fmt(peak.get('total_effect'))} at step {peak.get('step', 'not measured')}.",
         f"- Late decomposition: encoder-training effect={fmt(late.get('encoder_effect'))}, inference-head effect={fmt(late.get('head_effect'))}, total system effect={fmt(late.get('total_effect'))} at step 5400.",
@@ -1212,10 +1730,14 @@ def build_markdown(
     ]
     for key in ("A", "B", "C", "D"):
         cell = factorial["cells"][key]
-        lines.append(f"| {key} {cell['label']} | {'yes' if cell['transport'] else 'no'} | {'yes' if cell['text'] else 'no'} | {fmt(cell['peak_mAP'])} | {cell['peak_step'] if cell['peak_step'] is not None else 'not measured'} | {fmt(cell['mAP_at'].get('5400'))} |")
+        lines.append(
+            f"| {key} {cell['label']} | {'yes' if cell['transport'] else 'no'} | {'yes' if cell['text'] else 'no'} | {fmt(cell['peak_mAP'])} | {cell['peak_step'] if cell['peak_step'] is not None else 'not measured'} | {fmt(cell['mAP_at'].get('5400'))} |"
+        )
     for phase in ("peak", "late"):
         values = factorial["contrasts"][phase]
-        lines.append(f"- {phase} (common checkpoint {values.get('checkpoint_step', 'not measured')}): text main effect without transport={fmt(values.get('text_without_transport'))}; with transport={fmt(values.get('text_with_transport'))}; transport main effect without text={fmt(values.get('transport_without_text'))}; with text={fmt(values.get('transport_with_text'))}; interaction={fmt(values.get('interaction'))}.")
+        lines.append(
+            f"- {phase} (common checkpoint {values.get('checkpoint_step', 'not measured')}): text main effect without transport={fmt(values.get('text_without_transport'))}; with transport={fmt(values.get('text_with_transport'))}; transport main effect without text={fmt(values.get('transport_without_text'))}; with text={fmt(values.get('transport_with_text'))}; interaction={fmt(values.get('interaction'))}."
+        )
     lines += [
         "",
         "## 6. Rho Verdict",
@@ -1224,9 +1746,13 @@ def build_markdown(
     ]
     for strategy, value_ in rho["runs"].items():
         if value_ is None:
-            lines.append(f"| {strategy} | not measured | not measured | not measured | not measured | not measured | not measured | not measured |")
+            lines.append(
+                f"| {strategy} | not measured | not measured | not measured | not measured | not measured | not measured | not measured |"
+            )
         else:
-            lines.append(f"| {strategy} | {fmt(value_.get('peak_mAP'))} | {value_.get('peak_step', 'not measured')} | {fmt(value_.get('mAP_at', {}).get('500'))} | {fmt(value_.get('mAP_at', {}).get('1800'))} | {fmt(value_.get('mAP_at', {}).get('5400'))} | {fmt(value_.get('semantic_margin'))} | {fmt(value_.get('query_reference_cosine'))} |")
+            lines.append(
+                f"| {strategy} | {fmt(value_.get('peak_mAP'))} | {value_.get('peak_step', 'not measured')} | {fmt(value_.get('mAP_at', {}).get('500'))} | {fmt(value_.get('mAP_at', {}).get('1800'))} | {fmt(value_.get('mAP_at', {}).get('5400'))} | {fmt(value_.get('semantic_margin'))} | {fmt(value_.get('query_reference_cosine'))} |"
+            )
     lines += [
         f"- Learned rho distribution at peak: `{rho.get('learned_rho_distribution_at_peak') or 'not measured'}`.",
         f"- Learned-rho correlations (rho/AP, rho/class margin, rho/target angle): `{rho.get('learned_rho_correlations_at_peak') or 'not measured'}`.",
@@ -1237,7 +1763,9 @@ def build_markdown(
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for target, value_ in direction["variants"].items():
-        lines.append(f"| {target} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('semantic_margin'))} | {fmt(None if value_ is None else value_.get('moving_target_alignment'))} | {fmt(None if value_ is None else value_.get('fixed_target_alignment'))} | {fmt(None if value_ is None else value_.get('target_frame_agreement'))} |")
+        lines.append(
+            f"| {target} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('semantic_margin'))} | {fmt(None if value_ is None else value_.get('moving_target_alignment'))} | {fmt(None if value_ is None else value_.get('fixed_target_alignment'))} | {fmt(None if value_ is None else value_.get('target_frame_agreement'))} |"
+        )
     lines += [
         f"- Does explicit photo-direction prediction improve retrieval: **{direction.get('verdict', 'not measured')}**.",
         "- Moving-frame alignment is not treated as genuine by itself; fixed-target alignment and retrieval are required.",
@@ -1247,7 +1775,9 @@ def build_markdown(
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for location, value_ in text["variants"].items():
-        lines.append(f"| CE({location}) | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('late_mAP'))} | {fmt(None if value_ is None else value_.get('peak_mAP_z0'))} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('peak_semantic_margin_z0'))} | {fmt(None if value_ is None else value_.get('peak_semantic_margin_q'))} | {fmt(None if value_ is None else value_.get('seen_classification_accuracy_latest'))} |")
+        lines.append(
+            f"| CE({location}) | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('late_mAP'))} | {fmt(None if value_ is None else value_.get('peak_mAP_z0'))} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('peak_semantic_margin_z0'))} | {fmt(None if value_ is None else value_.get('peak_semantic_margin_q'))} | {fmt(None if value_ is None else value_.get('seen_classification_accuracy_latest'))} |"
+        )
     lines += [
         f"- Best text-supervision location: **{text.get('best_location', 'not measured')}**.",
         "- Text enters predictor: **NO**.",
@@ -1257,7 +1787,9 @@ def build_markdown(
         "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in hidden.get("checkpoints", []):
-        lines.append(f"| {row.get('step')} | {fmt(row.get('linear_cka'))} | {fmt(row.get('procrustes_residual'))} | {fmt(row.get('frozen_projection_mean_cosine'))} | {fmt(row.get('effective_rank_h_ref'))} | {fmt(row.get('effective_rank_h_t'))} | {fmt(row.get('effective_rank_W_h_t'))} |")
+        lines.append(
+            f"| {row.get('step')} | {fmt(row.get('linear_cka'))} | {fmt(row.get('procrustes_residual'))} | {fmt(row.get('frozen_projection_mean_cosine'))} | {fmt(row.get('effective_rank_h_ref'))} | {fmt(row.get('effective_rank_h_t'))} | {fmt(row.get('effective_rank_W_h_t'))} |"
+        )
     lines += [
         f"- At retrieval peak: `{hidden.get('at_peak') or 'not measured'}`.",
         f"- At step 5400: `{hidden.get('at_5400') or 'not measured'}`.",
@@ -1270,11 +1802,21 @@ def build_markdown(
     ]
     for name, value_ in freeze["variants"].items():
         if value_ is None:
-            lines.append(f"| {name} | not measured | not measured | not measured | not measured | not measured |")
+            lines.append(
+                f"| {name} | not measured | not measured | not measured | not measured | not measured |"
+            )
         else:
             encoder = "frozen" if "freeze" in name else "trainable"
-            state = "reset" if value_.get("optimizer_state_reset") else "restored" if value_.get("optimizer_state_restored") else "unavailable"
-            lines.append(f"| {name} | {encoder} | {state} | {fmt(value_.get('mAP_at', {}).get('500'))} | {fmt(value_.get('mAP_at', {}).get('1800'))} | {fmt(value_.get('mAP_at', {}).get('5400'))} |")
+            state = (
+                "reset"
+                if value_.get("optimizer_state_reset")
+                else "restored"
+                if value_.get("optimizer_state_restored")
+                else "unavailable"
+            )
+            lines.append(
+                f"| {name} | {encoder} | {state} | {fmt(value_.get('mAP_at', {}).get('500'))} | {fmt(value_.get('mAP_at', {}).get('1800'))} | {fmt(value_.get('mAP_at', {}).get('5400'))} |"
+            )
     lines += [
         f"- Optimizer-preserved freeze comparison: **{freeze_verdict}**.",
         "",
@@ -1288,7 +1830,9 @@ def build_markdown(
         "| ---: | ---: | ---: | --- | ---: | --- |",
     ]
     for key, value_ in deterministic["values"].items():
-        lines.append(f"| {key} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('late_mAP'))} | {fmt(None if value_ is None else value_.get('component_usage'))} | {fmt(None if value_ is None else value_.get('gate_entropy'))} | {fmt(None if value_ is None else value_.get('pairwise_direction_cosine'))} |")
+        lines.append(
+            f"| {key} | {fmt(None if value_ is None else value_.get('peak_mAP'))} | {fmt(None if value_ is None else value_.get('late_mAP'))} | {fmt(None if value_ is None else value_.get('component_usage'))} | {fmt(None if value_ is None else value_.get('gate_entropy'))} | {fmt(None if value_ is None else value_.get('pairwise_direction_cosine'))} |"
+        )
     lines += [
         f"- Best deterministic K: **{deterministic.get('best_deterministic_K', 'not measured')}**.",
         "- Mo-vMF verdict: **DEFER**; the matched K>1 family and R=8 residual probe do not justify adding a density model.",
@@ -1302,8 +1846,12 @@ def build_markdown(
         "| Run | Peak | Peak step | Late | Retention ratio | Absolute decay |",
         "| --- | ---: | ---: | ---: | ---: | ---: |",
     ]
-    for row in sorted(stability, key=lambda row: row.get('peak_mAP', -1), reverse=True)[:30]:
-        lines.append(f"| {row['name']} | {fmt(row.get('peak_mAP'))} | {row.get('peak_step')} | {fmt(row.get('late_mAP'))} | {fmt(row.get('retention_ratio'))} | {fmt(row.get('absolute_decay'))} |")
+    for row in sorted(stability, key=lambda row: row.get("peak_mAP", -1), reverse=True)[
+        :30
+    ]:
+        lines.append(
+            f"| {row['name']} | {fmt(row.get('peak_mAP'))} | {row.get('peak_step')} | {fmt(row.get('late_mAP'))} | {fmt(row.get('retention_ratio'))} | {fmt(row.get('absolute_decay'))} |"
+        )
     replication = report.get("seed_replication", {})
     lines += [
         "- Peak and mAP@5400 are both reported; early-stopping selection is not called long-run stability.",
@@ -1315,11 +1863,17 @@ def build_markdown(
     ]
     for group, rows in (replication.get("groups") or {}).items():
         for seed, row in sorted(rows.items(), key=lambda pair: int(pair[0])):
-            lines.append(f"| {seed} | {group} | `{row.get('run')}` | {fmt(row.get('peak_mAP'))} | {row.get('peak_step', 'not measured')} | {fmt(row.get('late_mAP'))} |")
+            lines.append(
+                f"| {seed} | {group} | `{row.get('run')}` | {fmt(row.get('peak_mAP'))} | {row.get('peak_step', 'not measured')} | {fmt(row.get('late_mAP'))} |"
+            )
     lines.append("- Same-seed matched deltas (at the left run's peak checkpoint):")
-    for seed, rows in sorted((replication.get("contrasts") or {}).items(), key=lambda pair: int(pair[0])):
+    for seed, rows in sorted(
+        (replication.get("contrasts") or {}).items(), key=lambda pair: int(pair[0])
+    ):
         for label, row in rows.items():
-            lines.append(f"  - seed {seed}, {label}: {fmt(row.get('delta_mAP'))} at step {row.get('checkpoint_step', 'not measured')}")
+            lines.append(
+                f"  - seed {seed}, {label}: {fmt(row.get('delta_mAP'))} at step {row.get('checkpoint_step', 'not measured')}"
+            )
     lines += [
         "",
         "## 16. Refined SPICA Mechanism",
@@ -1331,7 +1885,15 @@ def build_markdown(
         "## Plots",
     ]
     lines.extend(f"- `{path}`" for path in plots.values())
-    lines += ["", "## Raw Artifact Coverage", f"- Transport run artifacts inspected: {len(report.get('artifact_index', []))}.", "- Official test used for selection: **NO**.", "", "FINAL SPICA DEEP-PROBE VERDICT", ""]
+    lines += [
+        "",
+        "## Raw Artifact Coverage",
+        f"- Transport run artifacts inspected: {len(report.get('artifact_index', []))}.",
+        "- Official test used for selection: **NO**.",
+        "",
+        "FINAL SPICA DEEP-PROBE VERDICT",
+        "",
+    ]
 
     rho_values = decisions["rho_values"]
     direction_variants = direction["variants"]
@@ -1340,10 +1902,16 @@ def build_markdown(
     hidden_late = decisions.get("hidden_late") or {}
     best_stability = decisions.get("stability_best") or {}
     best_config = "not measured" if best_item is None else best_item["config"]
-    best_checkpoint = "not measured" if best_result is None else best_result.get("checkpoint", "not retained")
+    best_checkpoint = (
+        "not measured"
+        if best_result is None
+        else best_result.get("checkpoint", "not retained")
+    )
+
     def v(name: str) -> Any:
         value_ = direction_variants.get(name)
         return None if value_ is None else value_.get("peak_mAP")
+
     text_values = decisions["text_values"]
     lines += [
         f"Repository commit: {repository.get('current_commit') or 'unavailable'}",
@@ -1462,7 +2030,20 @@ def main() -> None:
     # causal contrasts or replace the primary selected cell.
     items = [item for item in all_items if item["config"].get("seed", 42) == 42]
     base = selected_effective(items, lambda item: strict_base(item, text=False))
-    transport = selected_effective(items, lambda item: strict_transport(item, text=True, K=1, lambda_endpoint=0.0, use_vmf=False, num_positive_photos=1, rho_strategy="learned", direction_target="moving", text_loss_location="q"))
+    transport = selected_effective(
+        items,
+        lambda item: strict_transport(
+            item,
+            text=True,
+            K=1,
+            lambda_endpoint=0.0,
+            use_vmf=False,
+            num_positive_photos=1,
+            rho_strategy="learned",
+            direction_target="moving",
+            text_loss_location="q",
+        ),
+    )
     decomposition = causal_decomposition(base, transport)
     factorial = factorial_report(items)
     rho = rho_report(items)
@@ -1486,7 +2067,8 @@ def main() -> None:
                 "K=1 requires explicit transport_enabled=true and matched deterministic transport conditions",
             ],
             "source_run_provenance": {
-                str(item["path"].relative_to(ROOT)): item["provenance"] for item in all_items
+                str(item["path"].relative_to(ROOT)): item["provenance"]
+                for item in all_items
             },
         },
         "artifact_index": raw_index(all_items),
@@ -1513,17 +2095,54 @@ def main() -> None:
             "historical_missing_cells_are_null": True,
         },
     }
-    decisions = verdicts(items, decomposition, factorial, rho, direction, text, hidden, freeze, deterministic, multi_photo, stability)
+    decisions = verdicts(
+        items,
+        decomposition,
+        factorial,
+        rho,
+        direction,
+        text,
+        hidden,
+        freeze,
+        deterministic,
+        multi_photo,
+        stability,
+    )
     report["decisions"] = {
-        key: value if not isinstance(value, dict) or "result" not in value else run_ref(value)
+        key: value
+        if not isinstance(value, dict) or "result" not in value
+        else run_ref(value)
         for key, value in decisions.items()
     }
-    plots = make_plots(items, decomposition, factorial, rho, direction, text, hidden, freeze, deterministic, angles, stability, gradients, multi_photo, replication)
+    plots = make_plots(
+        items,
+        decomposition,
+        factorial,
+        rho,
+        direction,
+        text,
+        hidden,
+        freeze,
+        deterministic,
+        angles,
+        stability,
+        gradients,
+        multi_photo,
+        replication,
+    )
     report["plots"] = plots
-    markdown = build_markdown(report=report, items=items, decisions=decisions, plots=plots, report_date=args.date)
+    markdown = build_markdown(
+        report=report,
+        items=items,
+        decisions=decisions,
+        plots=plots,
+        report_date=args.date,
+    )
     json_path = OUTPUTS / f"research_summary_transport_deep_probe_{args.date}.json"
     md_path = OUTPUTS / f"research_summary_transport_deep_probe_{args.date}.md"
-    json_path.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n")
+    json_path.write_text(
+        json.dumps(report, indent=2, sort_keys=True, default=str) + "\n"
+    )
     md_path.write_text(markdown)
     print(f"wrote {md_path}")
     print(f"wrote {json_path}")

@@ -144,9 +144,7 @@ def _validate_query_target_pair(
     name: str = "targets",
 ) -> None:
     if queries.ndim != 2 or targets.ndim != 2:
-        raise ValueError(
-            f"queries and {name} must both have shape [batch, dimension]"
-        )
+        raise ValueError(f"queries and {name} must both have shape [batch, dimension]")
     if queries.shape != targets.shape:
         raise ValueError(
             f"queries and {name} must have matching shapes, got "
@@ -162,9 +160,12 @@ def _validate_query_target_pair(
 def jepa_prediction_loss(queries: Tensor, target: Tensor) -> Tensor:
     """Cosine prediction loss against a detached photo-semantic target."""
     _validate_query_target_pair(queries, target, name="target")
-    return 1.0 - (
-        F.normalize(queries, dim=-1) * F.normalize(target.detach(), dim=-1)
-    ).sum(dim=-1).mean()
+    return (
+        1.0
+        - (F.normalize(queries, dim=-1) * F.normalize(target.detach(), dim=-1))
+        .sum(dim=-1)
+        .mean()
+    )
 
 
 def jepa_ranking_loss(
@@ -178,7 +179,9 @@ def jepa_ranking_loss(
     if not math.isfinite(margin) or margin < 0:
         raise ValueError("margin must be finite and non-negative")
     _validate_query_target_pair(queries, positive_target, name="positive_target")
-    _validate_query_target_pair(queries, negative_embeddings, name="negative_embeddings")
+    _validate_query_target_pair(
+        queries, negative_embeddings, name="negative_embeddings"
+    )
     query = F.normalize(queries, dim=-1)
     positive = F.normalize(positive_target.detach(), dim=-1)
     negative = F.normalize(negative_embeddings.detach(), dim=-1)
@@ -294,17 +297,17 @@ class SignatureRegularizer(nn.Module):
         centered = latent - latent.mean(dim=0, keepdim=True)
         std = centered.std(dim=0, unbiased=False).clamp_min(1e-4)
         standardized = centered / std
-        projected = standardized @ self.projections.to(
-            device=latent.device, dtype=latent.dtype
-        ).T
+        projected = (
+            standardized
+            @ self.projections.to(device=latent.device, dtype=latent.dtype).T
+        )
         frequencies = self.frequencies.to(device=latent.device, dtype=latent.dtype)
         arguments = projected[..., None] * frequencies
         empirical_real = arguments.cos().mean(dim=0)
         empirical_imag = arguments.sin().mean(dim=0)
         target_real = torch.exp(-0.5 * frequencies.square())
         return (
-            (empirical_real - target_real[None, :]).square()
-            + empirical_imag.square()
+            (empirical_real - target_real[None, :]).square() + empirical_imag.square()
         ).mean()
 
 

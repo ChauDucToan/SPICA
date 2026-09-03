@@ -90,9 +90,7 @@ def _save_checkpoint(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     routing_mode = str(args.routing_mode)
-    objective = (
-        ANGULAR_OBJECTIVE_NAME if routing_mode == "angular" else OBJECTIVE_NAME
-    )
+    objective = ANGULAR_OBJECTIVE_NAME if routing_mode == "angular" else OBJECTIVE_NAME
     torch.save(
         {
             "format_version": 1,
@@ -113,9 +111,7 @@ def _save_checkpoint(
                 "dataset": data_name,
                 "split": "train",
                 "model_name": str(args.model_name),
-                "pretrained": None
-                if args.pretrained is None
-                else str(args.pretrained),
+                "pretrained": None if args.pretrained is None else str(args.pretrained),
                 "frozen_clip": True,
                 "num_components": predictor.num_components,
                 "initialization_scheme": "shared_direction_gate_order_v2",
@@ -127,9 +123,7 @@ def _save_checkpoint(
                 "vMF": False,
                 "routing_mode": routing_mode,
                 "assignment_temperature": float(args.assignment_temperature),
-                "angular_assignment_weight": float(
-                    args.angular_assignment_weight
-                ),
+                "angular_assignment_weight": float(args.angular_assignment_weight),
                 "margin": float(args.margin),
                 "ranking_weight": 1.0,
                 "gate_prior_weight": float(args.gate_prior_weight),
@@ -139,12 +133,8 @@ def _save_checkpoint(
                 "dominant_photo_anchor_weight": float(
                     args.dominant_photo_anchor_weight
                 ),
-                "semantic_consistency_weight": float(
-                    args.semantic_consistency_weight
-                ),
-                "satellite_coverage_weight": float(
-                    args.satellite_coverage_weight
-                ),
+                "semantic_consistency_weight": float(args.semantic_consistency_weight),
+                "satellite_coverage_weight": float(args.satellite_coverage_weight),
                 "spread_matching_weight": float(args.spread_matching_weight),
                 "target_dominant_weight": float(args.target_dominant_weight),
                 "consistency_temperature": float(args.consistency_temperature),
@@ -304,8 +294,7 @@ def run(args: DictConfig) -> None:
                 * regularization.semantic_consistency
                 + float(args.satellite_coverage_weight)
                 * regularization.satellite_coverage
-                + float(args.spread_matching_weight)
-                * regularization.spread_matching
+                + float(args.spread_matching_weight) * regularization.spread_matching
             )
             angular = None
             if routing_mode == "angular":
@@ -316,9 +305,10 @@ def run(args: DictConfig) -> None:
                     margin=float(args.margin),
                     assignment_temperature=float(args.assignment_temperature),
                 )
-                combined_loss = combined_loss + float(
-                    args.angular_assignment_weight
-                ) * angular.total
+                combined_loss = (
+                    combined_loss
+                    + float(args.angular_assignment_weight) * angular.total
+                )
             if not torch.isfinite(combined_loss).item():
                 raise FloatingPointError("Stage-E deterministic loss is not finite")
             combined_loss.backward()
@@ -328,9 +318,9 @@ def run(args: DictConfig) -> None:
 
             with torch.no_grad():
                 gates = prediction.gate_logits.softmax(dim=-1)
-                gate_entropy = -(
-                    gates * gates.clamp_min(1e-12).log()
-                ).sum(dim=-1).mean()
+                gate_entropy = (
+                    -(gates * gates.clamp_min(1e-12).log()).sum(dim=-1).mean()
+                )
                 values: dict[str, float | int] = {
                     "step": step + 1,
                     "loss": combined_loss.item(),
@@ -352,7 +342,9 @@ def run(args: DictConfig) -> None:
                             "angular_assignment_entropy": angular.assignment_entropy.item(),
                             "angular_max_responsibility": angular.assignment_responsibilities.max(
                                 dim=-1
-                            ).values.mean().item(),
+                            )
+                            .values.mean()
+                            .item(),
                         }
                     )
             step += 1

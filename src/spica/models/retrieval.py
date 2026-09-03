@@ -64,7 +64,9 @@ def deterministic_single_direction_multi_positive_retrieval_loss(
         or positive_embeddings.ndim != 3
         or negative_embeddings.ndim != 2
     ):
-        raise ValueError("expected predictions [B,D], positives [B,M,D], negative [B,D]")
+        raise ValueError(
+            "expected predictions [B,D], positives [B,M,D], negative [B,D]"
+        )
     if positive_embeddings.shape[1] <= 0:
         raise ValueError("positive_embeddings must contain at least one positive")
     batch_size, embedding_dim = predicted_embeddings.shape
@@ -87,9 +89,7 @@ def deterministic_single_direction_multi_positive_retrieval_loss(
         "bd,bmd->bm", predicted_embeddings, positive_embeddings
     )
     negative_scores = (predicted_embeddings * negative_embeddings).sum(dim=-1)
-    return F.softplus(
-        margin - positive_scores + negative_scores[:, None]
-    ).mean()
+    return F.softplus(margin - positive_scores + negative_scores[:, None]).mean()
 
 
 def _validate_multi_positive_embeddings(
@@ -404,21 +404,19 @@ def deterministic_angular_positive_assignment_loss(
         + positive_component_cosines / assignment_temperature
     )
     responsibilities = assignment_logits.softmax(dim=-1)
-    negative_component_cosines = (
-        directions * negative[:, None, :]
-    ).sum(dim=-1)
-    routed_positive_cosines = (
-        responsibilities * positive_component_cosines
-    ).sum(dim=-1)
+    negative_component_cosines = (directions * negative[:, None, :]).sum(dim=-1)
+    routed_positive_cosines = (responsibilities * positive_component_cosines).sum(
+        dim=-1
+    )
     routed_negative_cosines = (
         responsibilities * negative_component_cosines[:, None, :]
     ).sum(dim=-1)
     total = F.softplus(
         margin - routed_positive_cosines + routed_negative_cosines
     ).mean()
-    assignment_entropy = -(
-        responsibilities * responsibilities.clamp_min(1e-12).log()
-    ).sum(dim=-1).mean()
+    assignment_entropy = (
+        -(responsibilities * responsibilities.clamp_min(1e-12).log()).sum(dim=-1).mean()
+    )
     return DeterministicAngularRoutingLoss(
         total=total,
         assignment_responsibilities=responsibilities,
@@ -444,7 +442,9 @@ def deterministic_dominant_satellite_regularization(
     if directions.shape[1] < 2 or positive_embeddings.ndim != 3:
         raise ValueError("deterministic dominant/satellite inputs have invalid shapes")
     if positive_embeddings.shape[1] < 2:
-        raise ValueError("deterministic dominant/satellite regularization requires M >= 2")
+        raise ValueError(
+            "deterministic dominant/satellite regularization requires M >= 2"
+        )
     if sketch_embeddings.shape != directions.shape[:1] + directions.shape[2:]:
         raise ValueError("sketch_embeddings shape must match [B, D]")
     if not 1.0 / directions.shape[1] < target_dominant_weight < 1.0:
@@ -464,7 +464,9 @@ def deterministic_dominant_satellite_regularization(
     dominant_sketch_anchor = (1.0 - (dominant * sketch).sum(dim=-1)).mean()
     centroid = F.normalize(positives.mean(dim=1), dim=-1)
     dominant_photo_anchor = (1.0 - (dominant * centroid).sum(dim=-1)).mean()
-    semantic_center = F.normalize((probabilities[..., None] * directions).sum(dim=1), dim=-1)
+    semantic_center = F.normalize(
+        (probabilities[..., None] * directions).sum(dim=1), dim=-1
+    )
     logits = semantic_center @ sketch.T / consistency_temperature
     labels = torch.arange(logits.shape[0], device=logits.device)
     semantic_consistency = 0.5 * (
@@ -473,14 +475,18 @@ def deterministic_dominant_satellite_regularization(
     # Set coverage is component-wise: each satellite is encouraged to be close
     # to some positive, but positives do not compete for components and no
     # positive-to-component responsibility/routing distribution is formed here.
-    satellite_cosines = (directions[:, 1:, None, :] * positives[:, None, :, :]).sum(dim=-1)
+    satellite_cosines = (directions[:, 1:, None, :] * positives[:, None, :, :]).sum(
+        dim=-1
+    )
     satellite_coverage = (1.0 - satellite_cosines.max(dim=-1).values).mean()
     positive_pairs = torch.triu_indices(
         positives.shape[1], positives.shape[1], offset=1, device=positives.device
     )
     target_spread = (
-        positives[:, positive_pairs[0], :] * positives[:, positive_pairs[1], :]
-    ).sum(dim=-1).mean(dim=-1)
+        (positives[:, positive_pairs[0], :] * positives[:, positive_pairs[1], :])
+        .sum(dim=-1)
+        .mean(dim=-1)
+    )
     component_pairs = torch.triu_indices(
         directions.shape[1], directions.shape[1], offset=1, device=directions.device
     )

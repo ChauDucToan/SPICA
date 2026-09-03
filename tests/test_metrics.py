@@ -40,7 +40,11 @@ def test_map_denominator_variants_are_explicit():
         torch.tensor([1, 2, 1, 2]),
         ("a", "b", "c", "d"),
     )
-    for convention, expected in (("prefix_positive", 1.0), ("all_relevant", 0.5), ("min_relevant_k", 0.5)):
+    for convention, expected in (
+        ("prefix_positive", 1.0),
+        ("all_relevant", 0.5),
+        ("min_relevant_k", 0.5),
+    ):
         result = evaluate_category_retrieval(
             q, g, precision_at_k=(1,), map_at_k=(2,), map_at_k_denominator=convention
         )

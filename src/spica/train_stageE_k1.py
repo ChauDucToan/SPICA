@@ -74,9 +74,7 @@ def _save_checkpoint(
                 "dataset": data_name,
                 "split": "train",
                 "model_name": str(args.model_name),
-                "pretrained": None
-                if args.pretrained is None
-                else str(args.pretrained),
+                "pretrained": None if args.pretrained is None else str(args.pretrained),
                 "frozen_clip": True,
                 "num_components": 1,
                 "positives_per_anchor_per_step": int(args.num_positive_photos),
@@ -90,9 +88,7 @@ def _save_checkpoint(
                 "dominant_photo_anchor_weight": float(
                     args.dominant_photo_anchor_weight
                 ),
-                "semantic_consistency_weight": float(
-                    args.semantic_consistency_weight
-                ),
+                "semantic_consistency_weight": float(args.semantic_consistency_weight),
                 "consistency_temperature": float(args.consistency_temperature),
                 "warmup_steps": int(args.warmup_steps),
                 "batch_size": int(args.batch_size),
@@ -178,11 +174,10 @@ def main(args: DictConfig) -> None:
                 1.0 - (predicted * F.normalize(sketch, dim=-1)).sum(dim=-1)
             ).mean()
             centroid = F.normalize(positives.mean(dim=1), dim=-1)
-            predicted_photo_anchor = (
-                1.0 - (predicted * centroid).sum(dim=-1)
-            ).mean()
+            predicted_photo_anchor = (1.0 - (predicted * centroid).sum(dim=-1)).mean()
             consistency_logits = (
-                predicted @ F.normalize(sketch, dim=-1).T
+                predicted
+                @ F.normalize(sketch, dim=-1).T
                 / float(args.consistency_temperature)
             )
             labels = torch.arange(sketch.shape[0], device=device)
@@ -200,7 +195,10 @@ def main(args: DictConfig) -> None:
                 raise FloatingPointError("K=1 Stage-E loss is not finite")
             loss.backward()
             for name, parameter in predictor.named_parameters():
-                if parameter.grad is None or not torch.isfinite(parameter.grad).all().item():
+                if (
+                    parameter.grad is None
+                    or not torch.isfinite(parameter.grad).all().item()
+                ):
                     raise FloatingPointError(f"Invalid predictor gradient: {name}")
             optimizer.step()
             _check_module_parameters_finite(predictor)

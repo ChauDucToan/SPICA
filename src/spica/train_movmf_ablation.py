@@ -602,9 +602,7 @@ def main(args: DictConfig) -> None:
                     name: value / window_count for name, value in window_sums.items()
                 }
                 temperature_text = (
-                    "warmup_fixed_prior"
-                    if in_warmup
-                    else f"{gate_temperature:.2f}"
+                    "warmup_fixed_prior" if in_warmup else f"{gate_temperature:.2f}"
                 )
                 print(
                     f"step={step:04d} loss={means['total']:.5f} "

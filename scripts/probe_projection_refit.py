@@ -20,7 +20,11 @@ from spica.evaluation.embeddings import EncodedRetrievalSet, encode_retrieval_lo
 from spica.evaluation.metrics import evaluate_category_retrieval
 from spica.evaluation.transport import hidden_space_compatibility
 from spica.evaluate_transport import _load_model
-from spica.models.clip import frozen_visual_projection, load_frozen_clip, visual_pre_projection
+from spica.models.clip import (
+    frozen_visual_projection,
+    load_frozen_clip,
+    visual_pre_projection,
+)
 from spica.provenance import capture_provenance, hash_json
 from spica.train_transport import PROJECT_ROOT, _build_split
 
@@ -124,7 +128,9 @@ def _alignment(predicted: torch.Tensor, target: torch.Tensor) -> dict[str, float
     }
 
 
-def _ridge_fit(train_h: torch.Tensor, target: torch.Tensor, strength: float) -> torch.Tensor:
+def _ridge_fit(
+    train_h: torch.Tensor, target: torch.Tensor, strength: float
+) -> torch.Tensor:
     x = torch.cat((train_h.float(), torch.ones(train_h.shape[0], 1)), dim=1)
     gram = x.T @ x
     regularizer = torch.eye(gram.shape[0], dtype=x.dtype) * strength
@@ -163,7 +169,9 @@ def _fit_methods(
     diagnostics = {
         "orthogonal": {
             "rotation_singular_values": _singular_summary(rotation),
-            "rotation_frobenius_displacement": float((rotation - torch.eye(rotation.shape[0])).norm()),
+            "rotation_frobenius_displacement": float(
+                (rotation - torch.eye(rotation.shape[0])).norm()
+            ),
             "train_hidden_alignment": _alignment(train_h @ rotation, train_ref),
         },
         "ridge": {
@@ -199,7 +207,9 @@ def _method_results(
     for name, embeddings in methods.items():
         result = _evaluate(embeddings, val_labels, val_paths, gallery, device)
         result["frozen_W_compatibility_cosine"] = float(
-            F.cosine_similarity(F.normalize(embeddings, dim=-1), reference, dim=-1).mean()
+            F.cosine_similarity(
+                F.normalize(embeddings, dim=-1), reference, dim=-1
+            ).mean()
         )
         results[name] = result
     reference_result = _evaluate(
@@ -208,6 +218,7 @@ def _method_results(
     reference_result["frozen_W_compatibility_cosine"] = 1.0
     results["frozen_sketch_reference_W_CLIP"] = reference_result
     return results
+
 
 def _add_control_comparisons(values: list[dict[str, Any]]) -> None:
     controls = {
@@ -231,7 +242,10 @@ def _add_control_comparisons(values: list[dict[str, Any]]) -> None:
             for method in row["methods"]
             if method in control["methods"]
         }
-        original_gap = float(row["methods"]["frozen_original_W_CLIP"]["mAP"]) - control_methods["frozen_original_W_CLIP"]
+        original_gap = (
+            float(row["methods"]["frozen_original_W_CLIP"]["mAP"])
+            - control_methods["frozen_original_W_CLIP"]
+        )
         row["matched_frozen_control"] = {
             "roles": [control_role],
             "mAP_by_method": control_methods,
@@ -244,10 +258,7 @@ def _add_control_comparisons(values: list[dict[str, Any]]) -> None:
                 method: None
                 if abs(original_gap) < 1e-12
                 else 1.0
-                - (
-                    float(row["methods"][method]["mAP"])
-                    - control_methods[method]
-                )
+                - (float(row["methods"][method]["mAP"]) - control_methods[method])
                 / original_gap
                 for method in row["methods"]
                 if method in control_methods
@@ -262,11 +273,17 @@ def _plot(values: list[dict[str, Any]], path: Path) -> None:
     for row in values:
         role = row.get("experiment_role") or "unknown"
         step = int(row["checkpoint_step"])
-        for method in ("frozen_original_W_CLIP", "orthogonal_adapter", "ridge_projection"):
+        for method in (
+            "frozen_original_W_CLIP",
+            "orthogonal_adapter",
+            "ridge_projection",
+        ):
             axis.scatter(
                 step,
                 float(row["methods"][method]["mAP"]),
-                label=f"{role}/{method}" if step == int(row["checkpoint_step"]) else None,
+                label=f"{role}/{method}"
+                if step == int(row["checkpoint_step"])
+                else None,
             )
     handles, labels = axis.get_legend_handles_labels()
     if handles:
@@ -300,7 +317,11 @@ def main() -> None:
     if output.exists() or plot_path.exists():
         raise FileExistsError(f"refusing to overwrite {output} or {plot_path}")
     device = torch.device(args.device)
-    data_path = args.data_config if args.data_config.is_absolute() else PROJECT_ROOT / args.data_config
+    data_path = (
+        args.data_config
+        if args.data_config.is_absolute()
+        else PROJECT_ROOT / args.data_config
+    )
     data = load_data_config(data_path)
     split, _ = _build_split(data, num_validation_classes=20, seed=3407)
     expected_split = _split_identity(data, split)
@@ -317,15 +338,23 @@ def main() -> None:
     seen_checkpoints: set[tuple[str, int]] = set()
 
     first_checkpoint = args.checkpoints[0]
-    first_checkpoint = first_checkpoint if first_checkpoint.is_absolute() else PROJECT_ROOT / first_checkpoint
+    first_checkpoint = (
+        first_checkpoint
+        if first_checkpoint.is_absolute()
+        else PROJECT_ROOT / first_checkpoint
+    )
     first_payload = torch.load(first_checkpoint, map_location="cpu", weights_only=True)
-    if not isinstance(first_payload, dict) or not isinstance(first_payload.get("model_config"), dict):
+    if not isinstance(first_payload, dict) or not isinstance(
+        first_payload.get("model_config"), dict
+    ):
         raise ValueError("invalid first transport checkpoint")
     model_config = first_payload["model_config"]
     model_name = str(model_config["encoder_model_name"])
     pretrained_value = model_config.get("encoder_pretrained")
     pretrained = None if pretrained_value is None else str(pretrained_value)
-    photo_clip = load_frozen_clip(model_name=model_name, pretrained=pretrained, device=device)
+    photo_clip = load_frozen_clip(
+        model_name=model_name, pretrained=pretrained, device=device
+    )
     photo_projection = frozen_visual_projection(photo_clip.encoder).to(device)
     gallery = encode_retrieval_loader(
         photo_clip.encoder,
@@ -333,7 +362,11 @@ def main() -> None:
     )
     values: list[dict[str, Any]] = []
     for configured_checkpoint in args.checkpoints:
-        checkpoint = configured_checkpoint if configured_checkpoint.is_absolute() else PROJECT_ROOT / configured_checkpoint
+        checkpoint = (
+            configured_checkpoint
+            if configured_checkpoint.is_absolute()
+            else PROJECT_ROOT / configured_checkpoint
+        )
         model, payload, transform = _load_model(checkpoint, device=device)
         checkpoint_model_config = payload.get("model_config")
         if not isinstance(checkpoint_model_config, dict):
@@ -353,24 +386,49 @@ def main() -> None:
             raise ValueError(f"checkpoint metadata is missing: {checkpoint}")
         split_identity = payload.get("data_split_identity")
         if split_identity != expected_split:
-            raise ValueError(f"checkpoint split differs from the current pseudo split: {checkpoint}")
+            raise ValueError(
+                f"checkpoint split differs from the current pseudo split: {checkpoint}"
+            )
         resolved = payload.get("resolved_config")
-        if not isinstance(resolved, dict) or resolved.get("train_class_scope") != "pseudo_train":
-            raise ValueError(f"checkpoint was not trained on pseudo-train classes: {checkpoint}")
+        if (
+            not isinstance(resolved, dict)
+            or resolved.get("train_class_scope") != "pseudo_train"
+        ):
+            raise ValueError(
+                f"checkpoint was not trained on pseudo-train classes: {checkpoint}"
+            )
         if metadata.get("data_split_identity") != expected_split:
-            raise ValueError(f"checkpoint metadata split differs from the current pseudo split: {checkpoint}")
+            raise ValueError(
+                f"checkpoint metadata split differs from the current pseudo split: {checkpoint}"
+            )
         checkpoint_manifest_identity = payload.get("data_manifest_identity")
-        if checkpoint_manifest_identity is not None and checkpoint_manifest_identity != expected_manifest_identity:
-            raise ValueError(f"checkpoint manifest entries differ from the current pseudo split: {checkpoint}")
+        if (
+            checkpoint_manifest_identity is not None
+            and checkpoint_manifest_identity != expected_manifest_identity
+        ):
+            raise ValueError(
+                f"checkpoint manifest entries differ from the current pseudo split: {checkpoint}"
+            )
         metadata_manifest_identity = metadata.get("data_manifest_identity")
-        if metadata_manifest_identity is not None and metadata_manifest_identity != expected_manifest_identity:
-            raise ValueError(f"checkpoint metadata manifest entries differ from the current pseudo split: {checkpoint}")
-        if metadata.get("pseudo_validation_class_ids") != list(split.validation_class_ids):
-            raise ValueError(f"checkpoint pseudo-validation classes differ: {checkpoint}")
+        if (
+            metadata_manifest_identity is not None
+            and metadata_manifest_identity != expected_manifest_identity
+        ):
+            raise ValueError(
+                f"checkpoint metadata manifest entries differ from the current pseudo split: {checkpoint}"
+            )
+        if metadata.get("pseudo_validation_class_ids") != list(
+            split.validation_class_ids
+        ):
+            raise ValueError(
+                f"checkpoint pseudo-validation classes differ: {checkpoint}"
+            )
         role = metadata.get("experiment_role")
         campaign = metadata.get("experiment_campaign")
         if role not in P3_ROLES or campaign != P3_CAMPAIGN:
-            raise ValueError(f"checkpoint role/campaign is not a corrected P1 artifact: {checkpoint}")
+            raise ValueError(
+                f"checkpoint role/campaign is not a corrected P1 artifact: {checkpoint}"
+            )
         step = int(payload.get("step", -1))
         identity = (str(role), step)
         if identity in seen_checkpoints:
@@ -379,13 +437,12 @@ def main() -> None:
         if role == "freeze_optimizer_source" and step != 73:
             raise ValueError("P3 source must be the step-73 checkpoint")
         if role != "freeze_optimizer_source" and step not in {500, 1800, 5400}:
-            raise ValueError("P3 branch checkpoints must be at steps 500, 1800, or 5400")
+            raise ValueError(
+                "P3 branch checkpoints must be at steps 500, 1800, or 5400"
+            )
         bias = model.photo_projection.bias
         reference_bias = photo_projection.bias
-        bias_matches = (
-            bias is None
-            and reference_bias is None
-        ) or (
+        bias_matches = (bias is None and reference_bias is None) or (
             bias is not None
             and reference_bias is not None
             and torch.allclose(bias.cpu(), reference_bias.cpu(), atol=1e-6, rtol=0)
@@ -484,9 +541,17 @@ def main() -> None:
         "source_artifacts": [
             {
                 "path": str(
-                    (checkpoint if checkpoint.is_absolute() else PROJECT_ROOT / checkpoint).resolve()
+                    (
+                        checkpoint
+                        if checkpoint.is_absolute()
+                        else PROJECT_ROOT / checkpoint
+                    ).resolve()
                 ),
-                "sha256": _sha256(checkpoint if checkpoint.is_absolute() else PROJECT_ROOT / checkpoint),
+                "sha256": _sha256(
+                    checkpoint
+                    if checkpoint.is_absolute()
+                    else PROJECT_ROOT / checkpoint
+                ),
             }
             for checkpoint in args.checkpoints
         ],

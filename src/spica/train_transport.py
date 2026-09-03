@@ -31,7 +31,11 @@ from .data.splits import (
     make_classwise_retrieval_split,
     split_manifest_identity,
 )
-from .evaluation.embeddings import EncodedRetrievalSet, encode_retrieval_loader, load_encoded_retrieval_set
+from .evaluation.embeddings import (
+    EncodedRetrievalSet,
+    encode_retrieval_loader,
+    load_encoded_retrieval_set,
+)
 from .evaluation.transport import (
     TransportFeatureSet,
     encode_transport_loader,
@@ -207,7 +211,9 @@ def _seed_worker(worker_id: int) -> None:
 def _validate_options(args: DictConfig) -> None:
     mode = str(args.transport_mode)
     if mode not in {"residual", "bounded_residual", "tangent"}:
-        raise ValueError("transport_mode must be residual, bounded_residual, or tangent")
+        raise ValueError(
+            "transport_mode must be residual, bounded_residual, or tangent"
+        )
     if not isinstance(args.transport_enabled, bool):
         raise ValueError("transport_enabled must be boolean")
     encoder_mode = str(args.encoder_mode)
@@ -226,14 +232,22 @@ def _validate_options(args: DictConfig) -> None:
     if bool(args.use_vmf) and mode != "tangent":
         raise ValueError("use_vmf is only valid for tangent transport")
     if bool(args.use_vmf) and k < 2:
-        raise ValueError("Mo-vMF transport requires K > 1; use the deterministic K=1 control first")
+        raise ValueError(
+            "Mo-vMF transport requires K > 1; use the deterministic K=1 control first"
+        )
     if float(args.lambda_vmf) > 0 and not bool(args.use_vmf):
         raise ValueError("lambda_vmf > 0 requires use_vmf=true")
     if bool(args.use_vmf) and float(args.lambda_vmf) <= 0:
         raise ValueError("use_vmf=true requires lambda_vmf > 0")
     if str(args.rho_mode) not in {"shared", "component"}:
         raise ValueError("rho_mode must be shared or component")
-    if str(args.rho_strategy) not in {"learned", "zero", "fixed", "linear_warmup", "cosine_warmup"}:
+    if str(args.rho_strategy) not in {
+        "learned",
+        "zero",
+        "fixed",
+        "linear_warmup",
+        "cosine_warmup",
+    }:
         raise ValueError("rho_strategy is not supported")
     if int(args.rho_warmup_steps) <= 0:
         raise ValueError("rho_warmup_steps must be positive")
@@ -270,7 +284,10 @@ def _validate_options(args: DictConfig) -> None:
         value = float(args[name])
         if not math.isfinite(value) or value < 0:
             raise ValueError(f"{name} must be finite and non-negative")
-    if float(args.predictor_learning_rate) <= 0 or float(args.encoder_learning_rate) <= 0:
+    if (
+        float(args.predictor_learning_rate) <= 0
+        or float(args.encoder_learning_rate) <= 0
+    ):
         raise ValueError("predictor and encoder learning rates must be positive")
     if int(args.num_positive_photos) <= 0:
         raise ValueError("num_positive_photos must be positive")
@@ -289,13 +306,20 @@ def _validate_options(args: DictConfig) -> None:
         if freeze_step < 0 or freeze_step > int(args.max_steps):
             raise ValueError("freeze_encoder_at_step must be between 0 and max_steps")
         if bool(args.freeze_encoder_on_resume):
-            raise ValueError("choose freeze_encoder_on_resume or freeze_encoder_at_step, not both")
+            raise ValueError(
+                "choose freeze_encoder_on_resume or freeze_encoder_at_step, not both"
+            )
     offsets = args.probe_step_offsets
     if offsets is not None:
         for offset in offsets:
             if int(offset) != float(offset) or int(offset) < 0:
-                raise ValueError("probe_step_offsets must contain non-negative integers")
-    if any(int(step) < 0 or int(step) > int(args.max_steps) for step in args.gradient_conflict_steps):
+                raise ValueError(
+                    "probe_step_offsets must contain non-negative integers"
+                )
+    if any(
+        int(step) < 0 or int(step) > int(args.max_steps)
+        for step in args.gradient_conflict_steps
+    ):
         raise ValueError("gradient conflict steps must be within training range")
     if int(args.query_chunk_size) <= 0:
         raise ValueError("query_chunk_size must be positive")
@@ -303,13 +327,24 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("rho_max_degrees must be in (0, 180]")
     if float(args.initial_rho_degrees) >= float(args.rho_max_degrees):
         raise ValueError("initial_rho_degrees must be smaller than rho_max_degrees")
-    if float(args.initial_alpha) >= float(args.alpha_max) and str(args.transport_mode) == "bounded_residual":
+    if (
+        float(args.initial_alpha) >= float(args.alpha_max)
+        and str(args.transport_mode) == "bounded_residual"
+    ):
         raise ValueError("initial_alpha must be smaller than alpha_max")
     if float(args.max_kappa) <= float(args.min_kappa):
         raise ValueError("max_kappa must exceed min_kappa")
     if not float(args.min_kappa) < float(args.initial_kappa) < float(args.max_kappa):
         raise ValueError("initial_kappa must be strictly within kappa bounds")
-    if float(args.lambda_dir) == 0 and float(args.lambda_dist) == 0 and float(args.lambda_endpoint) == 0 and float(args.lambda_rank) == 0 and float(args.lambda_cls) == 0 and float(args.lambda_vmf) == 0 and float(args.lambda_geom) == 0:
+    if (
+        float(args.lambda_dir) == 0
+        and float(args.lambda_dist) == 0
+        and float(args.lambda_endpoint) == 0
+        and float(args.lambda_rank) == 0
+        and float(args.lambda_cls) == 0
+        and float(args.lambda_vmf) == 0
+        and float(args.lambda_geom) == 0
+    ):
         raise ValueError("at least one transport loss weight must be positive")
     if not isinstance(args.use_geometry_loss, bool):
         raise ValueError("use_geometry_loss must be boolean")
@@ -325,8 +360,15 @@ def _validate_options(args: DictConfig) -> None:
         raise ValueError("prompt_template must contain exactly one '{}' placeholder")
     if str(args.text_loss_location) not in {"q", "z0", "both", "none"}:
         raise ValueError("text_loss_location must be q, z0, both, or none")
-    if str(args.direction_target) not in {"moving", "fixed_reference", "class_centroid", "none"}:
-        raise ValueError("direction_target must be moving, fixed_reference, class_centroid, or none")
+    if str(args.direction_target) not in {
+        "moving",
+        "fixed_reference",
+        "class_centroid",
+        "none",
+    }:
+        raise ValueError(
+            "direction_target must be moving, fixed_reference, class_centroid, or none"
+        )
     if int(args.training_angle_diagnostic_max) <= 0:
         raise ValueError("training_angle_diagnostic_max must be positive")
     if not isinstance(args.reset_optimizer_on_resume, bool):
@@ -373,7 +415,10 @@ def _validate_options(args: DictConfig) -> None:
         "two_stage_S3",
         "two_stage_S4",
     }
-    if role in corrected_roles and str(args.experiment_campaign) != "transport_corrected_2026-09-02_v2":
+    if (
+        role in corrected_roles
+        and str(args.experiment_campaign) != "transport_corrected_2026-09-02_v2"
+    ):
         raise ValueError("corrected transport roles require the corrected campaign")
     if role == "freeze_optimizer_source" and (
         int(args.max_steps) != 73
@@ -418,7 +463,8 @@ def _validate_options(args: DictConfig) -> None:
             and bool(args.reset_transport_head_on_resume)
             and args.resume_checkpoint_path is not None
             and args.stage1_selection_manifest_path is not None
-            and [int(value) for value in args.probe_steps] == [100, 150, 250, 500, 1800, 5400]
+            and [int(value) for value in args.probe_steps]
+            == [100, 150, 250, 500, 1800, 5400]
             and args.probe_step_offsets is not None
             and [int(value) for value in args.probe_step_offsets] == [0]
             and str(args.train_class_scope) == "pseudo_train"
@@ -499,12 +545,17 @@ def _encode_photo_targets(
     if positive_images.ndim != 5 or negative_images.ndim != 4:
         raise ValueError("invalid positive/negative photo image dimensions")
     batch_size, num_positives = positive_images.shape[:2]
-    if negative_images.shape[0] != batch_size or positive_images.shape[2:] != negative_images.shape[1:]:
+    if (
+        negative_images.shape[0] != batch_size
+        or positive_images.shape[2:] != negative_images.shape[1:]
+    ):
         raise ValueError("positive and negative image shapes must match")
     flattened = positive_images.flatten(0, 1)
     with torch.no_grad():
         embeddings = encoder(torch.cat((flattened, negative_images), dim=0))
-    positives, negative = embeddings.split((batch_size * num_positives, batch_size), dim=0)
+    positives, negative = embeddings.split(
+        (batch_size * num_positives, batch_size), dim=0
+    )
     return positives.reshape(batch_size, num_positives, -1), negative
 
 
@@ -550,17 +601,24 @@ def _target_for_labels(
     observed = prototype_labels.to(labels.device)[positions]
     if not torch.equal(observed, labels):
         raise ValueError("a training label is missing from the photo prototypes")
-    return prototypes.to(device=labels.device, dtype=positive_embeddings.dtype)[positions].detach()
+    return prototypes.to(device=labels.device, dtype=positive_embeddings.dtype)[
+        positions
+    ].detach()
 
 
-def _parameter_counts(model: SpicaPredictiveTransport, photo_encoder: FrozenClipEncoder) -> dict[str, int]:
+def _parameter_counts(
+    model: SpicaPredictiveTransport, photo_encoder: FrozenClipEncoder
+) -> dict[str, int]:
     return {
         "total_parameters": model.total_parameter_count,
         "trainable_parameters": model.trainable_parameter_count,
-        "frozen_parameters": model.total_parameter_count - model.trainable_parameter_count,
+        "frozen_parameters": model.total_parameter_count
+        - model.trainable_parameter_count,
         "transport_parameters": model.transport_parameter_count,
         "sketch_encoder_trainable_parameters": model.sketch_encoder_trainable_parameter_count,
-        "frozen_photo_encoder_parameters": sum(p.numel() for p in photo_encoder.parameters()),
+        "frozen_photo_encoder_parameters": sum(
+            p.numel() for p in photo_encoder.parameters()
+        ),
     }
 
 
@@ -572,7 +630,9 @@ def _capture_initial_parameters(model: SpicaPredictiveTransport) -> dict[str, Te
     }
 
 
-def _parameter_drift(model: SpicaPredictiveTransport, initial: dict[str, Tensor]) -> dict[str, float]:
+def _parameter_drift(
+    model: SpicaPredictiveTransport, initial: dict[str, Tensor]
+) -> dict[str, float]:
     numerator: dict[str, float] = {}
     denominator: dict[str, float] = {}
     for name, parameter in model.named_parameters():
@@ -585,7 +645,9 @@ def _parameter_drift(model: SpicaPredictiveTransport, initial: dict[str, Tensor]
         if marker in name:
             tail = name.split(marker, 1)[1]
             block = "visual_block_" + tail.split(".", 1)[0]
-        numerator[block] = numerator.get(block, 0.0) + (value - before).norm().item() ** 2
+        numerator[block] = (
+            numerator.get(block, 0.0) + (value - before).norm().item() ** 2
+        )
         denominator[block] = denominator.get(block, 0.0) + before.norm().item() ** 2
     return {
         block: math.sqrt(value) / max(math.sqrt(denominator[block]), 1e-12)
@@ -608,7 +670,9 @@ def _gradient_vector(loss: Tensor, parameters: list[torch.nn.Parameter]) -> Tens
         allow_unused=True,
     )
     values = [
-        gradient.reshape(-1) if gradient is not None else parameter.new_zeros(parameter.numel())
+        gradient.reshape(-1)
+        if gradient is not None
+        else parameter.new_zeros(parameter.numel())
         for gradient, parameter in zip(gradients, parameters)
     ]
     return torch.cat(values) if values else loss.new_zeros(1)
@@ -687,7 +751,11 @@ def _apply_resume_controls(
         return _rebuild_optimizer_without_encoder(optimizer, model), resume_step, True
     if freeze_encoder_at_step is not None and resume_step >= freeze_encoder_at_step:
         _freeze_encoder(model)
-        return _rebuild_optimizer_without_encoder(optimizer, model), freeze_encoder_at_step, True
+        return (
+            _rebuild_optimizer_without_encoder(optimizer, model),
+            freeze_encoder_at_step,
+            True,
+        )
     return optimizer, freeze_encoder_at_step, False
 
 
@@ -736,7 +804,9 @@ def _load_stage1_selection(
     try:
         manifest = json.loads(manifest_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
-        raise ValueError(f"cannot read Stage-1 selection manifest: {manifest_path}") from error
+        raise ValueError(
+            f"cannot read Stage-1 selection manifest: {manifest_path}"
+        ) from error
     if not isinstance(manifest, dict):
         raise ValueError("Stage-1 selection manifest must be a JSON object")
     if manifest.get("schema_version") != 1:
@@ -748,7 +818,10 @@ def _load_stage1_selection(
     if manifest.get("source_campaign") != expected_campaign:
         raise ValueError("Stage-1 selection campaign differs from this run")
     manifest_identity = manifest.get("data_manifest_identity")
-    if manifest_identity is not None and manifest_identity != expected_manifest_identity:
+    if (
+        manifest_identity is not None
+        and manifest_identity != expected_manifest_identity
+    ):
         raise ValueError("Stage-1 selection manifest entries differ from this run")
     if manifest.get("source_role") != "two_stage_stage1":
         raise ValueError("Stage-1 selection source role is invalid")
@@ -764,14 +837,21 @@ def _load_stage1_selection(
     if selected_path.resolve() != resume_path.resolve():
         raise ValueError("resume checkpoint is not the selected Stage-1 checkpoint")
     if not selected_path.is_file():
-        raise FileNotFoundError(f"selected Stage-1 checkpoint not found: {selected_path}")
+        raise FileNotFoundError(
+            f"selected Stage-1 checkpoint not found: {selected_path}"
+        )
     if selected.get("checkpoint_sha256") != _sha256_file(selected_path):
         raise ValueError("selected Stage-1 checkpoint hash differs from manifest")
     if int(payload.get("step", -1)) != int(selected["step"]):
         raise ValueError("selected Stage-1 checkpoint step differs from payload")
     metadata = payload.get("metadata")
-    if not isinstance(metadata, dict) or metadata.get("experiment_role") != "two_stage_stage1":
-        raise ValueError("resume checkpoint is not a Stage-1 semantic-origin checkpoint")
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("experiment_role") != "two_stage_stage1"
+    ):
+        raise ValueError(
+            "resume checkpoint is not a Stage-1 semantic-origin checkpoint"
+        )
     if metadata.get("experiment_campaign") != manifest.get("source_campaign"):
         raise ValueError("Stage-1 source campaign differs from selection manifest")
     if metadata.get("transport_enabled") is not False:
@@ -779,16 +859,30 @@ def _load_stage1_selection(
     if metadata.get("data_split_identity") != data_split_identity:
         raise ValueError("Stage-1 checkpoint split identity differs from this run")
     checkpoint_manifest_identity = payload.get("data_manifest_identity")
-    if checkpoint_manifest_identity is not None and checkpoint_manifest_identity != expected_manifest_identity:
+    if (
+        checkpoint_manifest_identity is not None
+        and checkpoint_manifest_identity != expected_manifest_identity
+    ):
         raise ValueError("Stage-1 checkpoint entries differ from this run")
-    if len(candidates) != 2 or any(not isinstance(candidate, dict) for candidate in candidates):
+    if len(candidates) != 2 or any(
+        not isinstance(candidate, dict) for candidate in candidates
+    ):
         raise ValueError("Stage-1 selection must contain exactly two candidate objects")
     candidate_steps = sorted(int(candidate.get("step", -1)) for candidate in candidates)
     if candidate_steps != [44, 73]:
         raise ValueError("Stage-1 selection must contain exactly candidates 44 and 73")
-    selected_candidate = next(candidate for candidate in candidates if int(candidate["step"]) == int(selected["step"]))
-    if any(selected.get(key) != selected_candidate.get(key) for key in ("checkpoint", "checkpoint_sha256", "mAP")):
-        raise ValueError("selected Stage-1 candidate does not match its candidate record")
+    selected_candidate = next(
+        candidate
+        for candidate in candidates
+        if int(candidate["step"]) == int(selected["step"])
+    )
+    if any(
+        selected.get(key) != selected_candidate.get(key)
+        for key in ("checkpoint", "checkpoint_sha256", "mAP")
+    ):
+        raise ValueError(
+            "selected Stage-1 candidate does not match its candidate record"
+        )
     return {
         "manifest_path": str(manifest_path),
         "manifest_sha256": _sha256_file(manifest_path),
@@ -800,7 +894,8 @@ def _load_stage1_selection(
         "selected": selected,
         "data_split_identity": data_split_identity,
         "data_manifest_identity": manifest_identity,
-        "manifest_identity_verified": manifest_identity is not None and checkpoint_manifest_identity is not None,
+        "manifest_identity_verified": manifest_identity is not None
+        and checkpoint_manifest_identity is not None,
         "official_unseen_used": False,
         "provenance": manifest.get("provenance"),
     }
@@ -812,12 +907,25 @@ def _rebuild_optimizer_without_encoder(
 ) -> torch.optim.Optimizer:
     """Drop the encoder group while retaining Adam state for transport params."""
     transport_parameters = [
-        parameter for parameter in model.transport_head.parameters() if parameter.requires_grad
+        parameter
+        for parameter in model.transport_head.parameters()
+        if parameter.requires_grad
     ]
     old_group = optimizer.param_groups[0]
     options = {
         key: old_group[key]
-        for key in ("lr", "betas", "eps", "weight_decay", "amsgrad", "maximize", "foreach", "capturable", "differentiable", "fused")
+        for key in (
+            "lr",
+            "betas",
+            "eps",
+            "weight_decay",
+            "amsgrad",
+            "maximize",
+            "foreach",
+            "capturable",
+            "differentiable",
+            "fused",
+        )
         if key in old_group
     }
     rebuilt = type(optimizer)([{"params": transport_parameters, **options}])
@@ -966,7 +1074,9 @@ def _metrics_summary(evaluation) -> dict[str, object]:
     }
 
 
-def _radius_ap_payload(evaluation, rho: Tensor, *, max_items: int = 2048) -> dict[str, list[float]]:
+def _radius_ap_payload(
+    evaluation, rho: Tensor, *, max_items: int = 2048
+) -> dict[str, list[float]]:
     values = rho if rho.ndim == 1 else rho.mean(dim=-1)
     average_precision = evaluation.average_precision_per_query
     if values.shape[0] != average_precision.shape[0]:
@@ -1039,8 +1149,12 @@ def _probe(
         "query_chunk_size": int(args.query_chunk_size),
         "device": device,
     }
-    val_base_evaluation = evaluate_base_queries(val_features, val_gallery, **common_eval_args)
-    test_base_evaluation = evaluate_base_queries(test_features, test_gallery, **common_eval_args)
+    val_base_evaluation = evaluate_base_queries(
+        val_features, val_gallery, **common_eval_args
+    )
+    test_base_evaluation = evaluate_base_queries(
+        test_features, test_gallery, **common_eval_args
+    )
     val_probe = transport_probe_dict(
         val_features,
         val_gallery,
@@ -1081,18 +1195,26 @@ def _probe(
         "diagnostic_test": _metrics_summary(test_evaluations[selected_mode]),
         "base_diagnostic_test": _metrics_summary(test_base_evaluation),
         "retrieval_modes": {
-            "val": {name: _metrics_summary(value) for name, value in val_evaluations.items()},
-            "diagnostic_test": {name: _metrics_summary(value) for name, value in test_evaluations.items()},
+            "val": {
+                name: _metrics_summary(value) for name, value in val_evaluations.items()
+            },
+            "diagnostic_test": {
+                name: _metrics_summary(value)
+                for name, value in test_evaluations.items()
+            },
             "selected": selected_mode,
             "base_val": _metrics_summary(val_base_evaluation),
             "base_diagnostic_test": _metrics_summary(test_base_evaluation),
         },
-        "radius_vs_ap": _radius_ap_payload(val_evaluations[selected_mode], val_features.rho),
+        "radius_vs_ap": _radius_ap_payload(
+            val_evaluations[selected_mode], val_features.rho
+        ),
         "val_geometry": val_probe,
         "diagnostic_test_geometry": test_probe,
         "protocol": {
             "val_is_pseudo_unseen": str(args.train_class_scope) == "pseudo_train",
-            "validation_classes_seen_during_training": str(args.train_class_scope) == "all_seen",
+            "validation_classes_seen_during_training": str(args.train_class_scope)
+            == "all_seen",
             "official_test_is_diagnostic_only": True,
             "text_used_for_evaluation": False,
             "photo_gallery_reencoded": False,
@@ -1102,11 +1224,17 @@ def _probe(
     return result, val_features, test_features
 
 
-def _drift_probe(current: TransportFeatureSet, initial: TransportFeatureSet) -> dict[str, float]:
+def _drift_probe(
+    current: TransportFeatureSet, initial: TransportFeatureSet
+) -> dict[str, float]:
     if current.z0.shape != initial.z0.shape:
         raise ValueError("initial and current probe feature shapes must match")
-    base_initial = (F.normalize(current.z0, dim=-1) * F.normalize(initial.z0, dim=-1)).sum(dim=-1)
-    q_initial = (F.normalize(current.q, dim=-1) * F.normalize(initial.q, dim=-1)).sum(dim=-1)
+    base_initial = (
+        F.normalize(current.z0, dim=-1) * F.normalize(initial.z0, dim=-1)
+    ).sum(dim=-1)
+    q_initial = (F.normalize(current.q, dim=-1) * F.normalize(initial.q, dim=-1)).sum(
+        dim=-1
+    )
     return {
         "base_initial_cosine": base_initial.mean().item(),
         "base_initial_cosine_std": base_initial.std(unbiased=False).item(),
@@ -1119,7 +1247,11 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
     val = probe["val"]
     test = probe["diagnostic_test"]
     val_geometry = probe["val_geometry"]
-    if not isinstance(val, dict) or not isinstance(test, dict) or not isinstance(val_geometry, dict):
+    if (
+        not isinstance(val, dict)
+        or not isinstance(test, dict)
+        or not isinstance(val_geometry, dict)
+    ):
         raise TypeError("malformed transport probe")
     base_val = probe.get("base_val", {})
     base_test = probe.get("base_diagnostic_test", {})
@@ -1129,10 +1261,14 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
     }
     if isinstance(base_val, dict) and isinstance(base_val.get("mAP"), (int, float)):
         metrics["pseudo_val_base_mAP"] = float(base_val["mAP"])
-        metrics["pseudo_val_transport_gain"] = metrics["pseudo_val_mAP"] - metrics["pseudo_val_base_mAP"]
+        metrics["pseudo_val_transport_gain"] = (
+            metrics["pseudo_val_mAP"] - metrics["pseudo_val_base_mAP"]
+        )
     if isinstance(base_test, dict) and isinstance(base_test.get("mAP"), (int, float)):
         metrics["diagnostic_test_base_mAP"] = float(base_test["mAP"])
-        metrics["diagnostic_test_transport_gain"] = metrics["diagnostic_test_mAP"] - metrics["diagnostic_test_base_mAP"]
+        metrics["diagnostic_test_transport_gain"] = (
+            metrics["diagnostic_test_mAP"] - metrics["diagnostic_test_base_mAP"]
+        )
     val_precision = val.get("precision_at_k", {})
     test_precision = test.get("precision_at_k", {})
     if isinstance(val_precision, dict) and 200 in val_precision:
@@ -1147,13 +1283,42 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
     drift = val_geometry.get("drift", {})
     hidden = val_geometry.get("hidden_space_compatibility", {})
     for source, names in (
-        (transport, ("mean_rho", "std_rho", "p95_rho", "mean_direction_cosine", "mean_distance_error", "endpoint_photo_cosine", "base_photo_cosine")),
-        (mixture, ("gate_entropy", "responsibility_entropy", "mean_kappa", "kappa_saturation_fraction")),
+        (
+            transport,
+            (
+                "mean_rho",
+                "std_rho",
+                "p95_rho",
+                "mean_direction_cosine",
+                "mean_distance_error",
+                "endpoint_photo_cosine",
+                "base_photo_cosine",
+            ),
+        ),
+        (
+            mixture,
+            (
+                "gate_entropy",
+                "responsibility_entropy",
+                "mean_kappa",
+                "kappa_saturation_fraction",
+            ),
+        ),
         (q_geometry, ("effective_rank",)),
         (semantic, ("semantic_margin",)),
         (reference, ("base_reference_cosine", "query_reference_cosine")),
         (drift, ("base_initial_cosine", "query_initial_cosine")),
-        (hidden, ("linear_cka", "procrustes_residual", "frozen_projection_mean_cosine", "effective_rank_h_ref", "effective_rank_h_t", "effective_rank_W_h_t")),
+        (
+            hidden,
+            (
+                "linear_cka",
+                "procrustes_residual",
+                "frozen_projection_mean_cosine",
+                "effective_rank_h_ref",
+                "effective_rank_h_t",
+                "effective_rank_W_h_t",
+            ),
+        ),
     ):
         if isinstance(source, dict):
             for name in names:
@@ -1164,7 +1329,10 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
         for prefix, key in (
             ("component_usage", "component_usage"),
             ("component_direction_cosine", "mean_direction_cosine_by_component"),
-            ("component_pairwise_direction_cosine", "component_pairwise_direction_cosine"),
+            (
+                "component_pairwise_direction_cosine",
+                "component_pairwise_direction_cosine",
+            ),
         ):
             values = mixture.get(key)
             if isinstance(values, list):
@@ -1176,11 +1344,25 @@ def _flatten_probe_metrics(probe: dict[str, object]) -> dict[str, float]:
         for frame in ("moving", "fixed"):
             summary = angles.get(frame, {})
             if isinstance(summary, dict):
-                for name in ("mean_degrees", "std_degrees", "p05_degrees", "p25_degrees", "p50_degrees", "p75_degrees", "p95_degrees"):
+                for name in (
+                    "mean_degrees",
+                    "std_degrees",
+                    "p05_degrees",
+                    "p25_degrees",
+                    "p50_degrees",
+                    "p75_degrees",
+                    "p95_degrees",
+                ):
                     value = summary.get(name)
                     if isinstance(value, (int, float)):
                         metrics[f"target_{frame}_{name}"] = float(value)
-        for name in ("moving_target_alignment", "fixed_target_alignment", "target_frame_agreement", "fixed_tangent_destination_max_abs_dot", "rho_over_moving_theta"):
+        for name in (
+            "moving_target_alignment",
+            "fixed_target_alignment",
+            "target_frame_agreement",
+            "fixed_tangent_destination_max_abs_dot",
+            "rho_over_moving_theta",
+        ):
             value = angles.get(name)
             if isinstance(value, (int, float)):
                 metrics[name] = float(value)
@@ -1231,10 +1413,14 @@ def run(args: DictConfig) -> None:
         train_photo_entries = split.train_photo_entries
         train_class_ids = split.train_class_ids
     else:
-        train_sketch_entries = tuple(read_manifest(data.train.sketch_manifest, data.root))
+        train_sketch_entries = tuple(
+            read_manifest(data.train.sketch_manifest, data.root)
+        )
         train_photo_entries = tuple(read_manifest(data.train.photo_manifest, data.root))
         train_class_ids = tuple(sorted(all_class_names))
-    train_class_names = {class_id: all_class_names[class_id] for class_id in train_class_ids}
+    train_class_names = {
+        class_id: all_class_names[class_id] for class_id in train_class_ids
+    }
 
     pretrained = None if args.pretrained is None else str(args.pretrained)
     print(f"Loading frozen photo CLIP {args.model_name} ({pretrained}) on {device}...")
@@ -1275,17 +1461,27 @@ def run(args: DictConfig) -> None:
     model.train()
 
     train_loader = _build_train_loader(
-        train_sketch_entries, train_photo_entries, sketch_bundle.transform, args, seed=seed
+        train_sketch_entries,
+        train_photo_entries,
+        sketch_bundle.transform,
+        args,
+        seed=seed,
     )
     if len(train_loader) == 0:
         raise ValueError("training loader has no batches")
-    val_loader = _build_eval_loader(split.validation_sketch_entries, sketch_bundle.transform, args)
-    val_photo_loader = _build_eval_loader(split.validation_photo_entries, photo_clip.transform, args)
+    val_loader = _build_eval_loader(
+        split.validation_sketch_entries, sketch_bundle.transform, args
+    )
+    val_photo_loader = _build_eval_loader(
+        split.validation_photo_entries, photo_clip.transform, args
+    )
     test_entries = read_manifest(data.test.sketch_manifest, data.root)
     test_loader = _build_eval_loader(test_entries, sketch_bundle.transform, args)
     print("Encoding pseudo-unseen validation gallery with frozen photo CLIP...")
     val_gallery = encode_retrieval_loader(photo_clip.encoder, val_photo_loader)
-    test_gallery = load_encoded_retrieval_set(_resolve_project_path(args.embedding_dir) / "photos.pt")
+    test_gallery = load_encoded_retrieval_set(
+        _resolve_project_path(args.embedding_dir) / "photos.pt"
+    )
 
     # Reference features are encoded in loader order once, only for probes and
     # geometry-loss targets; they are never passed to the model.
@@ -1293,7 +1489,9 @@ def run(args: DictConfig) -> None:
         batches: list[Tensor] = []
         with torch.no_grad():
             for batch in loader:
-                batches.append(photo_clip.encoder(batch["image"].to(device)).float().cpu())
+                batches.append(
+                    photo_clip.encoder(batch["image"].to(device)).float().cpu()
+                )
         return torch.cat(batches, dim=0)
 
     def encode_hidden_reference_loader(loader: DataLoader) -> Tensor:
@@ -1314,7 +1512,10 @@ def run(args: DictConfig) -> None:
 
     prototype_labels: Tensor | None = None
     prototypes: Tensor | None = None
-    if str(args.photo_target) == "class_prototype" or str(args.direction_target) == "class_centroid":
+    if (
+        str(args.photo_target) == "class_prototype"
+        or str(args.direction_target) == "class_centroid"
+    ):
         print("Building train-photo-only class prototypes...")
         prototype_labels, prototypes = _build_class_prototypes(
             photo_clip.encoder, train_photo_entries, photo_clip.transform, args
@@ -1328,7 +1529,9 @@ def run(args: DictConfig) -> None:
             train_class_names,
             prompt_template=str(args.prompt_template),
         )
-        text_bank_path = Path(HydraConfig.get().runtime.output_dir) / "seen_text_bank.pt"
+        text_bank_path = (
+            Path(HydraConfig.get().runtime.output_dir) / "seen_text_bank.pt"
+        )
         text_bank_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(
             {
@@ -1345,22 +1548,38 @@ def run(args: DictConfig) -> None:
     text_embeddings = None if text_bank is None else text_bank.embeddings.to(device)
     text_labels = None if text_bank is None else text_bank.labels.to(device)
 
-    predictor_parameters = [p for p in model.transport_head.parameters() if p.requires_grad]
-    encoder_parameters = [p for p in model.sketch_context_encoder.parameters() if p.requires_grad]
-    parameter_groups = [{"params": predictor_parameters, "lr": float(args.predictor_learning_rate)}]
+    predictor_parameters = [
+        p for p in model.transport_head.parameters() if p.requires_grad
+    ]
+    encoder_parameters = [
+        p for p in model.sketch_context_encoder.parameters() if p.requires_grad
+    ]
+    parameter_groups = [
+        {"params": predictor_parameters, "lr": float(args.predictor_learning_rate)}
+    ]
     if encoder_parameters:
-        parameter_groups.append({"params": encoder_parameters, "lr": float(args.encoder_learning_rate)})
-    optimizer = torch.optim.AdamW(parameter_groups, weight_decay=float(args.weight_decay))
+        parameter_groups.append(
+            {"params": encoder_parameters, "lr": float(args.encoder_learning_rate)}
+        )
+    optimizer = torch.optim.AdamW(
+        parameter_groups, weight_decay=float(args.weight_decay)
+    )
     resume_step = 0
     payload: dict[str, Any] | None = None
     stage1_selection: dict[str, Any] | None = None
-    resume_path = None if args.resume_checkpoint_path is None else _resolve_project_path(args.resume_checkpoint_path)
+    resume_path = (
+        None
+        if args.resume_checkpoint_path is None
+        else _resolve_project_path(args.resume_checkpoint_path)
+    )
     if resume_path is not None:
         loaded = torch.load(resume_path, map_location="cpu", weights_only=True)
         if not isinstance(loaded, dict) or not isinstance(
             loaded.get("model_state_dict"), dict
         ):
-            raise ValueError("resume checkpoint is not a predictive transport checkpoint")
+            raise ValueError(
+                "resume checkpoint is not a predictive transport checkpoint"
+            )
         payload = loaded
         branch_roles = {
             "freeze_optimizer_A",
@@ -1377,19 +1596,33 @@ def run(args: DictConfig) -> None:
             if not isinstance(source_metadata, dict):
                 raise ValueError("freeze × optimizer source metadata is missing")
             if source_metadata.get("experiment_role") != "freeze_optimizer_source":
-                raise ValueError("freeze × optimizer branches must fork a semantic source checkpoint")
+                raise ValueError(
+                    "freeze × optimizer branches must fork a semantic source checkpoint"
+                )
             if source_metadata.get("experiment_campaign") != args.experiment_campaign:
-                raise ValueError("freeze × optimizer source campaign differs from branch")
+                raise ValueError(
+                    "freeze × optimizer source campaign differs from branch"
+                )
             if source_metadata.get("data_split_identity") != data_split_identity:
                 raise ValueError("freeze × optimizer source split differs from branch")
             source_manifest_identity = payload.get("data_manifest_identity")
-            if source_manifest_identity is not None and source_manifest_identity != data_manifest_identity:
+            if (
+                source_manifest_identity is not None
+                and source_manifest_identity != data_manifest_identity
+            ):
                 raise ValueError("freeze × optimizer source entries differ from branch")
             if payload.get("optimizer_state_dict") is None:
-                raise ValueError("freeze × optimizer branches require the source optimizer state")
+                raise ValueError(
+                    "freeze × optimizer branches require the source optimizer state"
+                )
             source_config = payload.get("resolved_config")
-            if not isinstance(source_config, dict) or source_config.get("train_class_scope") != "pseudo_train":
-                raise ValueError("freeze × optimizer source must use pseudo-train classes")
+            if (
+                not isinstance(source_config, dict)
+                or source_config.get("train_class_scope") != "pseudo_train"
+            ):
+                raise ValueError(
+                    "freeze × optimizer source must use pseudo-train classes"
+                )
         fresh_head = (
             _cpu_state_dict(model.transport_head)
             if bool(args.reset_transport_head_on_resume)
@@ -1434,16 +1667,25 @@ def run(args: DictConfig) -> None:
         print(
             f"Resumed transport checkpoint at step {resume_step}: {resume_path} (optimizer reset scope={scope})"
         )
-    freeze_step = None if args.freeze_encoder_at_step is None else int(args.freeze_encoder_at_step)
-    optimizer, effective_freeze_step, freeze_applied_before_first_step = _apply_resume_controls(
-        model,
-        optimizer,
-        resume_step=resume_step,
-        freeze_encoder_on_resume=bool(args.freeze_encoder_on_resume) and resume_path is not None,
-        freeze_encoder_at_step=freeze_step,
+    freeze_step = (
+        None
+        if args.freeze_encoder_at_step is None
+        else int(args.freeze_encoder_at_step)
+    )
+    optimizer, effective_freeze_step, freeze_applied_before_first_step = (
+        _apply_resume_controls(
+            model,
+            optimizer,
+            resume_step=resume_step,
+            freeze_encoder_on_resume=bool(args.freeze_encoder_on_resume)
+            and resume_path is not None,
+            freeze_encoder_at_step=freeze_step,
+        )
     )
     if freeze_applied_before_first_step:
-        print(f"Sketch encoder frozen before first update at resumed step {resume_step}")
+        print(
+            f"Sketch encoder frozen before first update at resumed step {resume_step}"
+        )
     model.set_schedule_step(resume_step)
     parameter_counts = _parameter_counts(model, photo_clip.encoder)
     output_dir = Path(HydraConfig.get().runtime.output_dir)
@@ -1465,7 +1707,10 @@ def run(args: DictConfig) -> None:
     )
     optimizer_state_reset = bool(
         resume_path is not None
-        and (bool(args.reset_optimizer_on_resume) or str(args.optimizer_reset_scope) in {"encoder", "head"})
+        and (
+            bool(args.reset_optimizer_on_resume)
+            or str(args.optimizer_reset_scope) in {"encoder", "head"}
+        )
     )
     continuation_metadata: dict[str, Any] = {
         "resumed": resume_path is not None,
@@ -1476,7 +1721,8 @@ def run(args: DictConfig) -> None:
         "freeze_applied_before_first_update": freeze_applied_before_first_step,
         "effective_freeze_step": effective_freeze_step,
         "encoder_frozen_at_start": not any(
-            parameter.requires_grad for parameter in model.sketch_context_encoder.parameters()
+            parameter.requires_grad
+            for parameter in model.sketch_context_encoder.parameters()
         ),
         "transport_head_reinitialized": bool(args.reset_transport_head_on_resume),
         "optimizer_state_restored": optimizer_state_restored,
@@ -1621,7 +1867,9 @@ def run(args: DictConfig) -> None:
             origin: str = "scheduled",
         ) -> dict[str, object]:
             """Save one globally named probe with explicit resume coordinates."""
-            checkpoint_path = output_dir / "checkpoints" / f"transport_step{global_step}.pt"
+            checkpoint_path = (
+                output_dir / "checkpoints" / f"transport_step{global_step}.pt"
+            )
             _save_checkpoint(
                 path=checkpoint_path,
                 model=model,
@@ -1679,15 +1927,25 @@ def run(args: DictConfig) -> None:
                     "mean_rho": probe_metrics.get("mean_rho", 0.0),
                     "std_rho": probe_metrics.get("std_rho", 0.0),
                     "p95_rho": probe_metrics.get("p95_rho", 0.0),
-                    "mean_direction_cosine": probe_metrics.get("mean_direction_cosine", 0.0),
-                    "endpoint_photo_cosine": probe_metrics.get("endpoint_photo_cosine", 0.0),
+                    "mean_direction_cosine": probe_metrics.get(
+                        "mean_direction_cosine", 0.0
+                    ),
+                    "endpoint_photo_cosine": probe_metrics.get(
+                        "endpoint_photo_cosine", 0.0
+                    ),
                     "base_photo_cosine": probe_metrics.get("base_photo_cosine", 0.0),
                     "semantic_margin": probe_metrics.get("semantic_margin", 0.0),
-                    "base_reference_cosine": probe_metrics.get("base_reference_cosine", 0.0),
-                    "query_reference_cosine": probe_metrics.get("query_reference_cosine", 0.0),
+                    "base_reference_cosine": probe_metrics.get(
+                        "base_reference_cosine", 0.0
+                    ),
+                    "query_reference_cosine": probe_metrics.get(
+                        "query_reference_cosine", 0.0
+                    ),
                     "mean_kappa": probe_metrics.get("mean_kappa", 0.0),
                     "gate_entropy": probe_metrics.get("gate_entropy", 0.0),
-                    "responsibility_entropy": probe_metrics.get("responsibility_entropy", 0.0),
+                    "responsibility_entropy": probe_metrics.get(
+                        "responsibility_entropy", 0.0
+                    ),
                     "global_step": global_step,
                     "steps_since_resume": global_step - resume_step,
                 }
@@ -1711,26 +1969,99 @@ def run(args: DictConfig) -> None:
             # then use that same feature set as the initial reference.
             initial_val = encode_transport_loader(model, val_loader, device=device)
             initial_test = encode_transport_loader(model, test_loader, device=device)
-            modes = ("barycentric", "angular_logsumexp", "max") if int(args.K) > 1 else ("barycentric",)
-            val_evals = evaluate_transport_features(initial_val, val_gallery, modes=modes, temperature=float(args.score_temperature), precision_at_k=tuple(int(k) for k in args.precision_at_k), map_at_k=tuple(int(k) for k in args.map_at_k), map_at_k_denominator=str(args.map_at_k_denominator), query_chunk_size=int(args.query_chunk_size), device=device)
-            test_evals = evaluate_transport_features(initial_test, test_gallery, modes=modes, temperature=float(args.score_temperature), precision_at_k=tuple(int(k) for k in args.precision_at_k), map_at_k=tuple(int(k) for k in args.map_at_k), map_at_k_denominator=str(args.map_at_k_denominator), query_chunk_size=int(args.query_chunk_size), device=device)
-            val_base = evaluate_base_queries(initial_val, val_gallery, temperature=float(args.score_temperature), precision_at_k=tuple(int(k) for k in args.precision_at_k), map_at_k=tuple(int(k) for k in args.map_at_k), map_at_k_denominator=str(args.map_at_k_denominator), query_chunk_size=int(args.query_chunk_size), device=device)
-            test_base = evaluate_base_queries(initial_test, test_gallery, temperature=float(args.score_temperature), precision_at_k=tuple(int(k) for k in args.precision_at_k), map_at_k=tuple(int(k) for k in args.map_at_k), map_at_k_denominator=str(args.map_at_k_denominator), query_chunk_size=int(args.query_chunk_size), device=device)
+            modes = (
+                ("barycentric", "angular_logsumexp", "max")
+                if int(args.K) > 1
+                else ("barycentric",)
+            )
+            val_evals = evaluate_transport_features(
+                initial_val,
+                val_gallery,
+                modes=modes,
+                temperature=float(args.score_temperature),
+                precision_at_k=tuple(int(k) for k in args.precision_at_k),
+                map_at_k=tuple(int(k) for k in args.map_at_k),
+                map_at_k_denominator=str(args.map_at_k_denominator),
+                query_chunk_size=int(args.query_chunk_size),
+                device=device,
+            )
+            test_evals = evaluate_transport_features(
+                initial_test,
+                test_gallery,
+                modes=modes,
+                temperature=float(args.score_temperature),
+                precision_at_k=tuple(int(k) for k in args.precision_at_k),
+                map_at_k=tuple(int(k) for k in args.map_at_k),
+                map_at_k_denominator=str(args.map_at_k_denominator),
+                query_chunk_size=int(args.query_chunk_size),
+                device=device,
+            )
+            val_base = evaluate_base_queries(
+                initial_val,
+                val_gallery,
+                temperature=float(args.score_temperature),
+                precision_at_k=tuple(int(k) for k in args.precision_at_k),
+                map_at_k=tuple(int(k) for k in args.map_at_k),
+                map_at_k_denominator=str(args.map_at_k_denominator),
+                query_chunk_size=int(args.query_chunk_size),
+                device=device,
+            )
+            test_base = evaluate_base_queries(
+                initial_test,
+                test_gallery,
+                temperature=float(args.score_temperature),
+                precision_at_k=tuple(int(k) for k in args.precision_at_k),
+                map_at_k=tuple(int(k) for k in args.map_at_k),
+                map_at_k_denominator=str(args.map_at_k_denominator),
+                query_chunk_size=int(args.query_chunk_size),
+                device=device,
+            )
             selected = str(args.inference_score_mode)
             step0_probe: dict[str, object] = {
                 "val": _metrics_summary(val_evals[selected]),
                 "base_val": _metrics_summary(val_base),
                 "diagnostic_test": _metrics_summary(test_evals[selected]),
                 "base_diagnostic_test": _metrics_summary(test_base),
-                "retrieval_modes": {"val": {k: _metrics_summary(v) for k, v in val_evals.items()}, "diagnostic_test": {k: _metrics_summary(v) for k, v in test_evals.items()}, "base_val": _metrics_summary(val_base), "base_diagnostic_test": _metrics_summary(test_base), "selected": selected},
-                "radius_vs_ap": _radius_ap_payload(val_evals[selected], initial_val.rho),
-                "val_geometry": transport_probe_dict(initial_val, val_gallery, frozen_reference=val_reference, kappa_max=float(args.max_kappa)),
-                "diagnostic_test_geometry": transport_probe_dict(initial_test, test_gallery, frozen_reference=test_reference, kappa_max=float(args.max_kappa)),
-                "hidden_space_compatibility": {
-                    "val": hidden_space_compatibility(val_hidden_reference, initial_val.h, model.photo_projection),
-                    "diagnostic_test": hidden_space_compatibility(test_hidden_reference, initial_test.h, model.photo_projection),
+                "retrieval_modes": {
+                    "val": {k: _metrics_summary(v) for k, v in val_evals.items()},
+                    "diagnostic_test": {
+                        k: _metrics_summary(v) for k, v in test_evals.items()
+                    },
+                    "base_val": _metrics_summary(val_base),
+                    "base_diagnostic_test": _metrics_summary(test_base),
+                    "selected": selected,
                 },
-                "protocol": {"val_is_pseudo_unseen": str(args.train_class_scope) == "pseudo_train", "official_test_is_diagnostic_only": True, "text_used_for_evaluation": False, "photo_gallery_reencoded": False, "map_at_k_denominator": str(args.map_at_k_denominator)},
+                "radius_vs_ap": _radius_ap_payload(
+                    val_evals[selected], initial_val.rho
+                ),
+                "val_geometry": transport_probe_dict(
+                    initial_val,
+                    val_gallery,
+                    frozen_reference=val_reference,
+                    kappa_max=float(args.max_kappa),
+                ),
+                "diagnostic_test_geometry": transport_probe_dict(
+                    initial_test,
+                    test_gallery,
+                    frozen_reference=test_reference,
+                    kappa_max=float(args.max_kappa),
+                ),
+                "hidden_space_compatibility": {
+                    "val": hidden_space_compatibility(
+                        val_hidden_reference, initial_val.h, model.photo_projection
+                    ),
+                    "diagnostic_test": hidden_space_compatibility(
+                        test_hidden_reference, initial_test.h, model.photo_projection
+                    ),
+                },
+                "protocol": {
+                    "val_is_pseudo_unseen": str(args.train_class_scope)
+                    == "pseudo_train",
+                    "official_test_is_diagnostic_only": True,
+                    "text_used_for_evaluation": False,
+                    "photo_gallery_reencoded": False,
+                    "map_at_k_denominator": str(args.map_at_k_denominator),
+                },
                 "step": 0,
                 "global_step": 0,
                 "steps_since_resume": 0,
@@ -1740,19 +2071,40 @@ def run(args: DictConfig) -> None:
                 "parameter_drift": {},
                 "training_losses_at_checkpoint": {},
             }
-            step0_probe["val_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
-            step0_probe["diagnostic_test_geometry"]["drift"] = {"base_initial_cosine": 1.0, "query_initial_cosine": 1.0}  # type: ignore[index]
-            step0_probe["val_geometry"]["transport"]["rho_correlations"] = transport_query_correlations(  # type: ignore[index]
-                initial_val, val_gallery, val_evals[selected].average_precision_per_query
+            step0_probe["val_geometry"]["drift"] = {
+                "base_initial_cosine": 1.0,
+                "query_initial_cosine": 1.0,
+            }  # type: ignore[index]
+            step0_probe["diagnostic_test_geometry"]["drift"] = {
+                "base_initial_cosine": 1.0,
+                "query_initial_cosine": 1.0,
+            }  # type: ignore[index]
+            step0_probe["val_geometry"]["transport"]["rho_correlations"] = (
+                transport_query_correlations(  # type: ignore[index]
+                    initial_val,
+                    val_gallery,
+                    val_evals[selected].average_precision_per_query,
+                )
             )
-            step0_probe["diagnostic_test_geometry"]["transport"]["rho_correlations"] = transport_query_correlations(  # type: ignore[index]
-                initial_test, test_gallery, test_evals[selected].average_precision_per_query
+            step0_probe["diagnostic_test_geometry"]["transport"]["rho_correlations"] = (
+                transport_query_correlations(  # type: ignore[index]
+                    initial_test,
+                    test_gallery,
+                    test_evals[selected].average_precision_per_query,
+                )
             )
             history.append(step0_probe)
             (output_dir / "probe_step0.json").write_text(
                 json.dumps(step0_probe, indent=2, sort_keys=True) + "\n"
             )
-            experiment.log_metrics({**_flatten_probe_metrics(step0_probe), "step": 0, "equivalent_epochs": 0.0}, step=0)
+            experiment.log_metrics(
+                {
+                    **_flatten_probe_metrics(step0_probe),
+                    "step": 0,
+                    "equivalent_epochs": 0.0,
+                },
+                step=0,
+            )
             print(f"step=0000 pseudo_val_mAP={float(step0_probe['val']['mAP']):.6f}")  # type: ignore[index]
 
         if initial_val is None or initial_test is None:
@@ -1787,10 +2139,16 @@ def run(args: DictConfig) -> None:
         while step < int(args.max_steps):
             for batch in train_loader:
                 sketch_images = batch["sketch"].to(device, non_blocking=non_blocking)
-                positive_images = batch["positive_photos"].to(device, non_blocking=non_blocking)
-                negative_images = batch["negative_photo"].to(device, non_blocking=non_blocking)
+                positive_images = batch["positive_photos"].to(
+                    device, non_blocking=non_blocking
+                )
+                negative_images = batch["negative_photo"].to(
+                    device, non_blocking=non_blocking
+                )
                 labels = batch["label"].to(device=device, dtype=torch.long)
-                positive_embeddings, negative_embedding = _encode_photo_targets(photo_clip.encoder, positive_images, negative_images)
+                positive_embeddings, negative_embedding = _encode_photo_targets(
+                    photo_clip.encoder, positive_images, negative_images
+                )
                 target_photo = _target_for_labels(
                     positive_embeddings,
                     labels,
@@ -1804,7 +2162,10 @@ def run(args: DictConfig) -> None:
                 # frame for the fixed-origin direction control.
                 sketch_reference = _encode_reference(photo_clip.encoder, sketch_images)
                 model.train()
-                if not any(parameter.requires_grad for parameter in model.sketch_context_encoder.parameters()):
+                if not any(
+                    parameter.requires_grad
+                    for parameter in model.sketch_context_encoder.parameters()
+                ):
                     model.sketch_context_encoder.eval()
                 optimizer.zero_grad(set_to_none=True)
                 model.set_schedule_step(step)
@@ -1846,14 +2207,16 @@ def run(args: DictConfig) -> None:
                         _angle_values(
                             prediction.z0,
                             positive_embeddings,
-                            max_items=int(args.training_angle_diagnostic_max) - len(training_angle_values),
+                            max_items=int(args.training_angle_diagnostic_max)
+                            - len(training_angle_values),
                         ).tolist()
                     )
                     training_angle_fixed_values.extend(
                         _angle_values(
                             sketch_reference,
                             positive_embeddings,
-                            max_items=int(args.training_angle_diagnostic_max) - len(training_angle_fixed_values),
+                            max_items=int(args.training_angle_diagnostic_max)
+                            - len(training_angle_fixed_values),
                         ).tolist()
                     )
                 mixture = None
@@ -1861,7 +2224,12 @@ def run(args: DictConfig) -> None:
                     loss_dir = query.new_zeros(())
                     loss_dist = query.new_zeros(())
                     loss_endpoint = query.new_zeros(())
-                    loss_rank = transport_ranking_loss(query, target_photo, negative_embedding, margin=float(args.margin))
+                    loss_rank = transport_ranking_loss(
+                        query,
+                        target_photo,
+                        negative_embedding,
+                        margin=float(args.margin),
+                    )
                 elif int(args.K) == 1:
                     loss_dir = (
                         query.new_zeros(())
@@ -1870,9 +2238,20 @@ def run(args: DictConfig) -> None:
                             prediction.direction, direction_transport.direction
                         )
                     )
-                    loss_rank = transport_ranking_loss(query, target_photo, negative_embedding, margin=float(args.margin))
-                    rho_for_loss = prediction.rho if prediction.rho.ndim == 1 else prediction.rho.mean(dim=-1)
-                    loss_dist = transport_distance_loss(rho_for_loss, target_transport.theta)
+                    loss_rank = transport_ranking_loss(
+                        query,
+                        target_photo,
+                        negative_embedding,
+                        margin=float(args.margin),
+                    )
+                    rho_for_loss = (
+                        prediction.rho
+                        if prediction.rho.ndim == 1
+                        else prediction.rho.mean(dim=-1)
+                    )
+                    loss_dist = transport_distance_loss(
+                        rho_for_loss, target_transport.theta
+                    )
                     loss_endpoint = transport_endpoint_loss(query, target_photo)
                 else:
                     if bool(args.use_vmf):
@@ -1897,13 +2276,21 @@ def run(args: DictConfig) -> None:
                             negative_embedding,
                             margin=float(args.margin),
                             ranking_weight=1.0,
-                            direction_weight=0.0 if str(args.direction_target) == "none" else 1.0,
+                            direction_weight=0.0
+                            if str(args.direction_target) == "none"
+                            else 1.0,
                             assignment_temperature=float(args.assignment_temperature),
                         )
                         loss_dir = mixture.direction_nll
                     loss_rank = mixture.ranking
-                    rho_for_loss = prediction.rho if prediction.rho.ndim == 1 else prediction.rho.mean(dim=-1)
-                    loss_dist = transport_distance_loss(rho_for_loss, target_transport.theta)
+                    rho_for_loss = (
+                        prediction.rho
+                        if prediction.rho.ndim == 1
+                        else prediction.rho.mean(dim=-1)
+                    )
+                    loss_dist = transport_distance_loss(
+                        rho_for_loss, target_transport.theta
+                    )
                     loss_endpoint = transport_endpoint_loss(query, target_photo)
                 loss_cls = query.new_zeros(())
                 cls_accuracy = query.new_zeros(())
@@ -1919,7 +2306,9 @@ def run(args: DictConfig) -> None:
                             labels,
                             temperature=float(args.tau_cls),
                         )
-                        cls_accuracy_q = classification_accuracy(logits_q, text_labels, labels)
+                        cls_accuracy_q = classification_accuracy(
+                            logits_q, text_labels, labels
+                        )
                     else:
                         loss_cls_q = query.new_zeros(())
                     if location in {"z0", "both"}:
@@ -1930,7 +2319,9 @@ def run(args: DictConfig) -> None:
                             labels,
                             temperature=float(args.tau_cls),
                         )
-                        cls_accuracy_z0 = classification_accuracy(logits_z0, text_labels, labels)
+                        cls_accuracy_z0 = classification_accuracy(
+                            logits_z0, text_labels, labels
+                        )
                     else:
                         loss_cls_z0 = query.new_zeros(())
                     if location == "q":
@@ -1947,7 +2338,9 @@ def run(args: DictConfig) -> None:
                 loss_vmf = query.new_zeros(())
                 if bool(args.use_vmf):
                     if mixture is None:
-                        raise RuntimeError("Mo-vMF loss was not constructed for a K>1 run")
+                        raise RuntimeError(
+                            "Mo-vMF loss was not constructed for a K>1 run"
+                        )
                     loss_vmf = mixture.direction_nll
                 dir_weight = float(args.lambda_dir)
                 dist_weight = float(args.lambda_dist)
@@ -2035,7 +2428,18 @@ def run(args: DictConfig) -> None:
                     + float(args.lambda_vmf) * loss_vmf
                     + float(args.lambda_geom) * loss_geom
                 )
-                values_to_check = {"loss_total": loss_total, "loss_dir": loss_dir, "loss_dist": loss_dist, "loss_endpoint": loss_endpoint, "loss_rank": loss_rank, "loss_cls": loss_cls, "loss_geom": loss_geom, "loss_vmf": loss_vmf, "prediction_q": prediction.q, "prediction_z0": prediction.z0}
+                values_to_check = {
+                    "loss_total": loss_total,
+                    "loss_dir": loss_dir,
+                    "loss_dist": loss_dist,
+                    "loss_endpoint": loss_endpoint,
+                    "loss_rank": loss_rank,
+                    "loss_cls": loss_cls,
+                    "loss_geom": loss_geom,
+                    "loss_vmf": loss_vmf,
+                    "prediction_q": prediction.q,
+                    "prediction_z0": prediction.z0,
+                }
                 for name, value in values_to_check.items():
                     if not torch.isfinite(value).all().item():
                         raise FloatingPointError(f"{name} contains non-finite values")
@@ -2043,11 +2447,17 @@ def run(args: DictConfig) -> None:
                 for name, parameter in model.named_parameters():
                     if parameter.requires_grad:
                         if parameter.grad is None:
-                            raise RuntimeError(f"Trainable parameter has no gradient: {name}")
+                            raise RuntimeError(
+                                f"Trainable parameter has no gradient: {name}"
+                            )
                         if not torch.isfinite(parameter.grad).all().item():
-                            raise FloatingPointError(f"gradient {name} contains non-finite values")
+                            raise FloatingPointError(
+                                f"gradient {name} contains non-finite values"
+                            )
                     elif parameter.grad is not None:
-                        raise RuntimeError(f"Frozen parameter received a gradient: {name}")
+                        raise RuntimeError(
+                            f"Frozen parameter received a gradient: {name}"
+                        )
                 optimizer.step()
                 if freeze_step is not None and step + 1 == freeze_step:
                     _freeze_encoder(model)
@@ -2055,10 +2465,28 @@ def run(args: DictConfig) -> None:
                     print(f"Sketch encoder frozen at step {freeze_step}")
                 for name, parameter in model.named_parameters():
                     if not torch.isfinite(parameter).all().item():
-                        raise FloatingPointError(f"parameter {name} contains non-finite values")
+                        raise FloatingPointError(
+                            f"parameter {name} contains non-finite values"
+                        )
                 with torch.no_grad():
-                    train_direction = ((prediction.direction * direction_transport.direction).sum(dim=-1).mean() if bool(args.transport_enabled) and int(args.K) == 1 else (prediction.directions * direction_transport.direction[:, None, :]).sum(dim=-1).max(dim=-1).values.mean() if bool(args.transport_enabled) else query.new_zeros(()))
-                    train_endpoint = (query * target_transport.z_photo).sum(dim=-1).mean()
+                    train_direction = (
+                        (prediction.direction * direction_transport.direction)
+                        .sum(dim=-1)
+                        .mean()
+                        if bool(args.transport_enabled) and int(args.K) == 1
+                        else (
+                            prediction.directions
+                            * direction_transport.direction[:, None, :]
+                        )
+                        .sum(dim=-1)
+                        .max(dim=-1)
+                        .values.mean()
+                        if bool(args.transport_enabled)
+                        else query.new_zeros(())
+                    )
+                    train_endpoint = (
+                        (query * target_transport.z_photo).sum(dim=-1).mean()
+                    )
                 # The dataset samples positive photos afresh in __getitem__; keep
                 # an explicit diversity counter so M=1 is not mistaken for a
                 # fixed target experiment.
@@ -2072,7 +2500,9 @@ def run(args: DictConfig) -> None:
                 step += 1
                 if gradient_conflict is not None:
                     gradient_conflicts.append(gradient_conflict)
-                    (output_dir / f"gradient_conflict_step{step}.json").write_text(json.dumps(gradient_conflict, indent=2, sort_keys=True) + "\n")
+                    (output_dir / f"gradient_conflict_step{step}.json").write_text(
+                        json.dumps(gradient_conflict, indent=2, sort_keys=True) + "\n"
+                    )
                 current = {
                     "loss_total": loss_total.item(),
                     "loss_dir": loss_dir.item(),
@@ -2092,12 +2522,28 @@ def run(args: DictConfig) -> None:
                     window[name] += value
                 window_count += 1
                 if step % int(args.log_every) == 0 or step == int(args.max_steps):
-                    means = {name: value / window_count for name, value in window.items()}
+                    means = {
+                        name: value / window_count for name, value in window.items()
+                    }
                     equivalent_epochs = step * equivalent_epochs_per_step
-                    train_log = {**means, "positive_photo_unique": float(len(positive_paths_seen)), "steps": step, "equivalent_epochs": equivalent_epochs}
+                    train_log = {
+                        **means,
+                        "positive_photo_unique": float(len(positive_paths_seen)),
+                        "steps": step,
+                        "equivalent_epochs": equivalent_epochs,
+                    }
                     experiment.log_metrics(train_log, step=step)
-                    training_history.append({"step": step, "equivalent_epochs": equivalent_epochs, **means, "positive_photo_unique": len(positive_paths_seen)})
-                    print(f"step={step:04d} total={means['loss_total']:.5f} dir={means['loss_dir']:.5f} dist={means['loss_dist']:.5f} endpoint={means['loss_endpoint']:.5f} rank={means['loss_rank']:.5f} unique_photos={len(positive_paths_seen)}")
+                    training_history.append(
+                        {
+                            "step": step,
+                            "equivalent_epochs": equivalent_epochs,
+                            **means,
+                            "positive_photo_unique": len(positive_paths_seen),
+                        }
+                    )
+                    print(
+                        f"step={step:04d} total={means['loss_total']:.5f} dir={means['loss_dir']:.5f} dist={means['loss_dist']:.5f} endpoint={means['loss_endpoint']:.5f} rank={means['loss_rank']:.5f} unique_photos={len(positive_paths_seen)}"
+                    )
                     window = dict.fromkeys(window, 0.0)
                     window_count = 0
                 if bool(args.run_probes) and step in probe_steps:
@@ -2180,7 +2626,9 @@ def run(args: DictConfig) -> None:
                 "starting_step": resume_step,
                 "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
                 "freeze_applied_before_first_update": freeze_applied_before_first_step,
-                "encoder_frozen_immediately": continuation_metadata["encoder_frozen_at_start"],
+                "encoder_frozen_immediately": continuation_metadata[
+                    "encoder_frozen_at_start"
+                ],
                 "effective_freeze_step": effective_freeze_step,
                 "freeze_encoder_at_step": freeze_step,
                 "optimizer_state_restored": optimizer_state_restored,
@@ -2223,8 +2671,12 @@ def run(args: DictConfig) -> None:
                 "run_url": experiment.run_url,
             },
         }
-        (output_dir / "training_history.json").write_text(json.dumps(training_history, indent=2, sort_keys=True) + "\n")
-        (output_dir / "run_result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        (output_dir / "training_history.json").write_text(
+            json.dumps(training_history, indent=2, sort_keys=True) + "\n"
+        )
+        (output_dir / "run_result.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n"
+        )
         print(f"Checkpoint saved to {final_path}")
         print("Text enters predictor: NO")
         print("Text required at inference: NO")

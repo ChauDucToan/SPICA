@@ -67,7 +67,9 @@ def _run(**updates):
     }
 
 
-def test_manifest_identity_covers_paths_labels_and_manifest_bytes(tmp_path: Path) -> None:
+def test_manifest_identity_covers_paths_labels_and_manifest_bytes(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "dataset"
     root.mkdir()
     manifests = {
@@ -100,19 +102,25 @@ def test_manifest_identity_covers_paths_labels_and_manifest_bytes(tmp_path: Path
         train_sketch_entries=(ManifestEntry(root / "a.png", 9),),
     )
     for changed in (changed_path, changed_label):
-        assert first["sha256"] != split_manifest_identity(
-            changed,
+        assert (
+            first["sha256"]
+            != split_manifest_identity(
+                changed,
+                dataset_name="fixture",
+                dataset_root=root,
+                manifest_paths=manifests,
+            )["sha256"]
+        )
+    manifests["train_sketch"].write_text("changed\\n")
+    assert (
+        first["sha256"]
+        != split_manifest_identity(
+            split,
             dataset_name="fixture",
             dataset_root=root,
             manifest_paths=manifests,
         )["sha256"]
-    manifests["train_sketch"].write_text("changed\\n")
-    assert first["sha256"] != split_manifest_identity(
-        split,
-        dataset_name="fixture",
-        dataset_root=root,
-        manifest_paths=manifests,
-    )["sha256"]
+    )
 
 
 def test_causal_decomposition_rejects_different_text_configuration() -> None:
@@ -157,7 +165,9 @@ def test_endpoint0_factorial_effects_are_correct() -> None:
     }
 
 
-def test_freeze_optimizer_artifact_validates_hashes_and_resume_flags(tmp_path: Path) -> None:
+def test_freeze_optimizer_artifact_validates_hashes_and_resume_flags(
+    tmp_path: Path,
+) -> None:
     source_path = tmp_path / "source.pt"
     result_path = tmp_path / "result.pt"
     source_path.write_bytes(b"source")
@@ -325,8 +335,18 @@ def test_stage1_selection_rejects_duplicate_candidate_steps(tmp_path: Path) -> N
                 "data_split_identity": split,
                 "provenance": {"status": "valid"},
                 "probe_history": [
-                    {"step": 44, "protocol": protocol, "checkpoint": str(checkpoint), "val": {"mAP": 0.5}},
-                    {"step": 44, "protocol": protocol, "checkpoint": str(checkpoint), "val": {"mAP": 0.5}},
+                    {
+                        "step": 44,
+                        "protocol": protocol,
+                        "checkpoint": str(checkpoint),
+                        "val": {"mAP": 0.5},
+                    },
+                    {
+                        "step": 44,
+                        "protocol": protocol,
+                        "checkpoint": str(checkpoint),
+                        "val": {"mAP": 0.5},
+                    },
                 ],
             }
         )
@@ -452,17 +472,19 @@ def test_projection_refit_rejects_tampered_hashed_source(tmp_path: Path) -> None
         "data_manifest_identity": {"sha256": "manifest"},
         "provenance": {"status": "valid"},
         "source_artifacts": [{"path": str(source), "sha256": digest}],
-        "values": [{
-            "experiment_role": "freeze_optimizer_source",
-            "experiment_campaign": "transport_corrected_2026-09-02_v2",
-            "checkpoint_step": 73,
-            "fit_split": "pseudo_train only",
-            "evaluation_split": "pseudo-unseen only",
-            "data_manifest_identity": {"sha256": "manifest"},
-            "methods": methods,
-            "checkpoint": str(source),
-            "checkpoint_sha256": digest,
-        }],
+        "values": [
+            {
+                "experiment_role": "freeze_optimizer_source",
+                "experiment_campaign": "transport_corrected_2026-09-02_v2",
+                "checkpoint_step": 73,
+                "fit_split": "pseudo_train only",
+                "evaluation_split": "pseudo-unseen only",
+                "data_manifest_identity": {"sha256": "manifest"},
+                "methods": methods,
+                "checkpoint": str(source),
+                "checkpoint_sha256": digest,
+            }
+        ],
     }
     path = tmp_path / "projection.json"
     path.write_text(json.dumps(artifact))

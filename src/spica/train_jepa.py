@@ -21,7 +21,11 @@ from .config.data import load_data_config
 from .data.datasets import MultiPositiveRetrievalTrainDataset, RetrievalEvalDataset
 from .data.manifest import read_class_map, read_manifest
 from .data.splits import ClasswiseRetrievalSplit, make_classwise_retrieval_split
-from .evaluation.embeddings import EncodedRetrievalSet, load_encoded_retrieval_set, encode_retrieval_loader
+from .evaluation.embeddings import (
+    EncodedRetrievalSet,
+    load_encoded_retrieval_set,
+    encode_retrieval_loader,
+)
 from .evaluation.jepa import (
     JepaFeatureSet,
     encode_jepa_loader,
@@ -34,7 +38,11 @@ from .evaluation.text_bank import (
     SoftPromptTextBank,
     encode_class_text_bank,
 )
-from .models.clip import FrozenClipEncoder, load_frozen_clip, load_trainable_sketch_encoder
+from .models.clip import (
+    FrozenClipEncoder,
+    load_frozen_clip,
+    load_trainable_sketch_encoder,
+)
 from .models.jepa import (
     JepaPrediction,
     SignatureRegularizer,
@@ -251,9 +259,7 @@ def _encode_photo_targets(
     flattened = positive_images.flatten(0, 1)
     with torch.no_grad():
         encoded = encoder(torch.cat((flattened, negative_images), dim=0))
-    positives, negative = encoded.split(
-        (batch_size * num_positives, batch_size), dim=0
-    )
+    positives, negative = encoded.split((batch_size * num_positives, batch_size), dim=0)
     return positives.reshape(batch_size, num_positives, -1), negative
 
 
@@ -279,7 +285,9 @@ def _parameter_counts(
         "frozen_parameters": total - trainable,
         "predictor_parameters": model.predictor_parameter_count,
         "sketch_encoder_trainable_parameters": model.sketch_encoder_trainable_parameter_count,
-        "regularizer_parameters": 0 if regularizer is None else regularizer.parameter_count,
+        "regularizer_parameters": 0
+        if regularizer is None
+        else regularizer.parameter_count,
         "soft_prompt_parameters": soft_prompt_parameters,
         "optimizer_trainable_parameters": trainable + soft_prompt_parameters,
         "frozen_photo_encoder_parameters": sum(
@@ -305,7 +313,8 @@ def _save_text_bank(
             "soft_prompt": True,
             "soft_prompt_length": text_bank.prompt_length,
             "soft_prompt_state_dict": {
-                key: value.detach().cpu() for key, value in text_bank.state_dict().items()
+                key: value.detach().cpu()
+                for key, value in text_bank.state_dict().items()
             },
             "used_only_as_training_classifier": True,
         }
@@ -461,7 +470,8 @@ def _probe_checkpoint(
             "diagnostic_test_geometry": feature_probe_dict(test_features, test_gallery),
             "protocol": {
                 "val_is_pseudo_unseen": str(args.train_class_scope) == "pseudo_train",
-                "validation_classes_seen_during_training": str(args.train_class_scope) == "all_seen",
+                "validation_classes_seen_during_training": str(args.train_class_scope)
+                == "all_seen",
                 "official_test_is_diagnostic_only": True,
                 "text_used_for_evaluation": False,
                 "photo_gallery_reencoded": False,
@@ -604,7 +614,9 @@ def run(args: DictConfig) -> None:
             Path(HydraConfig.get().runtime.output_dir) / "seen_text_bank.pt",
             text_bank,
         )
-        prompt_kind = "soft-prompt" if isinstance(text_bank, SoftPromptTextBank) else "frozen"
+        prompt_kind = (
+            "soft-prompt" if isinstance(text_bank, SoftPromptTextBank) else "frozen"
+        )
         print(
             f"Cached {len(text_bank.class_names)} seen-class {prompt_kind} text embeddings; "
             "text is training supervision only."
@@ -617,7 +629,11 @@ def run(args: DictConfig) -> None:
     text_labels = (
         None
         if text_bank is None
-        else (text_bank.class_labels if isinstance(text_bank, SoftPromptTextBank) else text_bank.labels).to(device)
+        else (
+            text_bank.class_labels
+            if isinstance(text_bank, SoftPromptTextBank)
+            else text_bank.labels
+        ).to(device)
     )
 
     signature_regularizer: SignatureRegularizer | None = None
@@ -631,7 +647,9 @@ def run(args: DictConfig) -> None:
         ).to(device)
 
     predictor_parameters = [
-        parameter for parameter in model.predictor.parameters() if parameter.requires_grad
+        parameter
+        for parameter in model.predictor.parameters()
+        if parameter.requires_grad
     ]
     encoder_parameters = [
         parameter
@@ -698,9 +716,7 @@ def run(args: DictConfig) -> None:
         "pseudo_validation_classes": len(split.validation_class_ids),
         "text_conditioning": False,
         "wandb_project": str(args.wandb_project),
-        "wandb_group": None
-        if args.wandb_group is None
-        else str(args.wandb_group),
+        "wandb_group": None if args.wandb_group is None else str(args.wandb_group),
         "wandb_mode": str(args.wandb_mode),
     }
 
@@ -717,7 +733,11 @@ def run(args: DictConfig) -> None:
         group=None if args.wandb_group is None else str(args.wandb_group),
         name=None if args.wandb_run_name is None else str(args.wandb_run_name),
         config=run_config,
-        tags=("cross-modal-jepa", str(args.encoder_mode), f"M{args.num_positive_photos}"),
+        tags=(
+            "cross-modal-jepa",
+            str(args.encoder_mode),
+            f"M{args.num_positive_photos}",
+        ),
         mode=experiment_mode,
         job_type="training",
         directory=output_dir,
@@ -785,9 +805,7 @@ def run(args: DictConfig) -> None:
                         temperature=float(args.tau_cls),
                         detach_text=not isinstance(text_bank, SoftPromptTextBank),
                     )
-                    cls_accuracy = classification_accuracy(
-                        logits, text_labels, labels
-                    )
+                    cls_accuracy = classification_accuracy(logits, text_labels, labels)
 
                 loss_var = prediction.u.new_zeros(())
                 loss_cov = prediction.u.new_zeros(())
@@ -830,10 +848,14 @@ def run(args: DictConfig) -> None:
                 for name, parameter in model.named_parameters():
                     if parameter.requires_grad:
                         if parameter.grad is None:
-                            raise RuntimeError(f"Trainable parameter has no gradient: {name}")
+                            raise RuntimeError(
+                                f"Trainable parameter has no gradient: {name}"
+                            )
                         _check_finite(f"gradient {name}", parameter.grad)
                     elif parameter.grad is not None:
-                        raise RuntimeError(f"Frozen parameter received a gradient: {name}")
+                        raise RuntimeError(
+                            f"Frozen parameter received a gradient: {name}"
+                        )
                 if isinstance(text_bank, SoftPromptTextBank):
                     for name, parameter in text_bank.named_parameters():
                         if parameter.grad is None:
@@ -868,7 +890,9 @@ def run(args: DictConfig) -> None:
                 window_count += 1
 
                 if step % int(args.log_every) == 0 or step == int(args.max_steps):
-                    means = {name: value / window_count for name, value in window.items()}
+                    means = {
+                        name: value / window_count for name, value in window.items()
+                    }
                     equivalent_epochs = step * equivalent_epochs_per_step
                     _log_training_metrics(
                         experiment,
@@ -904,7 +928,9 @@ def run(args: DictConfig) -> None:
                         split=split,
                         parameter_counts=parameter_counts,
                     )
-                    print(f"Probing pseudo-unseen and diagnostic test at step {step}...")
+                    print(
+                        f"Probing pseudo-unseen and diagnostic test at step {step}..."
+                    )
                     probe, _, _ = _probe_checkpoint(
                         model=model,
                         val_loader=val_loader,
@@ -952,14 +978,22 @@ def run(args: DictConfig) -> None:
                             "h_effective_rank": float(geometry["h"]["effective_rank"]),
                             "u_effective_rank": float(geometry["u"]["effective_rank"]),
                             "q_effective_rank": float(q_geometry["effective_rank"]),
-                            "mean_feature_variance": float(q_geometry["mean_feature_variance"]),
-                            "minimum_feature_variance": float(q_geometry["minimum_feature_variance"]),
+                            "mean_feature_variance": float(
+                                q_geometry["mean_feature_variance"]
+                            ),
+                            "minimum_feature_variance": float(
+                                q_geometry["minimum_feature_variance"]
+                            ),
                             "near_zero_variance_fraction": float(
                                 q_geometry["near_zero_variance_fraction"]
                             ),
-                            "covariance_offdiag": float(q_geometry["covariance_offdiag"]),
+                            "covariance_offdiag": float(
+                                q_geometry["covariance_offdiag"]
+                            ),
                             "global_anisotropy": float(q_geometry["global_anisotropy"]),
-                            "mean_pairwise_cosine": float(q_geometry["mean_pairwise_cosine"]),
+                            "mean_pairwise_cosine": float(
+                                q_geometry["mean_pairwise_cosine"]
+                            ),
                             "semantic_margin": float(semantic["semantic_margin"]),
                             "predicted_target_cosine": float(
                                 semantic["predicted_target_cosine"]
@@ -1024,11 +1058,14 @@ def run(args: DictConfig) -> None:
             "text": {
                 "enabled": text_bank is not None,
                 "enters_predictor": False,
-                "seen_class_count": 0 if text_bank is None else len(text_bank.class_names),
+                "seen_class_count": 0
+                if text_bank is None
+                else len(text_bank.class_names),
                 "prompt_template": str(args.prompt_template),
                 "soft_prompt": isinstance(text_bank, SoftPromptTextBank),
                 "soft_prompt_length": (
-                    0 if not isinstance(text_bank, SoftPromptTextBank)
+                    0
+                    if not isinstance(text_bank, SoftPromptTextBank)
                     else text_bank.prompt_length
                 ),
                 "text_gradients_enabled": isinstance(text_bank, SoftPromptTextBank),
@@ -1045,9 +1082,7 @@ def run(args: DictConfig) -> None:
             "wandb": {
                 "mode": experiment_mode,
                 "project": str(args.wandb_project),
-                "group": None
-                if args.wandb_group is None
-                else str(args.wandb_group),
+                "group": None if args.wandb_group is None else str(args.wandb_group),
                 "run_id": experiment.run_id,
                 "run_url": experiment.run_url,
             },

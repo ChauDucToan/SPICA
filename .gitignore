@@ -37,7 +37,12 @@ outputs/*
 !outputs/research_summary_frozen_prompt_probe_*.md
 !outputs/research_summary_frozen_prompt_probe_*.json
 !outputs/experiment_manifest_frozen_prompt_probe_*.json
+!outputs/experiment_manifest_frozen_prompt_probe_v2_*.json
 !outputs/*frozen_prompt*2026-09-03.png
+!outputs/frozen_prompt_v2_*2026-09-04.png
+!outputs/frozen_prompt_v2_selection_2026-09-04.json
+!outputs/research_summary_frozen_prompt_probe_v2_2026-09-04.md
+!outputs/research_summary_frozen_prompt_probe_v2_2026-09-04.json
 !outputs/*visual_prompt*2026-09-03.png
 !outputs/*soft_text_prompt*2026-09-03.png
 !outputs/*prompt_attention*2026-09-03.png

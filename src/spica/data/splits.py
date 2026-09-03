@@ -114,11 +114,11 @@ def make_classwise_retrieval_split(
         )
 
     generator = random.Random(seed)
-    validation = tuple(
-        sorted(generator.sample(available, num_validation_classes))
-    )
+    validation = tuple(sorted(generator.sample(available, num_validation_classes)))
     validation_set = set(validation)
-    training = tuple(class_id for class_id in available if class_id not in validation_set)
+    training = tuple(
+        class_id for class_id in available if class_id not in validation_set
+    )
     training_set = set(training)
 
     return ClasswiseRetrievalSplit(

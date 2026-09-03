@@ -69,7 +69,9 @@ def save_prompt_cache(
     )
 
 
-def load_prompt_cache(path: Path, *, expected_identity: dict[str, Any]) -> EncodedRetrievalSet:
+def load_prompt_cache(
+    path: Path, *, expected_identity: dict[str, Any]
+) -> EncodedRetrievalSet:
     if not path.is_file():
         raise FileNotFoundError(f"prompted gallery cache not found: {path}")
     payload = torch.load(path, map_location="cpu", weights_only=True)
@@ -81,18 +83,24 @@ def load_prompt_cache(path: Path, *, expected_identity: dict[str, Any]) -> Encod
         embeddings=payload["embeddings"].float(),
         labels=payload["labels"].long(),
         paths=tuple(str(value) for value in payload["paths"]),
-        metadata={"prompt_cache_identity": json.dumps(expected_identity, sort_keys=True)},
+        metadata={
+            "prompt_cache_identity": json.dumps(expected_identity, sort_keys=True)
+        },
     )
 
 
-def encode_prompted_loader(model: Any, loader: DataLoader, *, photo: bool = False) -> EncodedRetrievalSet:
+def encode_prompted_loader(
+    model: Any, loader: DataLoader, *, photo: bool = False
+) -> EncodedRetrievalSet:
     model.eval()
     embeddings: list[Tensor] = []
     labels: list[Tensor] = []
     paths: list[str] = []
     with torch.no_grad():
         for batch in loader:
-            images = batch["image"].to(model.device, non_blocking=model.device.type == "cuda")
+            images = batch["image"].to(
+                model.device, non_blocking=model.device.type == "cuda"
+            )
             values = model.encode_photo(images) if photo else model(images)
             embeddings.append(values.float().cpu())
             labels.append(batch["label"].long().cpu())
@@ -129,7 +137,10 @@ def cross_modal_geometry(
     photo = F.normalize(photos.embeddings, dim=-1)
     photo_labels = torch.unique(photos.labels, sorted=True)
     centroids = torch.stack(
-        [F.normalize(photo[photos.labels == label].mean(0), dim=-1) for label in photo_labels]
+        [
+            F.normalize(photo[photos.labels == label].mean(0), dim=-1)
+            for label in photo_labels
+        ]
     )
     positions = torch.searchsorted(photo_labels, sketches.labels)
     same = (sketch * centroids[positions]).sum(-1)
@@ -150,9 +161,124 @@ def reference_preservation(
     current: EncodedRetrievalSet,
     reference: EncodedRetrievalSet,
 ) -> float:
-    if current.paths != reference.paths or current.labels.shape != reference.labels.shape:
+    if (
+        current.paths != reference.paths
+        or current.labels.shape != reference.labels.shape
+    ):
         raise ValueError("reference and current retrieval sets are not aligned")
-    return F.cosine_similarity(current.embeddings, reference.embeddings, dim=-1).mean().item()
+    return (
+        F.cosine_similarity(current.embeddings, reference.embeddings, dim=-1)
+        .mean()
+        .item()
+    )
+
+
+def linear_cka(current: Tensor, reference: Tensor) -> float:
+    """Compute linear CKA for two aligned feature matrices."""
+    if current.ndim != 2 or reference.ndim != 2 or current.shape != reference.shape:
+        raise ValueError("CKA inputs must be aligned two-dimensional tensors")
+    if current.shape[0] < 2:
+        raise ValueError("CKA requires at least two rows")
+    x = current.float() - current.float().mean(dim=0, keepdim=True)
+    y = reference.float() - reference.float().mean(dim=0, keepdim=True)
+    cross = x.T @ y
+    numerator = cross.square().sum()
+    denominator = (x.T @ x).square().sum().sqrt() * (y.T @ y).square().sum().sqrt()
+    return float((numerator / denominator.clamp_min(1e-12)).item())
+
+
+def orthogonal_procrustes_residual(current: Tensor, reference: Tensor) -> float:
+    """Return normalized residual after the best orthogonal feature alignment."""
+    if current.ndim != 2 or reference.ndim != 2 or current.shape != reference.shape:
+        raise ValueError("Procrustes inputs must be aligned two-dimensional tensors")
+    x = current.float() - current.float().mean(dim=0, keepdim=True)
+    y = reference.float() - reference.float().mean(dim=0, keepdim=True)
+    left, _, right_transpose = torch.linalg.svd(x.T @ y, full_matrices=False)
+    rotation = left @ right_transpose
+    residual = (x @ rotation - y).norm() / y.norm().clamp_min(1e-12)
+    return float(residual.item())
+
+
+def _aligned_sample(
+    current: EncodedRetrievalSet,
+    reference: EncodedRetrievalSet,
+    max_samples: int,
+) -> tuple[Tensor, Tensor]:
+    if current.paths != reference.paths or not torch.equal(
+        current.labels, reference.labels
+    ):
+        raise ValueError("feature references must have identical paths and labels")
+    count = min(current.embeddings.shape[0], max_samples)
+    return current.embeddings[:count], reference.embeddings[:count]
+
+
+def representation_alignment(
+    current: EncodedRetrievalSet,
+    reference: EncodedRetrievalSet,
+    *,
+    max_samples: int = 512,
+) -> dict[str, float]:
+    values, baseline = _aligned_sample(current, reference, max_samples)
+    return {
+        "linear_cka": linear_cka(values, baseline),
+        "orthogonal_procrustes_residual": orthogonal_procrustes_residual(
+            values, baseline
+        ),
+    }
+
+
+def prompt_token_geometry(model: Any) -> dict[str, Any]:
+    """Return per-token norms and within/between-modality cosine matrices."""
+
+    def values(name: str) -> Tensor:
+        tensor = getattr(model, name, None)
+        if not isinstance(tensor, Tensor):
+            return torch.empty((0, 0), dtype=torch.float32)
+        return tensor.detach().float().cpu()
+
+    sketch = values("sketch_prompt")
+    photo = values("photo_prompt")
+
+    def normalize(tensor: Tensor) -> Tensor:
+        return F.normalize(tensor, dim=-1) if tensor.numel() else tensor
+
+    sketch_normalized = normalize(sketch)
+    photo_normalized = normalize(photo)
+    sketch_cosine = (
+        sketch_normalized @ sketch_normalized.T
+        if sketch.numel()
+        else torch.empty((0, 0))
+    )
+    photo_cosine = (
+        photo_normalized @ photo_normalized.T if photo.numel() else torch.empty((0, 0))
+    )
+    cross_cosine = (
+        sketch_normalized @ photo_normalized.T
+        if sketch.numel() and photo.numel()
+        else torch.empty((0, 0))
+    )
+    matrices = [
+        matrix.flatten()
+        for matrix in (sketch_cosine, photo_cosine, cross_cosine)
+        if matrix.numel()
+    ]
+    all_cosines = torch.cat(matrices) if matrices else torch.empty(0)
+    return {
+        "sketch_token_norms": sketch.norm(dim=-1).tolist() if sketch.numel() else [],
+        "photo_token_norms": photo.norm(dim=-1).tolist() if photo.numel() else [],
+        "pairwise_sketch_prompt_token_cosine": sketch_cosine.tolist(),
+        "pairwise_photo_prompt_token_cosine": photo_cosine.tolist(),
+        "sketch_vs_photo_prompt_token_cosine": cross_cosine.tolist(),
+        "mean_prompt_cosine": None
+        if not all_cosines.numel()
+        else float(all_cosines.mean().item()),
+        "max_prompt_cosine": None
+        if not all_cosines.numel()
+        else float(all_cosines.max().item()),
+        "min_prompt_cosine": None
+        if not all_cosines.numel()
+        else float(all_cosines.min().item()),
+    }
 
 
 def geometry_payload(
@@ -161,14 +287,30 @@ def geometry_payload(
     *,
     sketch_reference: EncodedRetrievalSet,
     photo_reference: EncodedRetrievalSet,
+    model: Any | None = None,
     max_samples: int = 512,
 ) -> dict[str, Any]:
-    return {
-        "sketch": feature_geometry(sketches.embeddings, max_samples=max_samples, pair_samples=2048).to_dict(),
-        "photo": feature_geometry(photos.embeddings, max_samples=max_samples, pair_samples=2048).to_dict(),
+    payload = {
+        "sketch": feature_geometry(
+            sketches.embeddings, max_samples=max_samples, pair_samples=2048
+        ).to_dict(),
+        "photo": feature_geometry(
+            photos.embeddings, max_samples=max_samples, pair_samples=2048
+        ).to_dict(),
         "cross_modal": cross_modal_geometry(sketches, photos),
         "reference_preservation": {
             "sketch": reference_preservation(sketches, sketch_reference),
             "photo": reference_preservation(photos, photo_reference),
         },
+        "representation_alignment": {
+            "sketch": representation_alignment(
+                sketches, sketch_reference, max_samples=max_samples
+            ),
+            "photo": representation_alignment(
+                photos, photo_reference, max_samples=max_samples
+            ),
+        },
     }
+    if model is not None:
+        payload["prompt_token_geometry"] = prompt_token_geometry(model)
+    return payload

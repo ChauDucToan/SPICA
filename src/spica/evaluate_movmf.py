@@ -592,9 +592,7 @@ def main(args: DictConfig) -> None:
                 "component scoring_rule must be component_0, component_1, ..."
             ) from error
         if component_index < 0 or component_index >= num_components:
-            raise ValueError(
-                f"component index must be in [0, {num_components - 1}]"
-            )
+            raise ValueError(f"component index must be in [0, {num_components - 1}]")
     if scoring_rule not in supported_scoring_rules and not component_rule:
         raise ValueError(
             "unsupported scoring_rule; expected one of "
@@ -724,8 +722,13 @@ def main(args: DictConfig) -> None:
             temperature = float(args.temperature)
             if scoring_rule == "angular_logsumexp" and temperature <= 0:
                 raise ValueError("temperature must be positive for angular_logsumexp")
-            for start in range(0, prediction.mean_directions.shape[0], int(args.query_chunk_size)):
-                stop = min(start + int(args.query_chunk_size), prediction.mean_directions.shape[0])
+            for start in range(
+                0, prediction.mean_directions.shape[0], int(args.query_chunk_size)
+            ):
+                stop = min(
+                    start + int(args.query_chunk_size),
+                    prediction.mean_directions.shape[0],
+                )
                 directions = prediction.mean_directions[start:stop].to(device)
                 cosine = torch.einsum("bkd,gd->bkg", directions, gallery_embeddings)
                 if scoring_rule in {"max_component", "max_directional"}:
@@ -739,7 +742,9 @@ def main(args: DictConfig) -> None:
                     scores = temperature * torch.logsumexp(cosine / temperature, dim=1)
                     ranking_semantics = "angular_logsumexp_of_component_cosines"
                 else:
-                    raise ValueError(f"unsupported non-vector scoring_rule: {scoring_rule}")
+                    raise ValueError(
+                        f"unsupported non-vector scoring_rule: {scoring_rule}"
+                    )
                 score_batches.append(scores.cpu())
             score_matrix = torch.cat(score_batches, dim=0)
             # Reuse the deterministic score-matrix evaluator; it only consumes

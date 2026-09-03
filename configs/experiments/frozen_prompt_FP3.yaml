@@ -1,6 +1,7 @@
 # @package _global_
-experiment_role: frozen_prompt_FP3
+experiment_role: frozen_prompt_v2_FP3
 visual_prompt_length: 3
 prompt_mode: prompt_only
 text_mode: soft
 lambda_cls: 1.0
+classification_location: query

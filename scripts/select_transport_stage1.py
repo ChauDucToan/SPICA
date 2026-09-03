@@ -48,7 +48,10 @@ def select_stage1(run_result_path: Path) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise ValueError("Stage-1 run_result must be a JSON object")
     config = result.get("config")
-    if not isinstance(config, dict) or config.get("experiment_role") != "two_stage_stage1":
+    if (
+        not isinstance(config, dict)
+        or config.get("experiment_role") != "two_stage_stage1"
+    ):
         raise ValueError("run_result is not the corrected Stage-1 role")
     if config.get("transport_enabled") is not False:
         raise ValueError("Stage-1 selection requires transport_enabled=false")
@@ -79,8 +82,13 @@ def select_stage1(run_result_path: Path) -> dict[str, Any]:
         if step in by_step:
             raise ValueError(f"duplicate Stage-1 candidate checkpoint step: {step}")
         protocol = point.get("protocol")
-        if not isinstance(protocol, dict) or protocol.get("val_is_pseudo_unseen") is not True:
-            raise ValueError(f"Stage-1 step {step} lacks pseudo-unseen validation protocol")
+        if (
+            not isinstance(protocol, dict)
+            or protocol.get("val_is_pseudo_unseen") is not True
+        ):
+            raise ValueError(
+                f"Stage-1 step {step} lacks pseudo-unseen validation protocol"
+            )
         if protocol.get("official_test_is_diagnostic_only") is not True:
             raise ValueError(f"Stage-1 step {step} has unsafe official-test protocol")
         checkpoint = _resolve(point.get("checkpoint"))
@@ -99,10 +107,16 @@ def select_stage1(run_result_path: Path) -> dict[str, Any]:
         if metadata.get("data_split_identity") != split:
             raise ValueError(f"Stage-1 checkpoint split mismatch at {checkpoint}")
         if payload.get("data_manifest_identity") != manifest_identity:
-            raise ValueError(f"Stage-1 checkpoint manifest identity mismatch at {checkpoint}")
+            raise ValueError(
+                f"Stage-1 checkpoint manifest identity mismatch at {checkpoint}"
+            )
         by_step[step] = {
             "step": step,
-            "mAP": _number(point.get("val", {}).get("mAP") if isinstance(point.get("val"), dict) else None),
+            "mAP": _number(
+                point.get("val", {}).get("mAP")
+                if isinstance(point.get("val"), dict)
+                else None
+            ),
             "checkpoint": str(checkpoint),
             "checkpoint_sha256": _sha256(checkpoint),
         }
@@ -132,7 +146,9 @@ def main() -> None:
     parser.add_argument("run_result", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    run_result = args.run_result if args.run_result.is_absolute() else ROOT / args.run_result
+    run_result = (
+        args.run_result if args.run_result.is_absolute() else ROOT / args.run_result
+    )
     output = args.output if args.output.is_absolute() else ROOT / args.output
     selection = select_stage1(run_result)
     selection["provenance"] = capture_provenance(

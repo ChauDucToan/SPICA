@@ -16,7 +16,11 @@ from spica.config.data import load_data_config
 from spica.data.datasets import RetrievalEvalDataset
 from spica.data.manifest import read_manifest
 from spica.evaluation.embeddings import encode_retrieval_loader
-from spica.evaluation.jepa import encode_jepa_loader, evaluate_jepa_features, feature_probe_dict
+from spica.evaluation.jepa import (
+    encode_jepa_loader,
+    evaluate_jepa_features,
+    feature_probe_dict,
+)
 from spica.models.clip import load_frozen_clip
 from spica.evaluate_jepa import _load_model
 
@@ -24,7 +28,9 @@ from spica.evaluate_jepa import _load_model
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoint", type=Path)
-    parser.add_argument("--data-config", type=Path, default=Path("configs/data/sketchy_104_21.yaml"))
+    parser.add_argument(
+        "--data-config", type=Path, default=Path("configs/data/sketchy_104_21.yaml")
+    )
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -56,7 +62,9 @@ def main() -> None:
 
     photo_clip = load_frozen_clip(
         model_name=str(metadata["model_name"]),
-        pretrained=None if metadata["pretrained"] is None else str(metadata["pretrained"]),
+        pretrained=None
+        if metadata["pretrained"] is None
+        else str(metadata["pretrained"]),
         device=device,
     )
     gallery_loader = DataLoader(

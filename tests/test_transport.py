@@ -95,7 +95,9 @@ def test_nonlearned_rho_controls_have_expected_schedule_and_no_head() -> None:
     )
     model.set_schedule_step(37)
     output = model(torch.randn(2, 3, 8, 8))
-    assert torch.allclose(output.rho, torch.full((2,), math.radians(15.0 * 37 / 75)), atol=1e-6)
+    assert torch.allclose(
+        output.rho, torch.full((2,), math.radians(15.0 * 37 / 75)), atol=1e-6
+    )
 
 
 def test_hidden_compatibility_and_training_angle_summary_are_finite() -> None:
@@ -115,7 +117,10 @@ def test_multi_photo_residual_alignment_has_one_value_per_component() -> None:
     rows, components, dimension = 6, 3, 4
     z0 = F.normalize(torch.randn(rows, dimension), dim=-1)
     directions = torch.randn(rows, components, dimension)
-    directions = directions - (directions * z0[:, None, :]).sum(dim=-1, keepdim=True) * z0[:, None, :]
+    directions = (
+        directions
+        - (directions * z0[:, None, :]).sum(dim=-1, keepdim=True) * z0[:, None, :]
+    )
     directions = F.normalize(directions, dim=-1)
     features = TransportFeatureSet(
         h=torch.randn(rows, dimension),
@@ -143,8 +148,12 @@ def test_tangent_transport_is_unit_and_orthogonal() -> None:
     prediction = _model(k=2)(torch.randn(5, 3, 8, 8))
     assert prediction.directions.shape == (5, 2, 3)
     assert prediction.q_hypotheses.shape == (5, 2, 3)
-    assert torch.allclose(prediction.directions.norm(dim=-1), torch.ones(5, 2), atol=1e-5)
-    assert torch.allclose(prediction.q_hypotheses.norm(dim=-1), torch.ones(5, 2), atol=1e-5)
+    assert torch.allclose(
+        prediction.directions.norm(dim=-1), torch.ones(5, 2), atol=1e-5
+    )
+    assert torch.allclose(
+        prediction.q_hypotheses.norm(dim=-1), torch.ones(5, 2), atol=1e-5
+    )
     tangent_cosine = (prediction.directions * prediction.z0[:, None, :]).sum(dim=-1)
     assert tangent_cosine.abs().max() < 1e-5
 
@@ -165,22 +174,24 @@ def test_parallel_transport_identity_and_fixed_origin_diagnostic() -> None:
     z0 = F.normalize(torch.randn(4, 8), dim=-1)
     target = F.normalize(torch.randn(4, 8), dim=-1)
     fixed = fixed_origin_transport_target(x, target, z0)
-    assert torch.allclose(
-        (fixed.direction * z0).sum(dim=-1), torch.zeros(4), atol=1e-5
-    )
+    assert torch.allclose((fixed.direction * z0).sum(dim=-1), torch.zeros(4), atol=1e-5)
 
 
 def test_freeze_after_warmup_disables_encoder_gradients_and_state_updates() -> None:
     model = _model()
     model.train()
     _freeze_encoder(model)
-    assert not any(parameter.requires_grad for parameter in model.sketch_context_encoder.parameters())
+    assert not any(
+        parameter.requires_grad
+        for parameter in model.sketch_context_encoder.parameters()
+    )
     assert not model.sketch_context_encoder.training
 
 
 def test_text_never_enters_predictor_signature() -> None:
     assert list(inspect.signature(SpicaPredictiveTransport.forward).parameters) == [
-        "self", "sketch_images"
+        "self",
+        "sketch_images",
     ]
 
 
@@ -191,7 +202,9 @@ def test_base_query_control_is_exactly_z0_and_has_no_transport_gradients() -> No
     output = model(torch.randn(3, 3, 8, 8))
     assert torch.allclose(output.q, output.z0)
     assert torch.allclose(output.q_hypotheses[:, 0], output.z0)
-    assert not any(parameter.requires_grad for parameter in model.transport_head.parameters())
+    assert not any(
+        parameter.requires_grad for parameter in model.transport_head.parameters()
+    )
 
 
 def test_photo_transport_target_handles_zero_angle() -> None:
@@ -200,13 +213,17 @@ def test_photo_transport_target_handles_zero_angle() -> None:
     assert torch.all(target.near_zero)
     assert torch.allclose(target.theta, torch.zeros(4))
     assert torch.allclose(target.direction.norm(dim=-1), torch.ones(4), atol=1e-5)
-    assert torch.allclose((target.direction * base).sum(dim=-1), torch.zeros(4), atol=1e-5)
+    assert torch.allclose(
+        (target.direction * base).sum(dim=-1), torch.zeros(4), atol=1e-5
+    )
 
 
 def test_transport_losses_and_vmf_direction_mixture_are_finite() -> None:
     torch.manual_seed(8)
     prediction = _model(k=2, use_vmf=True)(torch.randn(6, 3, 8, 8))
-    target = photo_transport_target(prediction.z0, F.normalize(torch.randn(6, 3), dim=-1))
+    target = photo_transport_target(
+        prediction.z0, F.normalize(torch.randn(6, 3), dim=-1)
+    )
     positives = F.normalize(torch.randn(6, 1, 3), dim=-1)
     negatives = F.normalize(torch.randn(6, 3), dim=-1)
     loss = directional_mixture_loss(prediction, target.direction, positives, negatives)
@@ -217,7 +234,9 @@ def test_transport_losses_and_vmf_direction_mixture_are_finite() -> None:
         control_prediction, target.direction, positives, negatives
     )
     assert torch.isfinite(control.total)
-    assert torch.isfinite(transport_geometry_loss(prediction.q, torch.randn_like(prediction.q)))
+    assert torch.isfinite(
+        transport_geometry_loss(prediction.q, torch.randn_like(prediction.q))
+    )
 
 
 def test_transport_retrieval_modes_and_probes() -> None:
@@ -251,7 +270,10 @@ def test_transport_retrieval_modes_and_probes() -> None:
         query_chunk_size=2,
     )
     assert set(evaluations) == {"barycentric", "angular_logsumexp", "max"}
-    assert all(torch.isfinite(torch.tensor(e.metrics.mean_average_precision)) for e in evaluations.values())
+    assert all(
+        torch.isfinite(torch.tensor(e.metrics.mean_average_precision))
+        for e in evaluations.values()
+    )
     probe = transport_probe_dict(features, gallery, frozen_reference=features.z0)
     assert "transport" in probe
     assert "mixture" in probe

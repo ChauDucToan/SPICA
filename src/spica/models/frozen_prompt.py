@@ -15,6 +15,8 @@ class FrozenPromptModel(nn.Module):
         *,
         prompt_length: int,
         train_visual_layernorm: bool = False,
+        train_sketch_prompt: bool = True,
+        train_photo_prompt: bool = True,
     ) -> None:
         super().__init__()
         if isinstance(prompt_length, bool) or not isinstance(prompt_length, int):
@@ -23,19 +25,29 @@ class FrozenPromptModel(nn.Module):
             raise ValueError("prompt_length must be non-negative")
         if not isinstance(train_visual_layernorm, bool):
             raise TypeError("train_visual_layernorm must be a bool")
+        if not isinstance(train_sketch_prompt, bool) or not isinstance(
+            train_photo_prompt, bool
+        ):
+            raise TypeError("train_sketch_prompt and train_photo_prompt must be bools")
         self._validate_visual(visual)
 
         self.visual = visual
         self.prompt_length = prompt_length
         self.train_visual_layernorm = train_visual_layernorm
+        self.train_sketch_prompt = train_sketch_prompt
+        self.train_photo_prompt = train_photo_prompt
         width = int(visual.positional_embedding.shape[1])
         options = {
             "device": visual.positional_embedding.device,
             "dtype": visual.positional_embedding.dtype,
         }
         if prompt_length:
-            self.sketch_prompt = nn.Parameter(torch.empty(prompt_length, width, **options))
-            self.photo_prompt = nn.Parameter(torch.empty(prompt_length, width, **options))
+            self.sketch_prompt = nn.Parameter(
+                torch.empty(prompt_length, width, **options)
+            )
+            self.photo_prompt = nn.Parameter(
+                torch.empty(prompt_length, width, **options)
+            )
             nn.init.normal_(self.sketch_prompt, std=0.02)
             nn.init.normal_(self.photo_prompt, std=0.02)
         else:
@@ -47,9 +59,8 @@ class FrozenPromptModel(nn.Module):
             for module in self.visual.modules():
                 if isinstance(module, nn.LayerNorm):
                     module.requires_grad_(True)
-        if prompt_length == 0:
-            self.sketch_prompt.requires_grad_(False)
-            self.photo_prompt.requires_grad_(False)
+        self.sketch_prompt.requires_grad_(prompt_length > 0 and train_sketch_prompt)
+        self.photo_prompt.requires_grad_(prompt_length > 0 and train_photo_prompt)
         self.train(False)
 
     @staticmethod
@@ -102,6 +113,24 @@ class FrozenPromptModel(nn.Module):
     def clip_parameter_names(self) -> tuple[str, ...]:
         return tuple(f"visual.{name}" for name, _ in self.visual.named_parameters())
 
+    @property
+    def visual_layernorm_parameter_names(self) -> tuple[str, ...]:
+        return tuple(
+            f"visual.{module_name}.{parameter_name}"
+            for module_name, module in self.visual.named_modules()
+            if isinstance(module, nn.LayerNorm)
+            for parameter_name, parameter in module.named_parameters(recurse=False)
+            if parameter.requires_grad
+        )
+
+    @property
+    def visual_prompt_parameter_names(self) -> tuple[str, ...]:
+        return tuple(
+            name
+            for name in ("sketch_prompt", "photo_prompt")
+            if getattr(self, name).requires_grad
+        )
+
     def train(self, mode: bool = True) -> Self:
         super().train(mode)
         self.visual.eval()
@@ -130,8 +159,10 @@ class FrozenPromptModel(nn.Module):
             )
         # ``_embeds`` has already applied the frozen token-wise ``ln_pre`` to
         # CLS and patches. Apply the same operation to prompts before insertion.
-        expanded = self.visual.ln_pre(prompt.to(dtype=tokens.dtype)).unsqueeze(0).expand(
-            tokens.shape[0], -1, -1
+        expanded = (
+            self.visual.ln_pre(prompt.to(dtype=tokens.dtype))
+            .unsqueeze(0)
+            .expand(tokens.shape[0], -1, -1)
         )
         return torch.cat((tokens[:, :1], expanded, tokens[:, 1:]), dim=1)
 
@@ -151,6 +182,11 @@ class FrozenPromptModel(nn.Module):
     def encode_photo(self, photo_images: Tensor) -> Tensor:
         return self._encode(photo_images, self.photo_prompt)
 
+    @staticmethod
+    def _attention_mass(weights: Tensor, rows: slice, columns: slice) -> Tensor:
+        selected = weights[..., rows, columns]
+        return selected.sum(dim=-1).mean()
+
     @torch.no_grad()
     def attention_diagnostics(
         self,
@@ -158,38 +194,103 @@ class FrozenPromptModel(nn.Module):
         *,
         prompt: Literal["sketch", "photo"] = "sketch",
         block_index: int = 0,
-    ) -> dict[str, float]:
-        """Return mean attention mass sent from CLS/patch queries to prompts."""
+    ) -> dict[str, float | int]:
+        """Return attention mass for one exact transformer block."""
+        result = self.attention_diagnostics_by_block(
+            images, prompt=prompt, block_indices=(block_index,)
+        )["blocks"][0]
+        return result
+
+    @torch.no_grad()
+    def attention_diagnostics_by_block(
+        self,
+        images: Tensor,
+        *,
+        prompt: Literal["sketch", "photo"] = "sketch",
+        block_indices: tuple[int, ...] | None = None,
+    ) -> dict[str, object]:
+        """Measure all prompt attention directions at explicitly named blocks."""
         if prompt not in {"sketch", "photo"}:
             raise ValueError("prompt must be 'sketch' or 'photo'")
         blocks = self.visual.transformer.resblocks
-        if isinstance(block_index, bool) or not isinstance(block_index, int):
-            raise TypeError("block_index must be an integer")
-        if not 0 <= block_index < len(blocks):
-            raise ValueError(f"block_index must be between 0 and {len(blocks) - 1}")
-        block = blocks[block_index]
-        if not isinstance(block, ResidualAttentionBlock):
-            raise TypeError(
-                "attention diagnostics support only OpenCLIP "
-                "ResidualAttentionBlock instances"
-            )
+        if block_indices is None:
+            if len(blocks) == 1:
+                block_indices = (0,)
+            elif len(blocks) == 2:
+                block_indices = (0, 1)
+            else:
+                block_indices = (0, len(blocks) // 2, len(blocks) - 1)
+        if not block_indices:
+            raise ValueError("block_indices must contain at least one block")
+        if any(
+            isinstance(index, bool) or not isinstance(index, int)
+            for index in block_indices
+        ):
+            raise TypeError("block_indices must contain integers")
+        if any(index < 0 or index >= len(blocks) for index in block_indices):
+            raise ValueError(f"block indices must be between 0 and {len(blocks) - 1}")
+        if len(set(block_indices)) != len(block_indices):
+            raise ValueError("block_indices must be unique")
+        if self.prompt_length == 0:
+            return {
+                "prompt": prompt,
+                "prompt_token_count": 0,
+                "blocks": [
+                    {
+                        "block_index": index,
+                        "cls_to_prompt_mass": 0.0,
+                        "patch_to_prompt_mass": 0.0,
+                        "prompt_to_cls_mass": 0.0,
+                        "prompt_to_patch_mass": 0.0,
+                    }
+                    for index in block_indices
+                ],
+            }
 
+        block_set = set(block_indices)
         selected = self.sketch_prompt if prompt == "sketch" else self.photo_prompt
         tokens = self._prompted_tokens(images, selected)
-        for previous in blocks[:block_index]:
-            tokens = previous(tokens, attn_mask=None)
-        normalized = block.ln_1(tokens)
-        _, weights = block.attn(
-            normalized,
-            normalized,
-            normalized,
-            need_weights=True,
-            average_attn_weights=False,
-        )
-        prompt_weights = weights[..., 1 : 1 + self.prompt_length]
-        cls_mass = prompt_weights[..., 0, :].sum(dim=-1).mean()
-        patch_mass = prompt_weights[..., 1 + self.prompt_length :, :].sum(dim=-1).mean()
+        results: list[dict[str, float | int]] = []
+        for index, block in enumerate(blocks):
+            if index in block_set:
+                if not isinstance(block, ResidualAttentionBlock):
+                    raise TypeError(
+                        "attention diagnostics support only OpenCLIP "
+                        "ResidualAttentionBlock instances"
+                    )
+                normalized = block.ln_1(tokens)
+                _, weights = block.attn(
+                    normalized,
+                    normalized,
+                    normalized,
+                    need_weights=True,
+                    average_attn_weights=False,
+                )
+                prompt_columns = slice(1, 1 + self.prompt_length)
+                patch_rows = slice(1 + self.prompt_length, tokens.shape[1])
+                prompt_rows = slice(1, 1 + self.prompt_length)
+                patch_columns = slice(1 + self.prompt_length, tokens.shape[1])
+                results.append(
+                    {
+                        "block_index": index,
+                        "cls_to_prompt_mass": self._attention_mass(
+                            weights, slice(0, 1), prompt_columns
+                        ).item(),
+                        "patch_to_prompt_mass": self._attention_mass(
+                            weights, patch_rows, prompt_columns
+                        ).item(),
+                        "prompt_to_cls_mass": self._attention_mass(
+                            weights, prompt_rows, slice(0, 1)
+                        ).item(),
+                        "prompt_to_patch_mass": self._attention_mass(
+                            weights, prompt_rows, patch_columns
+                        ).item(),
+                    }
+                )
+            tokens = block(tokens, attn_mask=None)
+        results.sort(key=lambda value: int(value["block_index"]))
         return {
-            "cls_to_prompt_mass": cls_mass.item(),
-            "patch_to_prompt_mass": patch_mass.item(),
+            "prompt": prompt,
+            "prompt_token_count": self.prompt_length,
+            "blocks": results,
         }

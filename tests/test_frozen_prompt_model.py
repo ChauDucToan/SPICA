@@ -159,8 +159,10 @@ def test_attention_diagnostics_match_openclip_attention_weights() -> None:
 
     with torch.no_grad():
         base = visual._embeds(images)
-        prompts = visual.ln_pre(model.sketch_prompt).unsqueeze(0).expand(
-            images.shape[0], -1, -1
+        prompts = (
+            visual.ln_pre(model.sketch_prompt)
+            .unsqueeze(0)
+            .expand(images.shape[0], -1, -1)
         )
         tokens = torch.cat((base[:, :1], prompts, base[:, 1:]), dim=1)
         normalized = block.ln_1(tokens)

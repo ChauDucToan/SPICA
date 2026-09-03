@@ -45,7 +45,10 @@ def collect_runs() -> list[tuple[Path, dict[str, Any]]]:
         except (OSError, json.JSONDecodeError):
             continue
         config = result.get("config", {})
-        if not isinstance(config, dict) or config.get("model_family") != "predictive_semantic_transport":
+        if (
+            not isinstance(config, dict)
+            or config.get("model_family") != "predictive_semantic_transport"
+        ):
             continue
         runs.append((path.parent, result))
     return runs
@@ -58,10 +61,16 @@ def collect_official_evaluations() -> list[dict[str, Any]]:
             result = _load(path)
         except (OSError, json.JSONDecodeError):
             continue
-        if result.get("model_family") != "predictive_semantic_transport" or not result.get("diagnostic_test_evaluation"):
+        if result.get(
+            "model_family"
+        ) != "predictive_semantic_transport" or not result.get(
+            "diagnostic_test_evaluation"
+        ):
             continue
         metrics = result.get("metrics", {})
-        precision = metrics.get("precision_at_k", {}) if isinstance(metrics, dict) else {}
+        precision = (
+            metrics.get("precision_at_k", {}) if isinstance(metrics, dict) else {}
+        )
         evaluations.append(
             {
                 "run_dir": str(path.parent.relative_to(ROOT)),
@@ -69,7 +78,9 @@ def collect_official_evaluations() -> list[dict[str, Any]]:
                 "checkpoint_step": result.get("checkpoint_step"),
                 "inference_score_mode": result.get("inference_score_mode"),
                 "mAP": metrics.get("mAP") if isinstance(metrics, dict) else None,
-                "P@200": precision.get("200", precision.get(200)) if isinstance(precision, dict) else None,
+                "P@200": precision.get("200", precision.get(200))
+                if isinstance(precision, dict)
+                else None,
                 "leakage_flags": result.get("leakage_flags", {}),
             }
         )
@@ -103,27 +114,59 @@ def points(run: dict[str, Any]) -> list[dict[str, Any]]:
                 "mean_rho_degrees": _number(transport.get("mean_rho_degrees")),
                 "p95_rho_degrees": _number(transport.get("p95_rho_degrees")),
                 "direction_cosine": _number(transport.get("mean_direction_cosine")),
-                "endpoint_photo_cosine": _number(transport.get("endpoint_photo_cosine")),
+                "endpoint_photo_cosine": _number(
+                    transport.get("endpoint_photo_cosine")
+                ),
                 "base_photo_cosine": _number(transport.get("base_photo_cosine")),
                 "base_reference_cosine": _number(
-                    (geometry.get("reference", {}) if isinstance(geometry, dict) else {}).get("base_reference_cosine")
+                    (
+                        geometry.get("reference", {})
+                        if isinstance(geometry, dict)
+                        else {}
+                    ).get("base_reference_cosine")
                 ),
                 "query_reference_cosine": _number(
-                    (geometry.get("reference", {}) if isinstance(geometry, dict) else {}).get("query_reference_cosine")
+                    (
+                        geometry.get("reference", {})
+                        if isinstance(geometry, dict)
+                        else {}
+                    ).get("query_reference_cosine")
                 ),
-                "base_initial_cosine": _number(drift.get("base_initial_cosine")) if isinstance(drift, dict) else None,
-                "query_initial_cosine": _number(drift.get("query_initial_cosine")) if isinstance(drift, dict) else None,
+                "base_initial_cosine": _number(drift.get("base_initial_cosine"))
+                if isinstance(drift, dict)
+                else None,
+                "query_initial_cosine": _number(drift.get("query_initial_cosine"))
+                if isinstance(drift, dict)
+                else None,
                 "semantic_margin": _number(
-                    (geometry.get("semantic", {}) if isinstance(geometry, dict) else {}).get("semantic_margin")
+                    (
+                        geometry.get("semantic", {})
+                        if isinstance(geometry, dict)
+                        else {}
+                    ).get("semantic_margin")
                 ),
                 "effective_rank": _number(
-                    (geometry.get("q", {}) if isinstance(geometry, dict) else {}).get("effective_rank")
+                    (geometry.get("q", {}) if isinstance(geometry, dict) else {}).get(
+                        "effective_rank"
+                    )
                 ),
-                "gate_entropy": _number(mixture.get("gate_entropy")) if isinstance(mixture, dict) else None,
-                "responsibility_entropy": _number(mixture.get("responsibility_entropy")) if isinstance(mixture, dict) else None,
-                "mean_kappa": _number(mixture.get("mean_kappa")) if isinstance(mixture, dict) else None,
-                "component_usage": mixture.get("component_usage") if isinstance(mixture, dict) else None,
-                "component_pairwise_direction_cosine": mixture.get("component_pairwise_direction_cosine") if isinstance(mixture, dict) else None,
+                "gate_entropy": _number(mixture.get("gate_entropy"))
+                if isinstance(mixture, dict)
+                else None,
+                "responsibility_entropy": _number(mixture.get("responsibility_entropy"))
+                if isinstance(mixture, dict)
+                else None,
+                "mean_kappa": _number(mixture.get("mean_kappa"))
+                if isinstance(mixture, dict)
+                else None,
+                "component_usage": mixture.get("component_usage")
+                if isinstance(mixture, dict)
+                else None,
+                "component_pairwise_direction_cosine": mixture.get(
+                    "component_pairwise_direction_cosine"
+                )
+                if isinstance(mixture, dict)
+                else None,
                 "radius_vs_ap": probe.get("radius_vs_ap"),
             }
         )
@@ -164,7 +207,8 @@ def previous_baseline() -> dict[str, Any]:
         (
             (name, value)
             for name, value in ablations.items()
-            if isinstance(value, dict) and isinstance(value.get("pseudo_validation"), dict)
+            if isinstance(value, dict)
+            and isinstance(value.get("pseudo_validation"), dict)
         ),
         key=lambda item: float(item[1]["pseudo_validation"].get("mAP", -1)),
         default=("unknown", {}),
@@ -174,7 +218,11 @@ def previous_baseline() -> dict[str, Any]:
     selected = long_training.get("selected_J4_pseudo_train", {})
     if isinstance(selected, dict):
         late = next(
-            (probe for probe in selected.get("probes", []) if probe.get("step") == 5400),
+            (
+                probe
+                for probe in selected.get("probes", [])
+                if probe.get("step") == 5400
+            ),
             None,
         )
     return {
@@ -220,22 +268,39 @@ def _save_plot(path: Path) -> None:
     plt.close()
 
 
-def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[str, str]:
+def make_plots(
+    records: list[dict[str, Any]], baseline: dict[str, Any]
+) -> dict[str, str]:
     PLOTS.mkdir(parents=True, exist_ok=True)
     # Base-only controls are useful in their own curves, but must never be
     # selected as a transport model or a K=1 transport point.
     transport_records = [
-        record for record in records
+        record
+        for record in records
         if record["step"] >= 100 and record.get("transport_enabled_recorded") is True
     ]
     plt.figure(figsize=(8, 5))
     if baseline.get("best_mAP") is not None:
-        plt.axhline(float(baseline["best_mAP"]), linestyle="--", color="black", label="full-vector JEPA best")
+        plt.axhline(
+            float(baseline["best_mAP"]),
+            linestyle="--",
+            color="black",
+            label="full-vector JEPA best",
+        )
     for index, record in enumerate(transport_records):
-        values = [(point["step"], point["mAP"]) for point in record["points"] if point["mAP"] is not None]
+        values = [
+            (point["step"], point["mAP"])
+            for point in record["points"]
+            if point["mAP"] is not None
+        ]
         if values:
             label = str(record["name"]).split("/")[0]
-            plt.plot([value[0] for value in values], [value[1] for value in values], marker="o", label=label)
+            plt.plot(
+                [value[0] for value in values],
+                [value[1] for value in values],
+                marker="o",
+                label=label,
+            )
     plt.xlabel("training step")
     plt.ylabel("pseudo-unseen mAP")
     plt.title("Predictive Semantic Transport learning curves")
@@ -248,12 +313,34 @@ def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[
     for record in transport_records:
         for point in record["points"]:
             radius_ap = point.get("radius_vs_ap")
-            if isinstance(radius_ap, dict) and isinstance(radius_ap.get("rho_degrees"), list) and isinstance(radius_ap.get("average_precision"), list):
-                plt.scatter(radius_ap["rho_degrees"], radius_ap["average_precision"], s=4, alpha=0.18, label=str(record["name"]).split("/")[0] if not plotted_scatter else None)
+            if (
+                isinstance(radius_ap, dict)
+                and isinstance(radius_ap.get("rho_degrees"), list)
+                and isinstance(radius_ap.get("average_precision"), list)
+            ):
+                plt.scatter(
+                    radius_ap["rho_degrees"],
+                    radius_ap["average_precision"],
+                    s=4,
+                    alpha=0.18,
+                    label=str(record["name"]).split("/")[0]
+                    if not plotted_scatter
+                    else None,
+                )
                 plotted_scatter = True
-        values = [(point["mean_rho_degrees"], point["mAP"]) for point in record["points"] if point["mean_rho_degrees"] is not None and point["mAP"] is not None]
+        values = [
+            (point["mean_rho_degrees"], point["mAP"])
+            for point in record["points"]
+            if point["mean_rho_degrees"] is not None and point["mAP"] is not None
+        ]
         if values:
-            plt.plot([value[0] for value in values], [value[1] for value in values], marker="o", linewidth=2, label=str(record["name"]).split("/")[0] + " checkpoint")
+            plt.plot(
+                [value[0] for value in values],
+                [value[1] for value in values],
+                marker="o",
+                linewidth=2,
+                label=str(record["name"]).split("/")[0] + " checkpoint",
+            )
     plt.xlabel("transport distance (degrees)")
     plt.ylabel("per-query AP / checkpoint mAP")
     plt.title("Transport radius versus retrieval")
@@ -263,9 +350,18 @@ def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[
 
     plt.figure(figsize=(8, 5))
     for record in transport_records:
-        values = [(point["step"], point["direction_cosine"]) for point in record["points"] if point["direction_cosine"] is not None]
+        values = [
+            (point["step"], point["direction_cosine"])
+            for point in record["points"]
+            if point["direction_cosine"] is not None
+        ]
         if values:
-            plt.plot([value[0] for value in values], [value[1] for value in values], marker="o", label=str(record["name"]).split("/")[0])
+            plt.plot(
+                [value[0] for value in values],
+                [value[1] for value in values],
+                marker="o",
+                label=str(record["name"]).split("/")[0],
+            )
     plt.xlabel("training step")
     plt.ylabel("cos(predicted direction, target direction)")
     plt.title("Transport direction alignment")
@@ -275,12 +371,31 @@ def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[
 
     plt.figure(figsize=(8, 5))
     for record in transport_records:
-        values = [(point["step"], point["base_reference_cosine"]) for point in record["points"] if point["base_reference_cosine"] is not None]
+        values = [
+            (point["step"], point["base_reference_cosine"])
+            for point in record["points"]
+            if point["base_reference_cosine"] is not None
+        ]
         if values:
-            plt.plot([value[0] for value in values], [value[1] for value in values], marker="o", label=str(record["name"]).split("/")[0] + " base")
-        values = [(point["step"], point["query_reference_cosine"]) for point in record["points"] if point["query_reference_cosine"] is not None]
+            plt.plot(
+                [value[0] for value in values],
+                [value[1] for value in values],
+                marker="o",
+                label=str(record["name"]).split("/")[0] + " base",
+            )
+        values = [
+            (point["step"], point["query_reference_cosine"])
+            for point in record["points"]
+            if point["query_reference_cosine"] is not None
+        ]
         if values:
-            plt.plot([value[0] for value in values], [value[1] for value in values], linestyle="--", marker="x", label=str(record["name"]).split("/")[0] + " query")
+            plt.plot(
+                [value[0] for value in values],
+                [value[1] for value in values],
+                linestyle="--",
+                marker="x",
+                label=str(record["name"]).split("/")[0] + " query",
+            )
     plt.xlabel("training step")
     plt.ylabel("cosine to frozen CLIP sketch reference")
     plt.title("Semantic drift probes")
@@ -292,20 +407,33 @@ def make_plots(records: list[dict[str, Any]], baseline: dict[str, Any]) -> dict[
     for record in transport_records:
         k = int(record["config"].get("K", 1))
         best = best_point(record)
-        if best is not None and (k not in k_values or float(best["mAP"]) > k_values[k][0]):
+        if best is not None and (
+            k not in k_values or float(best["mAP"]) > k_values[k][0]
+        ):
             k_values[k] = (float(best["mAP"]), str(record["name"]).split("/")[0])
     plt.figure(figsize=(7, 5))
     if k_values:
         ks = sorted(k_values)
         plt.bar([str(k) for k in ks], [k_values[k][0] for k in ks])
         for index, k in enumerate(ks):
-            plt.text(index, k_values[k][0], k_values[k][1], ha="center", va="bottom", fontsize=7, rotation=45)
+            plt.text(
+                index,
+                k_values[k][0],
+                k_values[k][1],
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                rotation=45,
+            )
     plt.xlabel("number of transport directions K")
     plt.ylabel("best pseudo-unseen mAP")
     plt.title("K ablation")
     k_plot = PLOTS / "transport_K_ablation.png"
     _save_plot(k_plot)
-    return {path.stem: str(path.relative_to(ROOT)) for path in (learning, radius, direction, drift, k_plot)}
+    return {
+        path.stem: str(path.relative_to(ROOT))
+        for path in (learning, radius, direction, drift, k_plot)
+    }
 
 
 def _fmt(value: Any, digits: int = 4) -> str:
@@ -339,29 +467,108 @@ def build_report(
     report_date: str,
     official_evaluations: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], str]:
-    usable = [record for record in records if record["step"] >= 100 and best_point(record) is not None]
-    transport_usable = [record for record in usable if record.get("transport_enabled_recorded") is True]
-    residual = [record for record in transport_usable if record["config"].get("transport_mode") in {"residual", "bounded_residual"}]
-    tangent = [record for record in transport_usable if record["config"].get("transport_mode") == "tangent" and int(record["config"].get("K", 1)) == 1]
-    best_residual_record = max(residual, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    simple_residual = [record for record in residual if record["config"].get("transport_mode") == "residual"]
-    best_simple_residual_record = max(simple_residual, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_tangent_record = max(tangent, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    plain_tangent = [record for record in tangent if not record["config"].get("use_text_cls")]
-    best_plain_tangent_record = max(plain_tangent, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    text_records = [record for record in transport_usable if record["config"].get("use_text_cls") and int(record["config"].get("K", 1)) == 1]
-    no_text_rho15 = [record for record in tangent if not record["config"].get("use_text_cls") and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6]
-    geometry_records = [record for record in tangent if record["config"].get("use_geometry_loss")]
-    no_geometry_rho15 = [record for record in tangent if not record["config"].get("use_geometry_loss") and not record["config"].get("use_text_cls") and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6]
-    deterministic_records = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
-    vmf_records = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
-    best_text_record = max(text_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_plain_rho15 = max(no_text_rho15, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_geometry_record = max(geometry_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_plain_geometry_record = max(no_geometry_rho15, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_deterministic_record = max(deterministic_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    best_vmf_record = max(vmf_records, key=lambda record: float(best_point(record)["mAP"]), default=None)
-    residual_long = max((record for record in residual if record["step"] >= 1000), key=lambda record: record["step"], default=None)
+    usable = [
+        record
+        for record in records
+        if record["step"] >= 100 and best_point(record) is not None
+    ]
+    transport_usable = [
+        record for record in usable if record.get("transport_enabled_recorded") is True
+    ]
+    residual = [
+        record
+        for record in transport_usable
+        if record["config"].get("transport_mode") in {"residual", "bounded_residual"}
+    ]
+    tangent = [
+        record
+        for record in transport_usable
+        if record["config"].get("transport_mode") == "tangent"
+        and int(record["config"].get("K", 1)) == 1
+    ]
+    best_residual_record = max(
+        residual, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    simple_residual = [
+        record
+        for record in residual
+        if record["config"].get("transport_mode") == "residual"
+    ]
+    best_simple_residual_record = max(
+        simple_residual,
+        key=lambda record: float(best_point(record)["mAP"]),
+        default=None,
+    )
+    best_tangent_record = max(
+        tangent, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    plain_tangent = [
+        record for record in tangent if not record["config"].get("use_text_cls")
+    ]
+    best_plain_tangent_record = max(
+        plain_tangent, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    text_records = [
+        record
+        for record in transport_usable
+        if record["config"].get("use_text_cls")
+        and int(record["config"].get("K", 1)) == 1
+    ]
+    no_text_rho15 = [
+        record
+        for record in tangent
+        if not record["config"].get("use_text_cls")
+        and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6
+    ]
+    geometry_records = [
+        record for record in tangent if record["config"].get("use_geometry_loss")
+    ]
+    no_geometry_rho15 = [
+        record
+        for record in tangent
+        if not record["config"].get("use_geometry_loss")
+        and not record["config"].get("use_text_cls")
+        and abs(float(record["config"].get("rho_max", 0)) - 15.0) < 1e-6
+    ]
+    deterministic_records = [
+        record
+        for record in transport_usable
+        if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")
+    ]
+    vmf_records = [
+        record
+        for record in transport_usable
+        if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")
+    ]
+    best_text_record = max(
+        text_records, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    best_plain_rho15 = max(
+        no_text_rho15, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    best_geometry_record = max(
+        geometry_records,
+        key=lambda record: float(best_point(record)["mAP"]),
+        default=None,
+    )
+    best_plain_geometry_record = max(
+        no_geometry_rho15,
+        key=lambda record: float(best_point(record)["mAP"]),
+        default=None,
+    )
+    best_deterministic_record = max(
+        deterministic_records,
+        key=lambda record: float(best_point(record)["mAP"]),
+        default=None,
+    )
+    best_vmf_record = max(
+        vmf_records, key=lambda record: float(best_point(record)["mAP"]), default=None
+    )
+    residual_long = max(
+        (record for record in residual if record["step"] >= 1000),
+        key=lambda record: record["step"],
+        default=None,
+    )
     k_ablation_records = [
         record
         for record in transport_usable
@@ -401,9 +608,13 @@ def build_report(
         ys = [pair[1] for pair in radius_pairs]
         mean_x = sum(xs) / len(xs)
         mean_y = sum(ys) / len(ys)
-        denom = math.sqrt(sum((x - mean_x) ** 2 for x in xs) * sum((y - mean_y) ** 2 for y in ys))
+        denom = math.sqrt(
+            sum((x - mean_x) ** 2 for x in xs) * sum((y - mean_y) ** 2 for y in ys)
+        )
         if denom > 0:
-            radius_correlation = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denom
+            radius_correlation = (
+                sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denom
+            )
 
     current_repository = repository_provenance()
     report: dict[str, Any] = {
@@ -412,8 +623,7 @@ def build_report(
             "starting_commit": "73ecaea34b43947c520092de1c08f6f5073da2ee",
             **current_repository,
             "source_run_provenance": {
-                record["run_dir"]: record.get("provenance")
-                for record in records
+                record["run_dir"]: record.get("provenance") for record in records
             },
         },
         "previous_full_vector_jepa": baseline,
@@ -441,9 +651,22 @@ def build_report(
             "conclusion": "semantic drift / over-adaptation, not simple dimensional collapse",
         },
         "models": {
-            "best_residual": None if best_residual_record is None else {"run": best_residual_record["run_dir"], "best": best_point(best_residual_record)},
-            "best_tangent": None if best_tangent_record is None else {"run": best_tangent_record["run_dir"], "best": best_point(best_tangent_record)},
-            "best_by_K": {str(k): {"run": value["run_dir"], "best": best_point(value)} for k, value in sorted(k_best.items())},
+            "best_residual": None
+            if best_residual_record is None
+            else {
+                "run": best_residual_record["run_dir"],
+                "best": best_point(best_residual_record),
+            },
+            "best_tangent": None
+            if best_tangent_record is None
+            else {
+                "run": best_tangent_record["run_dir"],
+                "best": best_point(best_tangent_record),
+            },
+            "best_by_K": {
+                str(k): {"run": value["run_dir"], "best": best_point(value)}
+                for k, value in sorted(k_best.items())
+            },
         },
         "official_diagnostic_evaluations": official_evaluations,
     }
@@ -495,20 +718,40 @@ def build_report(
         config = record["config"]
         p100 = point_at(record, 100)
         p1ep = min(
-            (point for point in record["points"] if point.get("equivalent_epochs") is not None),
+            (
+                point
+                for point in record["points"]
+                if point.get("equivalent_epochs") is not None
+            ),
             key=lambda point: abs(float(point["equivalent_epochs"]) - 1.0),
             default=None,
         )
-        if p1ep is not None and abs(float(p1ep.get("equivalent_epochs", 0.0)) - 1.0) > 0.35:
+        if (
+            p1ep is not None
+            and abs(float(p1ep.get("equivalent_epochs", 0.0)) - 1.0) > 0.35
+        ):
             p1ep = None
         p3ep = min(
-            (point for point in record["points"] if point.get("equivalent_epochs") is not None),
+            (
+                point
+                for point in record["points"]
+                if point.get("equivalent_epochs") is not None
+            ),
             key=lambda point: abs(float(point["equivalent_epochs"]) - 3.0),
             default=None,
         )
-        if p3ep is not None and abs(float(p3ep.get("equivalent_epochs", 0.0)) - 3.0) > 0.5:
+        if (
+            p3ep is not None
+            and abs(float(p3ep.get("equivalent_epochs", 0.0)) - 3.0) > 0.5
+        ):
             p3ep = None
-        prediction_type = "tangent/geodesic" if config.get("transport_mode") == "tangent" else "bounded residual" if config.get("transport_mode") == "bounded_residual" else "residual"
+        prediction_type = (
+            "tangent/geodesic"
+            if config.get("transport_mode") == "tangent"
+            else "bounded residual"
+            if config.get("transport_mode") == "bounded_residual"
+            else "residual"
+        )
         lines.append(
             f"| {config.get('transport_mode')} K={config.get('K')} | {prediction_type} | {config.get('encoder_mode')} | {_fmt((p100 or {}).get('mAP'))} | {_fmt((p1ep or {}).get('mAP'))} | {_fmt((p3ep or {}).get('mAP'))} | {_fmt((p100 or {}).get('effective_rank'))} | {_fmt((p100 or {}).get('semantic_margin'))} |"
         )
@@ -521,7 +764,9 @@ def build_report(
     ]
     for record in tangent:
         point = best_point(record)
-        lines.append(f"- {_record_label(record)}: mAP {_fmt((point or {}).get('mAP'))}, direction cosine {_fmt((point or {}).get('direction_cosine'))}, endpoint photo cosine {_fmt((point or {}).get('endpoint_photo_cosine'))}, mean rho degrees {_fmt((point or {}).get('mean_rho_degrees'))}.")
+        lines.append(
+            f"- {_record_label(record)}: mAP {_fmt((point or {}).get('mAP'))}, direction cosine {_fmt((point or {}).get('direction_cosine'))}, endpoint photo cosine {_fmt((point or {}).get('endpoint_photo_cosine'))}, mean rho degrees {_fmt((point or {}).get('mean_rho_degrees'))}."
+        )
     lines += [
         "",
         "## 7. Transport Radius Analysis",
@@ -533,65 +778,144 @@ def build_report(
     ]
     for record, point in early:
         if record["config"].get("use_text_cls"):
-            lines.append(f"- Text run {_record_label(record)}: mAP@100 {_fmt(point.get('mAP'))}.")
-    no_text = [point for record, point in early if not record["config"].get("use_text_cls")]
+            lines.append(
+                f"- Text run {_record_label(record)}: mAP@100 {_fmt(point.get('mAP'))}."
+            )
+    no_text = [
+        point for record, point in early if not record["config"].get("use_text_cls")
+    ]
     if no_text:
-        lines.append(f"- No-text transport early mAP values: {', '.join(_fmt(point.get('mAP')) for point in no_text)}.")
+        lines.append(
+            f"- No-text transport early mAP values: {', '.join(_fmt(point.get('mAP')) for point in no_text)}."
+        )
     if best_text_record is not None and best_plain_rho15 is not None:
-        lines.append(f"- Matched rho=15 degree partial K=1 comparison: text {_fmt(best_point(best_text_record).get('mAP'))} vs no-text {_fmt(best_point(best_plain_rho15).get('mAP'))}; text helps at this checkpoint.")
+        lines.append(
+            f"- Matched rho=15 degree partial K=1 comparison: text {_fmt(best_point(best_text_record).get('mAP'))} vs no-text {_fmt(best_point(best_plain_rho15).get('mAP'))}; text helps at this checkpoint."
+        )
     sampled_counts = [
         record["photo_sampling"].get("unique_positive_photo_paths_seen")
         for record in usable
-        if isinstance(record.get("photo_sampling"), dict) and record["config"].get("num_positive_photos") == 1
+        if isinstance(record.get("photo_sampling"), dict)
+        and record["config"].get("num_positive_photos") == 1
     ]
     if sampled_counts:
-        lines.append(f"- Observed M=1 unique-positive-path counts across runs: {', '.join(str(value) for value in sampled_counts if value is not None)}.")
-    lines.append("- The headline text result uses lambda_cls=1.0, whereas the earlier 0.5265 text result used lambda_cls=0.1; this is not a matched coefficient sweep.")
-    lines.append("- Text remains classification supervision only; it is never an inference input.")
+        lines.append(
+            f"- Observed M=1 unique-positive-path counts across runs: {', '.join(str(value) for value in sampled_counts if value is not None)}."
+        )
+    lines.append(
+        "- The headline text result uses lambda_cls=1.0, whereas the earlier 0.5265 text result used lambda_cls=0.1; this is not a matched coefficient sweep."
+    )
+    lines.append(
+        "- Text remains classification supervision only; it is never an inference input."
+    )
     lines += ["", "## 9. Geometry Preservation Ablation"]
     geom = [record for record in usable if record["config"].get("use_geometry_loss")]
     if geom:
         for record in geom:
             point = best_point(record)
-            lines.append(f"- {_record_label(record)}: mAP {_fmt((point or {}).get('mAP'))}, query/reference cosine {_fmt((point or {}).get('query_reference_cosine'))}.")
+            lines.append(
+                f"- {_record_label(record)}: mAP {_fmt((point or {}).get('mAP'))}, query/reference cosine {_fmt((point or {}).get('query_reference_cosine'))}."
+            )
         if best_geometry_record is not None and best_plain_geometry_record is not None:
-            lines.append(f"- Matched no-text rho=15 comparison: geometry {_fmt(best_point(best_geometry_record).get('mAP'))} vs no geometry {_fmt(best_point(best_plain_geometry_record).get('mAP'))}.")
+            lines.append(
+                f"- Matched no-text rho=15 comparison: geometry {_fmt(best_point(best_geometry_record).get('mAP'))} vs no geometry {_fmt(best_point(best_plain_geometry_record).get('mAP'))}."
+            )
     else:
-        lines.append("- No completed geometry-preservation transport run was found; the loss is implemented but not measured in this artifact set.")
-    lines.append("- Direct q-to-reference pinning is not used; the implemented regularizer preserves off-diagonal relational geometry.")
-    lines += ["", "## 10. Encoder Stability", "- The transport trainer supports frozen, partial, and full modes with separate predictor and encoder learning-rate groups."]
+        lines.append(
+            "- No completed geometry-preservation transport run was found; the loss is implemented but not measured in this artifact set."
+        )
+    lines.append(
+        "- Direct q-to-reference pinning is not used; the implemented regularizer preserves off-diagonal relational geometry."
+    )
+    lines += [
+        "",
+        "## 10. Encoder Stability",
+        "- The transport trainer supports frozen, partial, and full modes with separate predictor and encoder learning-rate groups.",
+    ]
     for record in usable:
         config = record["config"]
         point = best_point(record)
-        lines.append(f"- {config.get('encoder_mode')} / predictor LR {_fmt(config.get('predictor_lr'))} / encoder LR {_fmt(config.get('encoder_lr'))}: mAP {_fmt((point or {}).get('mAP'))}.")
-    lines += ["", "## 11. K Ablation", "| K | vMF | mAP | P@200 | Gate Entropy | Resp Entropy | κ | Compute |", "|---:|---|---:|---:|---:|---:|---:|---|"]
+        lines.append(
+            f"- {config.get('encoder_mode')} / predictor LR {_fmt(config.get('predictor_lr'))} / encoder LR {_fmt(config.get('encoder_lr'))}: mAP {_fmt((point or {}).get('mAP'))}."
+        )
+    lines += [
+        "",
+        "## 11. K Ablation",
+        "| K | vMF | mAP | P@200 | Gate Entropy | Resp Entropy | κ | Compute |",
+        "|---:|---|---:|---:|---:|---:|---:|---|",
+    ]
     for k, record in sorted(k_best.items()):
         point = best_point(record) or {}
-        lines.append(f"| {k} | {record['config'].get('use_vmf')} | {_fmt(point.get('mAP'))} | {_fmt(point.get('P@200'))} | {_fmt(point.get('gate_entropy'))} | {_fmt(point.get('responsibility_entropy'))} | {_fmt(point.get('mean_kappa'))} | one model query with K={k} hypotheses |")
+        lines.append(
+            f"| {k} | {record['config'].get('use_vmf')} | {_fmt(point.get('mAP'))} | {_fmt(point.get('P@200'))} | {_fmt(point.get('gate_entropy'))} | {_fmt(point.get('responsibility_entropy'))} | {_fmt(point.get('mean_kappa'))} | one model query with K={k} hypotheses |"
+        )
     if not k_best:
-        lines.append("| not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |")
-    lines += ["- K means plausible transport directions, not positive-photo count.", "", "## 12. Probabilistic Necessity"]
-    deterministic = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")]
-    vmf = [record for record in transport_usable if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")]
-    lines.append(f"- Deterministic multi-direction runs: {len(deterministic)}; Mo-vMF runs: {len(vmf)}.")
-    lines.append("- Mo-vMF is retained only as an evaluated option; no novelty-based retention decision is made without a matched deterministic comparison.")
-    lines += ["", "## 13. Feature Geometry", "- Every probe reports h/z0/q effective rank, semantic margin, base-reference cosine, query-reference cosine, photo alignment, direction alignment, and rho quantiles.", "- The previous artifact's rank/margin trajectory is reproduced above; transport artifacts remain inspectable in the run directories.", "", "## 14. Self-Query Verification", "- input at inference = sketch only", "- text at inference = NO", "- photo at inference = NO", "- gallery photos are precomputed frozen embeddings and are not re-encoded by the query model.", "", "## 15. Official Diagnostic Evaluation"]
+        lines.append(
+            "| not measured | not measured | not measured | not measured | not measured | not measured | not measured | not measured |"
+        )
+    lines += [
+        "- K means plausible transport directions, not positive-photo count.",
+        "",
+        "## 12. Probabilistic Necessity",
+    ]
+    deterministic = [
+        record
+        for record in transport_usable
+        if int(record["config"].get("K", 1)) > 1 and not record["config"].get("use_vmf")
+    ]
+    vmf = [
+        record
+        for record in transport_usable
+        if int(record["config"].get("K", 1)) > 1 and record["config"].get("use_vmf")
+    ]
+    lines.append(
+        f"- Deterministic multi-direction runs: {len(deterministic)}; Mo-vMF runs: {len(vmf)}."
+    )
+    lines.append(
+        "- Mo-vMF is retained only as an evaluated option; no novelty-based retention decision is made without a matched deterministic comparison."
+    )
+    lines += [
+        "",
+        "## 13. Feature Geometry",
+        "- Every probe reports h/z0/q effective rank, semantic margin, base-reference cosine, query-reference cosine, photo alignment, direction alignment, and rho quantiles.",
+        "- The previous artifact's rank/margin trajectory is reproduced above; transport artifacts remain inspectable in the run directories.",
+        "",
+        "## 14. Self-Query Verification",
+        "- input at inference = sketch only",
+        "- text at inference = NO",
+        "- photo at inference = NO",
+        "- gallery photos are precomputed frozen embeddings and are not re-encoded by the query model.",
+        "",
+        "## 15. Official Diagnostic Evaluation",
+    ]
     if official_evaluations:
         for evaluation in official_evaluations:
-            lines.append(f"- {evaluation.get('run_dir')}: checkpoint step {evaluation.get('checkpoint_step')}, mode {evaluation.get('inference_score_mode')}, diagnostic mAP {_fmt(evaluation.get('mAP'))}, P@200 {_fmt(evaluation.get('P@200'))}; not used for selection.")
+            lines.append(
+                f"- {evaluation.get('run_dir')}: checkpoint step {evaluation.get('checkpoint_step')}, mode {evaluation.get('inference_score_mode')}, diagnostic mAP {_fmt(evaluation.get('mAP'))}, P@200 {_fmt(evaluation.get('P@200'))}; not used for selection."
+            )
     else:
         lines.append("- No official diagnostic evaluation artifact was found.")
     lines += ["", "## 16. Recommended SPICA Architecture"]
     if best_tangent_record:
-        lines.append(f"- Current evidence-supported candidate: {_record_label(best_tangent_record)} with pseudo mAP {_fmt(best_point(best_tangent_record).get('mAP'))}.")
+        lines.append(
+            f"- Current evidence-supported candidate: {_record_label(best_tangent_record)} with pseudo mAP {_fmt(best_point(best_tangent_record).get('mAP'))}."
+        )
     else:
-        lines.append("- Predictive Semantic Transport is the recommended direction, but no completed tangent selection run is present in this artifact set.")
-    lines += ["- Keep the semantic origin fixed by the photo CLIP projection; select encoder mode, rho_max, text loss, geometry loss, and K only on pseudo-unseen validation.", "", "## Plots"]
+        lines.append(
+            "- Predictive Semantic Transport is the recommended direction, but no completed tangent selection run is present in this artifact set."
+        )
+    lines += [
+        "- Keep the semantic origin fixed by the photo CLIP projection; select encoder mode, rho_max, text loss, geometry loss, and K only on pseudo-unseen validation.",
+        "",
+        "## Plots",
+    ]
     lines.extend(f"- `{path}`" for path in plots.values())
     lines += ["", "FINAL SPICA TRANSPORT VERDICT", ""]
     final_residual = best_point(best_residual_record) if best_residual_record else None
     final_tangent = best_point(best_tangent_record) if best_tangent_record else None
-    best_k = max(k_best.items(), key=lambda item: float(best_point(item[1])["mAP"]), default=None)
+    best_k = max(
+        k_best.items(), key=lambda item: float(best_point(item[1])["mAP"]), default=None
+    )
     lines += [
         f"Repository commit: {current_repository.get('current_commit') or 'unavailable'}",
         f"Working tree clean: {'YES' if current_repository.get('working_tree_state') == 'clean' else 'NO'}",
@@ -606,7 +930,9 @@ def build_report(
         f"Best tangent transport mAP: {_fmt((final_tangent or {}).get('mAP'))}",
         "",
         f"Does residual transport reduce semantic drift: {'NO clear stability proof; bounded residual mAP falls from ' + _fmt((point_at(residual_long, 100) or {}).get('mAP')) + ' to ' + _fmt((point_at(residual_long, residual_long['step']) or {}).get('mAP')) if residual_long is not None else 'not established'}",
-        "Does tangent/geodesic transport improve over simple residual transport: not measured" if best_simple_residual_record is None or best_plain_tangent_record is None else f"Does tangent/geodesic transport improve over simple residual transport: {'YES' if float(best_point(best_plain_tangent_record)['mAP']) > float(best_point(best_simple_residual_record)['mAP']) else 'NO'} on matched no-text checkpoints",
+        "Does tangent/geodesic transport improve over simple residual transport: not measured"
+        if best_simple_residual_record is None or best_plain_tangent_record is None
+        else f"Does tangent/geodesic transport improve over simple residual transport: {'YES' if float(best_point(best_plain_tangent_record)['mAP']) > float(best_point(best_simple_residual_record)['mAP']) else 'NO'} on matched no-text checkpoints",
         "",
         f"Best encoder mode: {best_tangent_record['config'].get('encoder_mode') if best_tangent_record else 'not measured'}",
         f"Best encoder LR: {_fmt(best_tangent_record['config'].get('encoder_lr') if best_tangent_record else None)}",
@@ -649,7 +975,13 @@ def build_report(
         "Most important next experiment: matched lambda_cls={0,0.1,0.3,1.0} plus residual/tangent/encoder curves at fixed 0/100/500/1000/1800/5400 checkpoints",
         "Recommended final architecture direction: trainable pre-projection sketch encoder, frozen photo projection z0, tangent d/rho head, optional loss-only text classification, and K selected by deterministic-vs-Mo-vMF evidence",
     ]
-    report["final_verdict"] = {"best_residual_mAP": (final_residual or {}).get("mAP"), "best_tangent_mAP": (final_tangent or {}).get("mAP"), "best_K": best_k[0] if best_k else None, "text_at_inference": False, "photo_at_inference": False}
+    report["final_verdict"] = {
+        "best_residual_mAP": (final_residual or {}).get("mAP"),
+        "best_tangent_mAP": (final_tangent or {}).get("mAP"),
+        "best_K": best_k[0] if best_k else None,
+        "text_at_inference": False,
+        "photo_at_inference": False,
+    }
     return report, "\n".join(lines) + "\n"
 
 
@@ -661,7 +993,9 @@ def main() -> None:
     records = [run_record(path, result) for path, result in collect_runs()]
     official_evaluations = collect_official_evaluations()
     plots = make_plots(records, baseline)
-    report, markdown = build_report(records, baseline, plots, args.date, official_evaluations)
+    report, markdown = build_report(
+        records, baseline, plots, args.date, official_evaluations
+    )
     json_path = OUTPUTS / f"research_summary_transport_{args.date}.json"
     md_path = OUTPUTS / f"research_summary_transport_{args.date}.md"
     json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")

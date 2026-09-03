@@ -21,7 +21,11 @@ from ..models.transport import (
     transport_gallery_scores,
 )
 from .embeddings import EncodedRetrievalSet
-from .jepa import feature_geometry, photo_target_alignment_diagnostics, semantic_query_diagnostics
+from .jepa import (
+    feature_geometry,
+    photo_target_alignment_diagnostics,
+    semantic_query_diagnostics,
+)
 from .metrics import (
     CategoryRetrievalEvaluation,
     CategoryRetrievalMetrics,
@@ -53,8 +57,14 @@ def hidden_space_compatibility(
     """
     if h_ref.ndim != 2 or h_t.ndim != 2 or h_ref.shape != h_t.shape:
         raise ValueError("h_ref and h_t must have matching shape [N,D]")
-    if h_ref.shape[0] < 2 or not h_ref.is_floating_point() or not h_t.is_floating_point():
-        raise ValueError("hidden features must be floating point with at least two rows")
+    if (
+        h_ref.shape[0] < 2
+        or not h_ref.is_floating_point()
+        or not h_t.is_floating_point()
+    ):
+        raise ValueError(
+            "hidden features must be floating point with at least two rows"
+        )
     if not torch.isfinite(h_ref).all().item() or not torch.isfinite(h_t).all().item():
         raise ValueError("hidden features must be finite")
     x = h_ref.float() - h_ref.float().mean(dim=0, keepdim=True)
@@ -146,17 +156,29 @@ class TransportFeatureSet:
             raise ValueError("directions and q_hypotheses shapes must match")
         if self.h.shape[0] != self.z0.shape[0] or self.q.shape[0] != self.h.shape[0]:
             raise ValueError("all feature collections must have the same row count")
-        if self.directions.shape[0] != self.h.shape[0] or self.q.shape[1] != self.directions.shape[2]:
+        if (
+            self.directions.shape[0] != self.h.shape[0]
+            or self.q.shape[1] != self.directions.shape[2]
+        ):
             raise ValueError("transport feature dimensions do not match")
-        if self.rho.shape not in {(self.h.shape[0],), (self.h.shape[0], self.directions.shape[1])}:
+        if self.rho.shape not in {
+            (self.h.shape[0],),
+            (self.h.shape[0], self.directions.shape[1]),
+        }:
             raise ValueError("rho must have shape [N] or [N,K]")
         if self.labels.ndim != 1 or self.labels.shape[0] != self.h.shape[0]:
             raise ValueError("labels must contain one value per feature row")
         if len(self.paths) != self.h.shape[0]:
             raise ValueError("paths must contain one value per feature row")
-        if self.gate_logits is not None and self.gate_logits.shape != self.directions.shape[:2]:
+        if (
+            self.gate_logits is not None
+            and self.gate_logits.shape != self.directions.shape[:2]
+        ):
             raise ValueError("gate_logits must have shape [N,K]")
-        if self.concentrations is not None and self.concentrations.shape != self.directions.shape[:2]:
+        if (
+            self.concentrations is not None
+            and self.concentrations.shape != self.directions.shape[:2]
+        ):
             raise ValueError("concentrations must have shape [N,K]")
 
     @property
@@ -279,7 +301,11 @@ def _evaluate_score_chunks(
     for start in range(0, num_queries, query_chunk_size):
         stop = min(start + query_chunk_size, num_queries)
         q_hyp = features.q_hypotheses[start:stop].to(compute_device)
-        gates = None if features.gate_logits is None else features.gate_logits[start:stop].to(compute_device)
+        gates = (
+            None
+            if features.gate_logits is None
+            else features.gate_logits[start:stop].to(compute_device)
+        )
         scores = transport_gallery_scores(
             q_hyp,
             gates,
@@ -312,8 +338,14 @@ def _evaluate_score_chunks(
     return CategoryRetrievalEvaluation(
         metrics=CategoryRetrievalMetrics(
             mean_average_precision=ap.double().mean().item(),
-            precision_at_k={k: torch.cat(values).double().mean().item() for k, values in precision_batches.items()},
-            mean_average_precision_at_k={k: torch.cat(values).double().mean().item() for k, values in map_batches.items()},
+            precision_at_k={
+                k: torch.cat(values).double().mean().item()
+                for k, values in precision_batches.items()
+            },
+            mean_average_precision_at_k={
+                k: torch.cat(values).double().mean().item()
+                for k, values in map_batches.items()
+            },
             num_queries=num_queries,
             num_gallery_items=num_gallery,
         ),
@@ -393,13 +425,20 @@ def evaluate_base_queries(
 
 
 def _pearson(first: Tensor, second: Tensor) -> float | None:
-    if first.ndim != 1 or second.ndim != 1 or first.shape != second.shape or first.numel() < 2:
+    if (
+        first.ndim != 1
+        or second.ndim != 1
+        or first.shape != second.shape
+        or first.numel() < 2
+    ):
         return None
     first = first.float()
     second = second.float()
     first_centered = first - first.mean()
     second_centered = second - second.mean()
-    denominator = (first_centered.square().sum() * second_centered.square().sum()).sqrt()
+    denominator = (
+        first_centered.square().sum() * second_centered.square().sum()
+    ).sqrt()
     if denominator <= 1e-12:
         return None
     return float((first_centered * second_centered).sum().div(denominator).item())
@@ -417,17 +456,25 @@ def transport_query_correlations(
     target_angle = photo_transport_target(features.z0, target).theta
     query = F.normalize(features.q, dim=-1)
     query_labels = torch.unique(features.labels, sorted=True)
-    query_centroids = torch.stack([
-        F.normalize(query[features.labels == label].mean(dim=0), dim=-1)
-        for label in query_labels
-    ])
+    query_centroids = torch.stack(
+        [
+            F.normalize(query[features.labels == label].mean(dim=0), dim=-1)
+            for label in query_labels
+        ]
+    )
     positions = torch.searchsorted(query_labels, features.labels)
     own = (query * query_centroids[positions]).sum(dim=-1)
     all_cosines = query_centroids[positions] @ query_centroids.T
-    own_class = torch.arange(query_labels.numel(), device=query_labels.device)[positions]
+    own_class = torch.arange(query_labels.numel(), device=query_labels.device)[
+        positions
+    ]
     other_mask = torch.ones_like(all_cosines, dtype=torch.bool)
-    other_mask[torch.arange(all_cosines.shape[0], device=all_cosines.device), own_class] = False
-    other = all_cosines.masked_fill(~other_mask, 0.0).sum(dim=-1) / other_mask.sum(dim=-1).clamp_min(1)
+    other_mask[
+        torch.arange(all_cosines.shape[0], device=all_cosines.device), own_class
+    ] = False
+    other = all_cosines.masked_fill(~other_mask, 0.0).sum(dim=-1) / other_mask.sum(
+        dim=-1
+    ).clamp_min(1)
     class_margin = own - other
     rho = features.rho if features.rho.ndim == 1 else features.rho.mean(dim=-1)
     return {
@@ -443,10 +490,15 @@ def _class_centroid_targets(
 ) -> Tensor:
     labels = torch.unique(gallery.labels, sorted=True)
     centroids = torch.stack(
-        [F.normalize(gallery.embeddings[gallery.labels == label].mean(dim=0), dim=-1) for label in labels]
+        [
+            F.normalize(gallery.embeddings[gallery.labels == label].mean(dim=0), dim=-1)
+            for label in labels
+        ]
     )
     positions = torch.searchsorted(labels, features.labels)
-    if torch.any(positions >= labels.shape[0]).item() or not torch.equal(labels[positions], features.labels):
+    if torch.any(positions >= labels.shape[0]).item() or not torch.equal(
+        labels[positions], features.labels
+    ):
         raise ValueError("A transport query class is missing from the gallery")
     return centroids[positions]
 
@@ -494,10 +546,16 @@ def _target_angle_probe(
     valid_ratio = rho[moving.theta > 1e-6] / moving.theta[moving.theta > 1e-6]
     result: dict[str, object] = {
         "moving": _angle_summary(moving.theta),
-        "rho_over_moving_theta": float(valid_ratio.median().item()) if valid_ratio.numel() else None,
-        "rho_over_moving_theta_mean": float(valid_ratio.mean().item()) if valid_ratio.numel() else None,
+        "rho_over_moving_theta": float(valid_ratio.median().item())
+        if valid_ratio.numel()
+        else None,
+        "rho_over_moving_theta_mean": float(valid_ratio.mean().item())
+        if valid_ratio.numel()
+        else None,
         "moving_fraction_beyond_cap": {
-            str(cap): float((moving.theta * (180.0 / math.pi) > cap).float().mean().item())
+            str(cap): float(
+                (moving.theta * (180.0 / math.pi) > cap).float().mean().item()
+            )
             for cap in (5, 10, 15, 20, 30, 45)
         },
     }
@@ -519,7 +577,11 @@ def _target_angle_probe(
     result["fixed_target_alignment"] = float(fixed_alignment.mean().item())
     result["target_frame_agreement"] = float(frame_agreement.mean().item())
     result["fixed_tangent_destination_max_abs_dot"] = float(
-        (fixed.direction * F.normalize(features.z0, dim=-1)).sum(dim=-1).abs().max().item()
+        (fixed.direction * F.normalize(features.z0, dim=-1))
+        .sum(dim=-1)
+        .abs()
+        .max()
+        .item()
     )
     return result
 
@@ -535,7 +597,10 @@ def component_direction_alignment(
     responsible for constructing ``class_targets`` from training photos only;
     this function never reads labels or gallery data to create a prototype.
     """
-    if instance_targets.shape != class_targets.shape or instance_targets.shape != features.z0.shape:
+    if (
+        instance_targets.shape != class_targets.shape
+        or instance_targets.shape != features.z0.shape
+    ):
         raise ValueError("instance/class targets must match feature shape [N,D]")
     instance = photo_transport_target(features.z0, instance_targets)
     semantic = photo_transport_target(features.z0, class_targets)
@@ -548,18 +613,26 @@ def component_direction_alignment(
         "class_alignment_by_component": class_cos.mean(dim=0).tolist(),
         "instance_alignment_max": instance_cos.max(dim=-1).values.mean().item(),
         "class_alignment_max": class_cos.max(dim=-1).values.mean().item(),
-        "instance_alignment_gate_weighted": (weights * instance_cos).sum(dim=-1).mean().item(),
-        "class_alignment_gate_weighted": (weights * class_cos).sum(dim=-1).mean().item(),
+        "instance_alignment_gate_weighted": (weights * instance_cos)
+        .sum(dim=-1)
+        .mean()
+        .item(),
+        "class_alignment_gate_weighted": (weights * class_cos)
+        .sum(dim=-1)
+        .mean()
+        .item(),
     }
     if features.concentrations is not None:
         # The vMF posterior is a useful responsibility-selected diagnostic,
         # but is computed from the supplied targets and never fed to training.
         log_pi = weights.clamp_min(1e-12).log()
-        posterior = (
-            log_pi + features.concentrations * instance_cos
-        ).softmax(dim=-1)
-        result["instance_alignment_responsibility_selected"] = (posterior * instance_cos).sum(dim=-1).mean().item()
-        result["class_alignment_responsibility_selected"] = (posterior * class_cos).sum(dim=-1).mean().item()
+        posterior = (log_pi + features.concentrations * instance_cos).softmax(dim=-1)
+        result["instance_alignment_responsibility_selected"] = (
+            (posterior * instance_cos).sum(dim=-1).mean().item()
+        )
+        result["class_alignment_responsibility_selected"] = (
+            (posterior * class_cos).sum(dim=-1).mean().item()
+        )
     return result
 
 
@@ -590,7 +663,9 @@ def multi_photo_component_alignment(
         raise ValueError("training photo embeddings must be finite")
     photos = F.normalize(train_photo_embeddings, dim=-1)
     labels = torch.unique(train_photo_labels, sorted=True)
-    by_label = {int(label): torch.where(train_photo_labels == label)[0] for label in labels}
+    by_label = {
+        int(label): torch.where(train_photo_labels == label)[0] for label in labels
+    }
     if any(int(label) not in by_label for label in features.labels.unique()):
         raise ValueError("a query class is missing from training photos")
     generator = torch.Generator(device="cpu")
@@ -601,9 +676,17 @@ def multi_photo_component_alignment(
     for index, label in enumerate(features.labels.tolist()):
         candidates = by_label[int(label)]
         if candidates.numel() >= photos_per_class:
-            chosen = candidates[torch.randperm(candidates.numel(), generator=generator)[:photos_per_class]]
+            chosen = candidates[
+                torch.randperm(candidates.numel(), generator=generator)[
+                    :photos_per_class
+                ]
+            ]
         else:
-            chosen = candidates[torch.randint(candidates.numel(), (photos_per_class,), generator=generator)]
+            chosen = candidates[
+                torch.randint(
+                    candidates.numel(), (photos_per_class,), generator=generator
+                )
+            ]
         base = F.normalize(features.z0[index], dim=-1)
         selected = photos[chosen]
         prototype = F.normalize(selected.mean(dim=0), dim=-1)
@@ -621,7 +704,10 @@ def multi_photo_component_alignment(
         class_log = sphere_log(prototype)
         class_unit = F.normalize(class_log, dim=-1)
         instance_logs = torch.stack([sphere_log(photo) for photo in selected])
-        residuals = instance_logs - (instance_logs * class_unit).sum(dim=-1, keepdim=True) * class_unit
+        residuals = (
+            instance_logs
+            - (instance_logs * class_unit).sum(dim=-1, keepdim=True) * class_unit
+        )
         residuals = F.normalize(residuals, dim=-1, eps=1e-8)
         predicted = F.normalize(features.directions[index], dim=-1)
         class_values.append((predicted * class_unit).sum(dim=-1))
@@ -636,13 +722,25 @@ def multi_photo_component_alignment(
         "photos_per_class": photos_per_class,
         "seed": seed,
         "class_alignment_by_component": class_alignment.mean(dim=0).tolist(),
-        "instance_residual_alignment_by_component": all_residual.mean(dim=(0, 2)).tolist(),
-        "instance_residual_alignment_max_by_component": max_residual.mean(dim=0).tolist(),
+        "instance_residual_alignment_by_component": all_residual.mean(
+            dim=(0, 2)
+        ).tolist(),
+        "instance_residual_alignment_max_by_component": max_residual.mean(
+            dim=0
+        ).tolist(),
         "class_alignment_max": class_alignment.max(dim=-1).values.mean().item(),
         "instance_residual_alignment_mean": all_residual.mean().item(),
-        "instance_residual_alignment_max": max_residual.max(dim=-1).values.mean().item(),
-        "class_alignment_gate_weighted": (weights * class_alignment).sum(dim=-1).mean().item(),
-        "instance_residual_alignment_gate_weighted": (weights * max_residual).sum(dim=-1).mean().item(),
+        "instance_residual_alignment_max": max_residual.max(dim=-1)
+        .values.mean()
+        .item(),
+        "class_alignment_gate_weighted": (weights * class_alignment)
+        .sum(dim=-1)
+        .mean()
+        .item(),
+        "instance_residual_alignment_gate_weighted": (weights * max_residual)
+        .sum(dim=-1)
+        .mean()
+        .item(),
     }
 
 
@@ -651,10 +749,15 @@ def train_photo_class_prototypes(
 ) -> tuple[Tensor, Tensor]:
     """Return normalized class prototypes from an explicitly train-only set."""
     labels = torch.unique(encoded_photos.labels, sorted=True)
-    prototypes = torch.stack([
-        F.normalize(encoded_photos.embeddings[encoded_photos.labels == label].mean(dim=0), dim=-1)
-        for label in labels
-    ])
+    prototypes = torch.stack(
+        [
+            F.normalize(
+                encoded_photos.embeddings[encoded_photos.labels == label].mean(dim=0),
+                dim=-1,
+            )
+            for label in labels
+        ]
+    )
     return labels, prototypes
 
 
@@ -669,7 +772,9 @@ def transport_probe_dict(
     target = _class_centroid_targets(features, gallery)
     target_transport = photo_transport_target(features.z0, target)
     directions = F.normalize(features.directions, dim=-1)
-    direction_cosines = (directions * target_transport.direction[:, None, :]).sum(dim=-1)
+    direction_cosines = (directions * target_transport.direction[:, None, :]).sum(
+        dim=-1
+    )
     probabilities = features.probabilities
     posterior = None
     if features.concentrations is not None:
@@ -681,9 +786,7 @@ def transport_probe_dict(
             dimension=features.directions.shape[-1] - 1,
         )
         posterior = (
-            log_pi
-            + log_normalizer
-            + features.concentrations * direction_cosines
+            log_pi + log_normalizer + features.concentrations * direction_cosines
         ).softmax(dim=-1)
     # Reuse the tested JEPA geometry routines without making a transport model
     # look like a full-vector predictor at inference.
@@ -714,32 +817,57 @@ def transport_probe_dict(
             **_rho_summary(features.rho),
             "mean_direction_cosine": direction_cosines.mean().item(),
             "direction_cosine_std": direction_cosines.std(unbiased=False).item(),
-            "endpoint_photo_cosine": (F.normalize(features.q, dim=-1) * target).sum(dim=-1).mean().item(),
-            "base_photo_cosine": (F.normalize(features.z0, dim=-1) * target).sum(dim=-1).mean().item(),
+            "endpoint_photo_cosine": (F.normalize(features.q, dim=-1) * target)
+            .sum(dim=-1)
+            .mean()
+            .item(),
+            "base_photo_cosine": (F.normalize(features.z0, dim=-1) * target)
+            .sum(dim=-1)
+            .mean()
+            .item(),
             "mean_distance_error": (
                 (features.rho if features.rho.ndim == 1 else features.rho.mean(dim=-1))
                 - target_transport.theta
-            ).abs().mean().item(),
-            "near_zero_target_fraction": target_transport.near_zero.float().mean().item(),
+            )
+            .abs()
+            .mean()
+            .item(),
+            "near_zero_target_fraction": target_transport.near_zero.float()
+            .mean()
+            .item(),
             "target_angles": target_angles,
         },
         "mixture": {
             "num_components": features.num_components,
             "gate_entropy": (
-                -(probabilities * probabilities.clamp_min(1e-12).log()).sum(dim=-1).mean().item()
+                -(probabilities * probabilities.clamp_min(1e-12).log())
+                .sum(dim=-1)
+                .mean()
+                .item()
             ),
-            "mean_kappa": 0.0 if features.concentrations is None else features.concentrations.mean().item(),
+            "mean_kappa": 0.0
+            if features.concentrations is None
+            else features.concentrations.mean().item(),
             "kappa_saturation_fraction": 0.0
             if features.concentrations is None or kappa_max is None
-            else float((features.concentrations >= 0.99 * kappa_max).float().mean().item()),
+            else float(
+                (features.concentrations >= 0.99 * kappa_max).float().mean().item()
+            ),
             "component_usage": probabilities.mean(dim=0).tolist(),
-            "component_pairwise_direction_cosine": _component_pairwise_cosines(directions),
+            "component_pairwise_direction_cosine": _component_pairwise_cosines(
+                directions
+            ),
             "responsibility_entropy": None
             if posterior is None
             else float(
-                -(posterior * posterior.clamp_min(1e-12).log()).sum(dim=-1).mean().item()
+                -(posterior * posterior.clamp_min(1e-12).log())
+                .sum(dim=-1)
+                .mean()
+                .item()
             ),
-            "mean_direction_cosine_by_component": direction_cosines.mean(dim=0).tolist(),
+            "mean_direction_cosine_by_component": direction_cosines.mean(
+                dim=0
+            ).tolist(),
         },
     }
     if frozen_reference is not None:
@@ -747,8 +875,14 @@ def transport_probe_dict(
             raise ValueError("frozen_reference must match [N,D] transport features")
         reference = F.normalize(frozen_reference, dim=-1)
         result["reference"] = {
-            "base_reference_cosine": (F.normalize(features.z0, dim=-1) * reference).sum(dim=-1).mean().item(),
-            "query_reference_cosine": (F.normalize(features.q, dim=-1) * reference).sum(dim=-1).mean().item(),
+            "base_reference_cosine": (F.normalize(features.z0, dim=-1) * reference)
+            .sum(dim=-1)
+            .mean()
+            .item(),
+            "query_reference_cosine": (F.normalize(features.q, dim=-1) * reference)
+            .sum(dim=-1)
+            .mean()
+            .item(),
         }
     return result
 
@@ -760,6 +894,8 @@ def _component_pairwise_cosines(directions: Tensor) -> list[float]:
         directions.shape[1], directions.shape[1], offset=1, device=directions.device
     )
     values = (
-        directions[:, pairs[0], :] * directions[:, pairs[1], :]
-    ).sum(dim=-1).mean(dim=0)
+        (directions[:, pairs[0], :] * directions[:, pairs[1], :])
+        .sum(dim=-1)
+        .mean(dim=0)
+    )
     return [float(value) for value in values.reshape(-1)]

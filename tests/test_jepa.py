@@ -149,7 +149,14 @@ def test_feature_geometry_and_semantic_diagnostics() -> None:
     target_diagnostics = photo_target_alignment_diagnostics(jepa_features, gallery)
     assert 0 < geometry.effective_rank <= 4
     assert len(geometry.singular_values) == 4
-    assert torch.isfinite(torch.tensor(list(diagnostics.values(),), dtype=torch.float32)[0])
+    assert torch.isfinite(
+        torch.tensor(
+            list(
+                diagnostics.values(),
+            ),
+            dtype=torch.float32,
+        )[0]
+    )
     assert "semantic_margin" in diagnostics
     assert "individual_positive_cosine" in target_diagnostics
     assert "positive_negative_margin" in target_diagnostics
@@ -158,14 +165,10 @@ def test_feature_geometry_and_semantic_diagnostics() -> None:
 def test_classwise_split_is_deterministic_and_disjoint(tmp_path) -> None:
     classes = {i: f"class_{i}" for i in range(5)}
     sketches = tuple(
-        ManifestEntry(tmp_path / f"s{i}_{c}.png", c)
-        for c in classes
-        for i in range(2)
+        ManifestEntry(tmp_path / f"s{i}_{c}.png", c) for c in classes for i in range(2)
     )
     photos = tuple(
-        ManifestEntry(tmp_path / f"p{i}_{c}.jpg", c)
-        for c in classes
-        for i in range(3)
+        ManifestEntry(tmp_path / f"p{i}_{c}.jpg", c) for c in classes for i in range(3)
     )
     first = make_classwise_retrieval_split(
         sketches, photos, classes, num_validation_classes=2, seed=3407
@@ -175,5 +178,10 @@ def test_classwise_split_is_deterministic_and_disjoint(tmp_path) -> None:
     )
     assert first.validation_class_ids == second.validation_class_ids
     assert set(first.train_class_ids).isdisjoint(first.validation_class_ids)
-    assert all(entry.label in first.train_class_ids for entry in first.train_sketch_entries)
-    assert all(entry.label in first.validation_class_ids for entry in first.validation_photo_entries)
+    assert all(
+        entry.label in first.train_class_ids for entry in first.train_sketch_entries
+    )
+    assert all(
+        entry.label in first.validation_class_ids
+        for entry in first.validation_photo_entries
+    )

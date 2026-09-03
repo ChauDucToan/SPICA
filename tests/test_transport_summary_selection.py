@@ -8,7 +8,14 @@ from scripts.transport_artifact_utils import (
 )
 
 
-def _run(name: str, *, transport: bool | None, value: float, k: int = 1, endpoint: float = 0.0):
+def _run(
+    name: str,
+    *,
+    transport: bool | None,
+    value: float,
+    k: int = 1,
+    endpoint: float = 0.0,
+):
     return (
         Path("outputs/experiments") / name / "run_result.json",
         {

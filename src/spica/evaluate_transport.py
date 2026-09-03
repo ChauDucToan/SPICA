@@ -15,7 +15,11 @@ from .config.data import load_data_config
 from .data.datasets import RetrievalEvalDataset
 from .data.manifest import read_manifest
 from .evaluation.embeddings import load_encoded_retrieval_set
-from .evaluation.transport import encode_transport_loader, evaluate_transport_features, transport_probe_dict
+from .evaluation.transport import (
+    encode_transport_loader,
+    evaluate_transport_features,
+    transport_probe_dict,
+)
 from .evaluate_deterministic import (
     _resolve_device,
     _validate_cache_against_manifest,
@@ -44,19 +48,44 @@ def _load_model(
     payload = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if not isinstance(payload, dict):
         raise TypeError("invalid transport checkpoint payload")
-    required = {"format_version", "model_type", "step", "model_config", "model_state_dict", "metadata"}
+    required = {
+        "format_version",
+        "model_type",
+        "step",
+        "model_config",
+        "model_state_dict",
+        "metadata",
+    }
     missing = required - payload.keys()
     if missing:
         raise ValueError(f"transport checkpoint is missing keys: {sorted(missing)}")
-    if payload["format_version"] != 1 or payload["model_type"] != "predictive_semantic_transport":
-        raise ValueError(f"unsupported transport checkpoint type/version: {payload.get('model_type')!r}")
+    if (
+        payload["format_version"] != 1
+        or payload["model_type"] != "predictive_semantic_transport"
+    ):
+        raise ValueError(
+            f"unsupported transport checkpoint type/version: {payload.get('model_type')!r}"
+        )
     config = payload["model_config"]
     state = payload["model_state_dict"]
     metadata = payload["metadata"]
-    if not isinstance(config, dict) or not isinstance(state, dict) or not isinstance(metadata, dict):
-        raise TypeError("transport checkpoint config, state, and metadata must be dictionaries")
-    if metadata.get("text_enters_predictor") is not False or metadata.get("text_enters_gate") is not False or metadata.get("text_enters_distance_head") is not False or metadata.get("text_enters_vmf") is not False:
-        raise ValueError("transport checkpoint violates the text-free predictor contract")
+    if (
+        not isinstance(config, dict)
+        or not isinstance(state, dict)
+        or not isinstance(metadata, dict)
+    ):
+        raise TypeError(
+            "transport checkpoint config, state, and metadata must be dictionaries"
+        )
+    if (
+        metadata.get("text_enters_predictor") is not False
+        or metadata.get("text_enters_gate") is not False
+        or metadata.get("text_enters_distance_head") is not False
+        or metadata.get("text_enters_vmf") is not False
+    ):
+        raise ValueError(
+            "transport checkpoint violates the text-free predictor contract"
+        )
     try:
         hidden_dim = int(config["hidden_dim"])
         embedding_dim = int(config["embedding_dim"])
@@ -75,11 +104,15 @@ def _load_model(
         rho_warmup_steps = int(config.get("rho_warmup_steps", 75))
         use_vmf = bool(config["use_vmf"])
     except KeyError as error:
-        raise ValueError(f"transport model_config is missing {error.args[0]!r}") from error
+        raise ValueError(
+            f"transport model_config is missing {error.args[0]!r}"
+        ) from error
     matrix = state.get("photo_projection.matrix")
     bias = state.get("photo_projection.bias")
     if not isinstance(matrix, torch.Tensor):
-        raise ValueError("transport checkpoint does not contain frozen photo projection")
+        raise ValueError(
+            "transport checkpoint does not contain frozen photo projection"
+        )
     if bias is not None and not isinstance(bias, torch.Tensor):
         raise ValueError("transport checkpoint photo projection bias is invalid")
     projection = FrozenVisualProjection(matrix, bias)
@@ -90,8 +123,13 @@ def _load_model(
         mode=mode,
         unfreeze_depth=depth,
     )
-    if sketch_bundle.encoder.hidden_dim != hidden_dim or projection.embedding_dim != embedding_dim:
-        raise ValueError("checkpoint dimensions do not match the CLIP visual architecture")
+    if (
+        sketch_bundle.encoder.hidden_dim != hidden_dim
+        or projection.embedding_dim != embedding_dim
+    ):
+        raise ValueError(
+            "checkpoint dimensions do not match the CLIP visual architecture"
+        )
     model = SpicaPredictiveTransport(
         sketch_bundle.encoder,
         projection,
@@ -117,10 +155,14 @@ def _load_model(
     try:
         model.load_state_dict(state, strict=True)
     except RuntimeError as error:
-        raise ValueError("transport checkpoint state does not match model configuration") from error
+        raise ValueError(
+            "transport checkpoint state does not match model configuration"
+        ) from error
     for name, parameter in model.named_parameters():
         if not torch.isfinite(parameter).all().item():
-            raise ValueError(f"transport checkpoint contains a non-finite parameter: {name}")
+            raise ValueError(
+                f"transport checkpoint contains a non-finite parameter: {name}"
+            )
     model.set_schedule_step(int(payload["step"]))
     model.to(device).eval()
     return model, payload, sketch_bundle.transform
@@ -136,7 +178,9 @@ def _metrics_dict(evaluation) -> dict[str, object]:
     }
 
 
-@hydra.main(version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="evaluate_transport")
+@hydra.main(
+    version_base="1.3", config_path=HYDRA_CONFIG_DIR, config_name="evaluate_transport"
+)
 def main(args: DictConfig) -> None:
     device = _resolve_device(str(args.device))
     checkpoint_path = _resolve_project_path(args.checkpoint_path)
@@ -175,7 +219,11 @@ def main(args: DictConfig) -> None:
         persistent_workers=int(args.num_workers) > 0,
     )
     features = encode_transport_loader(model, query_loader, device=device)
-    modes = ("barycentric", "angular_logsumexp", "max") if model.num_components > 1 else ("barycentric",)
+    modes = (
+        ("barycentric", "angular_logsumexp", "max")
+        if model.num_components > 1
+        else ("barycentric",)
+    )
     evaluations = evaluate_transport_features(
         features,
         gallery,
@@ -207,7 +255,9 @@ def main(args: DictConfig) -> None:
         "split_identities": split_identities,
         "inference_score_mode": selected,
         "metrics": _metrics_dict(evaluations[selected]),
-        "retrieval_modes": {name: _metrics_dict(value) for name, value in evaluations.items()},
+        "retrieval_modes": {
+            name: _metrics_dict(value) for name, value in evaluations.items()
+        },
         "radius_vs_ap": _radius_ap_payload(evaluations[selected], features.rho),
         "feature_geometry": probe,
         "leakage_flags": {
@@ -236,9 +286,13 @@ def main(args: DictConfig) -> None:
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-    print(f"mAP ({selected}): {evaluations[selected].metrics.mean_average_precision:.6f}")
+    print(
+        f"mAP ({selected}): {evaluations[selected].metrics.mean_average_precision:.6f}"
+    )
     if 200 in evaluations[selected].metrics.precision_at_k:
-        print(f"P@200 ({selected}): {evaluations[selected].metrics.precision_at_k[200]:.6f}")
+        print(
+            f"P@200 ({selected}): {evaluations[selected].metrics.precision_at_k[200]:.6f}"
+        )
     print("Text required at inference: NO")
     print("Photo required at inference: NO")
     print(f"Metrics saved to {output}")

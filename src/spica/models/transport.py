@@ -128,7 +128,9 @@ def parallel_transport_tangent(
     y = _safe_normalize(destination)
     v = tangent_projection(vector, x)
     denominator = 1.0 + (x * y).sum(dim=-1, keepdim=True)
-    transported = v - ((v * y).sum(dim=-1, keepdim=True) / denominator.clamp_min(eps)) * (x + y)
+    transported = v - (
+        (v * y).sum(dim=-1, keepdim=True) / denominator.clamp_min(eps)
+    ) * (x + y)
     fallback = tangent_projection(v, y)
     return torch.where(denominator > eps, transported, fallback)
 
@@ -164,7 +166,9 @@ def _stable_tangent_direction(
         base_for_basis = base.unsqueeze(1)
     else:
         base_for_basis = base
-    fallback = basis - (basis * base_for_basis).sum(dim=-1, keepdim=True) * base_for_basis
+    fallback = (
+        basis - (basis * base_for_basis).sum(dim=-1, keepdim=True) * base_for_basis
+    )
     fallback = _safe_normalize(fallback, eps=eps)
     normalized = tangent / norm.clamp_min(eps)
     return torch.where(norm > eps, normalized, fallback)
@@ -199,9 +203,12 @@ class SemanticTransportPrediction:
     @property
     def pi(self) -> Tensor:
         if self.gate_logits is None:
-            return self.directions.new_ones(
-                self.directions.shape[0], self.directions.shape[1]
-            ) / self.directions.shape[1]
+            return (
+                self.directions.new_ones(
+                    self.directions.shape[0], self.directions.shape[1]
+                )
+                / self.directions.shape[1]
+            )
         return self.gate_logits.softmax(dim=-1)
 
     @property
@@ -240,9 +247,7 @@ class ResidualTransportHead(nn.Module):
         q = _safe_normalize(z0 + self.alpha_value * delta)
         directions = _safe_normalize(delta).unsqueeze(1)
         q_hypotheses = q.unsqueeze(1)
-        rho = torch.acos(
-            (z0 * q).sum(dim=-1).clamp(min=-1.0 + 1e-6, max=1.0 - 1e-6)
-        )
+        rho = torch.acos((z0 * q).sum(dim=-1).clamp(min=-1.0 + 1e-6, max=1.0 - 1e-6))
         return SemanticTransportPrediction(
             h=h,
             z0=z0,
@@ -297,9 +302,7 @@ class BoundedResidualTransportHead(nn.Module):
         alpha = self.alpha_max * self.alpha_head(features).squeeze(-1).sigmoid()
         q = _safe_normalize(z0 + alpha[:, None] * delta_unit)
         directions = delta_unit.unsqueeze(1)
-        rho = torch.acos(
-            (z0 * q).sum(dim=-1).clamp(min=-1.0 + 1e-6, max=1.0 - 1e-6)
-        )
+        rho = torch.acos((z0 * q).sum(dim=-1).clamp(min=-1.0 + 1e-6, max=1.0 - 1e-6))
         return SemanticTransportPrediction(
             h=h,
             z0=z0,
@@ -354,7 +357,13 @@ class TangentTransportHead(nn.Module):
             raise ValueError("rho_max must be in (0, pi]")
         if not math.isfinite(initial_rho) or not 0 <= initial_rho < rho_max:
             raise ValueError("initial_rho must be in [0, rho_max)")
-        if rho_strategy not in {"learned", "zero", "fixed", "linear_warmup", "cosine_warmup"}:
+        if rho_strategy not in {
+            "learned",
+            "zero",
+            "fixed",
+            "linear_warmup",
+            "cosine_warmup",
+        }:
             raise ValueError(
                 "rho_strategy must be learned, zero, fixed, linear_warmup, or cosine_warmup"
             )
@@ -370,7 +379,10 @@ class TangentTransportHead(nn.Module):
             raise ValueError("min_kappa must be finite and non-negative")
         if not math.isfinite(max_kappa) or max_kappa <= min_kappa:
             raise ValueError("max_kappa must exceed min_kappa")
-        if not math.isfinite(initial_kappa) or not min_kappa < initial_kappa < max_kappa:
+        if (
+            not math.isfinite(initial_kappa)
+            or not min_kappa < initial_kappa < max_kappa
+        ):
             raise ValueError("initial_kappa must be strictly within kappa bounds")
         self.hidden_dim = hidden_dim
         self.embedding_dim = embedding_dim
@@ -412,7 +424,9 @@ class TangentTransportHead(nn.Module):
             self.rho_head = None
 
         if num_components > 1:
-            self.gate_head = _TransportMLP(input_dim, predictor_hidden_dim, num_components)
+            self.gate_head = _TransportMLP(
+                input_dim, predictor_hidden_dim, num_components
+            )
             self.gate_head.zero_initialize_output()
         else:
             self.gate_head = None
@@ -423,9 +437,7 @@ class TangentTransportHead(nn.Module):
             )
             self.kappa_head.zero_initialize_output()
             self.kappa_head.output.bias.data.fill_(
-                _inverse_sigmoid(
-                    (initial_kappa - min_kappa) / (max_kappa - min_kappa)
-                )
+                _inverse_sigmoid((initial_kappa - min_kappa) / (max_kappa - min_kappa))
             )
         else:
             self.kappa_head = None
@@ -496,9 +508,11 @@ class TangentTransportHead(nn.Module):
 
         concentrations: Tensor | None = None
         if self.kappa_head is not None:
-            concentrations = self.min_kappa + (
-                self.max_kappa - self.min_kappa
-            ) * self.kappa_head(features).sigmoid()
+            concentrations = (
+                self.min_kappa
+                + (self.max_kappa - self.min_kappa)
+                * self.kappa_head(features).sigmoid()
+            )
 
         return SemanticTransportPrediction(
             h=h,
@@ -748,10 +762,15 @@ def transport_direction_loss(
     _validate_batch_features("target_direction", target_direction, 2)
     if predicted_direction.shape != target_direction.shape:
         raise ValueError("predicted and target direction shapes must match")
-    return 1.0 - (
-        _safe_normalize(predicted_direction)
-        * _safe_normalize(target_direction.detach())
-    ).sum(dim=-1).mean()
+    return (
+        1.0
+        - (
+            _safe_normalize(predicted_direction)
+            * _safe_normalize(target_direction.detach())
+        )
+        .sum(dim=-1)
+        .mean()
+    )
 
 
 def transport_distance_loss(predicted_rho: Tensor, target_theta: Tensor) -> Tensor:
@@ -769,9 +788,12 @@ def transport_endpoint_loss(queries: Tensor, photo_target: Tensor) -> Tensor:
     _validate_batch_features("photo_target", photo_target, 2)
     if queries.shape != photo_target.shape:
         raise ValueError("queries and photo_target shapes must match")
-    return 1.0 - (
-        _safe_normalize(queries) * _safe_normalize(photo_target.detach())
-    ).sum(dim=-1).mean()
+    return (
+        1.0
+        - (_safe_normalize(queries) * _safe_normalize(photo_target.detach()))
+        .sum(dim=-1)
+        .mean()
+    )
 
 
 def transport_ranking_loss(
@@ -786,7 +808,10 @@ def transport_ranking_loss(
     _validate_batch_features("queries", queries, 2)
     _validate_batch_features("positive_target", positive_target, 2)
     _validate_batch_features("negative_embedding", negative_embedding, 2)
-    if queries.shape != positive_target.shape or queries.shape != negative_embedding.shape:
+    if (
+        queries.shape != positive_target.shape
+        or queries.shape != negative_embedding.shape
+    ):
         raise ValueError("ranking tensors must have matching shapes")
     query = _safe_normalize(queries)
     positive = _safe_normalize(positive_target.detach())
@@ -808,10 +833,14 @@ def transport_geometry_loss(
     if queries.shape != reference.shape or queries.shape[0] < 2:
         raise ValueError("queries/reference must match and contain at least two rows")
     query_gram = _safe_normalize(queries) @ _safe_normalize(queries).T
-    reference_gram = _safe_normalize(reference.detach()) @ _safe_normalize(reference.detach()).T
+    reference_gram = (
+        _safe_normalize(reference.detach()) @ _safe_normalize(reference.detach()).T
+    )
     difference = (query_gram - reference_gram).square()
     if off_diagonal:
-        mask = ~torch.eye(difference.shape[0], dtype=torch.bool, device=difference.device)
+        mask = ~torch.eye(
+            difference.shape[0], dtype=torch.bool, device=difference.device
+        )
         return difference[mask].mean()
     return difference.mean()
 
@@ -849,9 +878,9 @@ def transport_multi_hypothesis_ranking_loss(
     negative = _safe_normalize(negative_embedding.detach())
     # Elementwise products avoid PyTorch's bmm_outer_product Triton dispatch
     # on systems where the optional ldconfig utility is unavailable.
-    positive_cosines = (
-        hypotheses[:, None, :, :] * positives[:, :, None, :]
-    ).sum(dim=-1)
+    positive_cosines = (hypotheses[:, None, :, :] * positives[:, :, None, :]).sum(
+        dim=-1
+    )
     negative_cosines = (hypotheses * negative[:, None, :]).sum(dim=-1)
     positive_scores = temperature * torch.logsumexp(
         log_pi[:, None, :] + positive_cosines / temperature, dim=-1
@@ -859,9 +888,7 @@ def transport_multi_hypothesis_ranking_loss(
     negative_score = temperature * torch.logsumexp(
         log_pi + negative_cosines / temperature, dim=-1
     )
-    return F.softplus(
-        margin - positive_scores + negative_score[:, None]
-    ).mean()
+    return F.softplus(margin - positive_scores + negative_score[:, None]).mean()
 
 
 @dataclass(frozen=True, slots=True)
@@ -903,19 +930,21 @@ def _relative_log_vmf_normalizer(
     m = torch.arange(terms_count, device=kappa.device, dtype=torch.float64)
     log_k_half = torch.log(kappa / 2.0)[..., None]
     terms = (
-        (2.0 * m + nu) * log_k_half
-        - torch.lgamma(m + 1.0)
-        - torch.lgamma(m + nu + 1.0)
+        (2.0 * m + nu) * log_k_half - torch.lgamma(m + 1.0) - torch.lgamma(m + nu + 1.0)
     )
     log_bessel_series = torch.logsumexp(terms, dim=-1)
     correction = (4.0 * nu * nu - 1.0) / (8.0 * kappa)
-    log_bessel_asymptotic = kappa - 0.5 * math.log(2.0 * math.pi * 1.0) - 0.5 * torch.log(kappa)
+    log_bessel_asymptotic = (
+        kappa - 0.5 * math.log(2.0 * math.pi * 1.0) - 0.5 * torch.log(kappa)
+    )
     log_bessel = torch.where(
         small,
         log_bessel_series,
         log_bessel_asymptotic + correction,
     )
-    log_c = nu * torch.log(kappa) - (dimension / 2.0) * math.log(2.0 * math.pi) - log_bessel
+    log_c = (
+        nu * torch.log(kappa) - (dimension / 2.0) * math.log(2.0 * math.pi) - log_bessel
+    )
     log_uniform = (
         math.lgamma(dimension / 2.0)
         - math.log(2.0)
@@ -1014,9 +1043,7 @@ def deterministic_direction_mixture_loss(
     directions = _safe_normalize(directions)
     target = _safe_normalize(target_direction.detach())
     cosine = (directions * target[:, None, :]).sum(dim=-1)
-    responsibilities = (
-        log_pi + cosine / assignment_temperature
-    ).softmax(dim=-1)
+    responsibilities = (log_pi + cosine / assignment_temperature).softmax(dim=-1)
     direction_loss = 1.0 - (responsibilities * cosine).sum(dim=-1).mean()
     ranking = transport_multi_hypothesis_ranking_loss(
         prediction.q_hypotheses,
@@ -1073,9 +1100,9 @@ def transport_gallery_scores(
     if mode == "barycentric":
         return barycentric_transport_query(q_hypotheses, gate_logits) @ gallery.T
     normalized_hypotheses = _safe_normalize(q_hypotheses)
-    component_scores = (
-        normalized_hypotheses.reshape(b * k, d) @ gallery.T
-    ).reshape(b, k, gallery.shape[0])
+    component_scores = (normalized_hypotheses.reshape(b * k, d) @ gallery.T).reshape(
+        b, k, gallery.shape[0]
+    )
     if mode == "max":
         return component_scores.max(dim=1).values
     if mode != "angular_logsumexp":

@@ -15,7 +15,10 @@ from spica.data.datasets import RetrievalEvalDataset
 from spica.data.manifest import read_class_map, read_manifest
 from spica.data.splits import make_classwise_retrieval_split
 from spica.evaluation.embeddings import encode_retrieval_loader
-from spica.evaluation.transport import encode_transport_loader, multi_photo_component_alignment
+from spica.evaluation.transport import (
+    encode_transport_loader,
+    multi_photo_component_alignment,
+)
 from spica.evaluate_transport import _load_model, _resolve_device
 from spica.models.clip import load_frozen_clip
 
@@ -72,7 +75,11 @@ def main() -> None:
     for k, configured_checkpoint in DEFAULT_RUNS.items():
         checkpoint = project_path(configured_checkpoint)
         if not checkpoint.is_file():
-            results[k] = {"run": str(checkpoint.relative_to(ROOT)), "alignment": None, "error": "checkpoint not found"}
+            results[k] = {
+                "run": str(checkpoint.relative_to(ROOT)),
+                "alignment": None,
+                "error": "checkpoint not found",
+            }
             continue
         print(f"Encoding train sketches for K={k}...")
         model, payload, sketch_transform = _load_model(checkpoint, device=device)

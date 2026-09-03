@@ -154,16 +154,12 @@ def main(args: DictConfig) -> None:
         "sketch_manifest_sha256": _validate_cache_against_manifest(
             modality="sketch",
             encoded_set=sketches,
-            manifest_entries=read_manifest(
-                split_config.sketch_manifest, config.root
-            ),
+            manifest_entries=read_manifest(split_config.sketch_manifest, config.root),
         ),
         "photo_manifest_sha256": _validate_cache_against_manifest(
             modality="photo",
             encoded_set=photos,
-            manifest_entries=read_manifest(
-                split_config.photo_manifest, config.root
-            ),
+            manifest_entries=read_manifest(split_config.photo_manifest, config.root),
         ),
     }
 

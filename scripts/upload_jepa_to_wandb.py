@@ -106,7 +106,9 @@ def event_history(run_result: dict[str, Any]) -> dict[int, dict[str, float]]:
         step = int(entry["step"])
         event = events.setdefault(step, {})
         for key, value in entry.items():
-            if key not in {"step", "equivalent_epochs"} and isinstance(value, (int, float)):
+            if key not in {"step", "equivalent_epochs"} and isinstance(
+                value, (int, float)
+            ):
                 event[f"train/{key}"] = float(value)
         event["train/equivalent_epochs"] = float(entry.get("equivalent_epochs", 0.0))
     for probe in run_result.get("probe_history", []):
@@ -123,7 +125,9 @@ def artifact_files(run_dir: Path) -> list[Path]:
         "train_jepa.log",
         "seen_text_bank.pt",
     }
-    paths = [path for path in run_dir.iterdir() if path.is_file() and path.name in names]
+    paths = [
+        path for path in run_dir.iterdir() if path.is_file() and path.name in names
+    ]
     paths.extend(sorted(run_dir.glob("probe_step*.json")))
     paths.extend(sorted((run_dir / ".hydra").glob("*.yaml")))
     return sorted(set(path for path in paths if path.is_file()))
@@ -178,7 +182,8 @@ def upload_run(
     validation_maps = [
         float(probe["val"]["mAP"])
         for probe in probes
-        if isinstance(probe.get("val"), dict) and isinstance(probe["val"].get("mAP"), (int, float))
+        if isinstance(probe.get("val"), dict)
+        and isinstance(probe["val"].get("mAP"), (int, float))
     ]
     if validation_maps:
         summary["best_validation_mAP"] = max(validation_maps)
@@ -232,12 +237,32 @@ def upload_overview(
             "source_commit": summary["repository"]["audited_commit"],
             "dataset": summary["protocol"]["dataset"],
             "pseudo_split_seed": summary["protocol"]["pseudo_split_seed"],
-            "external_benchmark_verified": summary["protocol"]["official_external_benchmark_verified"],
+            "external_benchmark_verified": summary["protocol"][
+                "official_external_benchmark_verified"
+            ],
         },
     )
-    columns = ["name", "final_step", "best_validation_mAP", "last_validation_mAP", "source_run_dir"]
-    run.log({"research/training_runs": wandb.Table(columns=columns, data=[[row.get(column) for column in columns] for row in rows])})
-    run.summary.update({"training_run_count": len(rows), "source_summary": str(summary_path.relative_to(ROOT))})
+    columns = [
+        "name",
+        "final_step",
+        "best_validation_mAP",
+        "last_validation_mAP",
+        "source_run_dir",
+    ]
+    run.log(
+        {
+            "research/training_runs": wandb.Table(
+                columns=columns,
+                data=[[row.get(column) for column in columns] for row in rows],
+            )
+        }
+    )
+    run.summary.update(
+        {
+            "training_run_count": len(rows),
+            "source_summary": str(summary_path.relative_to(ROOT)),
+        }
+    )
 
     artifact = wandb.Artifact(
         name=f"{safe_name(group)}-summary",
@@ -248,7 +273,10 @@ def upload_overview(
     markdown = summary_path.with_suffix(".md")
     if markdown.is_file():
         artifact.add_file(str(markdown), name=str(markdown.relative_to(ROOT)))
-    plot_dir = OUTPUTS / f"research_jepa_{summary_path.stem.removeprefix('research_summary_jepa_')}"
+    plot_dir = (
+        OUTPUTS
+        / f"research_jepa_{summary_path.stem.removeprefix('research_summary_jepa_')}"
+    )
     for plot in sorted(plot_dir.glob("*.png")):
         artifact.add_file(str(plot), name=str(plot.relative_to(ROOT)))
     run.log_artifact(artifact, aliases=["latest", "jepa", "research"])
@@ -285,7 +313,9 @@ def main() -> None:
         entity=args.entity,
         group=args.group,
     )
-    print(f"Uploaded {len(rows)} JEPA training histories to W&B project {args.project!r}.")
+    print(
+        f"Uploaded {len(rows)} JEPA training histories to W&B project {args.project!r}."
+    )
 
 
 if __name__ == "__main__":

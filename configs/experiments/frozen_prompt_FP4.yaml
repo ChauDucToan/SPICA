@@ -1,6 +1,10 @@
 # @package _global_
-experiment_role: frozen_prompt_FP4
+experiment_role: frozen_prompt_v2_FP4
 visual_prompt_length: 0
 prompt_mode: vanilla
 text_mode: soft
+train_sketch_prompt: false
+train_photo_prompt: false
+lambda_rank: 0.0
 lambda_cls: 1.0
+classification_location: query
