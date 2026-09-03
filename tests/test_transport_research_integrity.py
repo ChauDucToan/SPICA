@@ -13,6 +13,7 @@ import torch
 
 from scripts.select_transport_stage1 import select_stage1
 from scripts.summarize_transport_corrected import (
+    _p2_probe_steps,
     _projection_refit,
     _representation_value,
     _same_checkpoint,
@@ -25,6 +26,7 @@ from scripts.transport_artifact_utils import (
     assert_matched_runs,
     factorial_effects,
     select_unique_role,
+    validate_freeze_optimizer_artifact,
     validate_freeze_optimizer_role,
     write_new,
 )
@@ -155,6 +157,40 @@ def test_endpoint0_factorial_effects_are_correct() -> None:
     }
 
 
+def test_freeze_optimizer_artifact_validates_hashes_and_resume_flags(tmp_path: Path) -> None:
+    source_path = tmp_path / "source.pt"
+    result_path = tmp_path / "result.pt"
+    source_path.write_bytes(b"source")
+    result_path.write_bytes(b"result")
+    source_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    result_hash = hashlib.sha256(result_path.read_bytes()).hexdigest()
+    source = {"checkpoint": str(source_path), "checkpoint_sha256": source_hash}
+    result = {
+        "checkpoint": str(result_path),
+        "checkpoint_sha256": result_hash,
+        "config": {
+            "experiment_role": "freeze_optimizer_B",
+            "freeze_encoder_at_step": 73,
+            "reset_optimizer_on_resume": False,
+            "resume_checkpoint_path": str(source_path),
+        },
+        "resume": {
+            "checkpoint": str(source_path),
+            "checkpoint_sha256": source_hash,
+            "starting_step": 73,
+            "freeze_applied_before_first_update": True,
+            "encoder_frozen_immediately": True,
+            "optimizer_state_restored": True,
+            "optimizer_state_reset": False,
+            "transport_head_reinitialized": False,
+        },
+    }
+    assert validate_freeze_optimizer_artifact(result, source)["status"] == "validated"
+    result["resume"]["optimizer_state_restored"] = False
+    with pytest.raises(ArtifactIntegrityError, match="restore state"):
+        validate_freeze_optimizer_artifact(result, source)
+
+
 def test_optimizer_reset_only_rejects_frozen_encoder() -> None:
     with pytest.raises(ArtifactIntegrityError, match="keep the encoder trainable"):
         validate_freeze_optimizer_role(
@@ -229,6 +265,11 @@ def test_dirty_tree_provenance_contains_diff_and_source_hash(tmp_path: Path) -> 
     assert "value = 2" in provenance["git_diff"]
     assert len(provenance["git_diff_sha256"]) == 64
     assert len(provenance["source_snapshot"]["sha256"]) == 64
+
+
+def test_p2_probe_schedule_follows_selected_origin() -> None:
+    assert _p2_probe_steps(44) == [44, 100, 150, 250, 500, 1800, 5400]
+    assert _p2_probe_steps(73) == [73, 100, 150, 250, 500, 1800, 5400]
 
 
 def test_stability_uses_actual_probe_steps_and_unknown_transport_is_not_base() -> None:
@@ -408,6 +449,7 @@ def test_projection_refit_rejects_tampered_hashed_source(tmp_path: Path) -> None
         "fit_split": None,
         "seed": 3407,
         "official_unseen_used": False,
+        "data_manifest_identity": {"sha256": "manifest"},
         "provenance": {"status": "valid"},
         "source_artifacts": [{"path": str(source), "sha256": digest}],
         "values": [{
@@ -416,6 +458,7 @@ def test_projection_refit_rejects_tampered_hashed_source(tmp_path: Path) -> None
             "checkpoint_step": 73,
             "fit_split": "pseudo_train only",
             "evaluation_split": "pseudo-unseen only",
+            "data_manifest_identity": {"sha256": "manifest"},
             "methods": methods,
             "checkpoint": str(source),
             "checkpoint_sha256": digest,

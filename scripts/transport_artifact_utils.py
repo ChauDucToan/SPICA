@@ -7,6 +7,7 @@ field is *unknown*, not ``True``.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -222,7 +223,7 @@ def matched_transport_predicate(
             return False
         if k is not None and config.get("K") != k:
             return False
-        if text is not None and bool(config.get("use_text_cls")) is not text:
+        if text is not None and config.get("use_text_cls") is not text:
             return False
         if endpoint is not None:
             try:
@@ -249,7 +250,7 @@ def matched_base_predicate(*, text: bool) -> Callable[[dict[str, Any]], bool]:
             is_base_run(result)
             and config.get("transport_mode") == "tangent"
             and config.get("K") == 1
-            and bool(config.get("use_text_cls")) is text
+            and config.get("use_text_cls") is text
             and float(config.get("lambda_endpoint", 0.0)) == 0.0
             and config.get("num_positive_photos", 1) == 1
         )
@@ -281,6 +282,44 @@ def _same(left: Any, right: Any) -> bool:
     return left == right
 
 
+def _condition_mismatches(first: dict[str, Any], second: dict[str, Any]) -> list[str]:
+    first_config = config_of(first)
+    second_config = config_of(second)
+    mismatches = []
+    for field in MATCHED_FIELDS:
+        if field not in first_config or field not in second_config:
+            mismatches.append(f"{field}: missing")
+        elif not _same(first_config[field], second_config[field]):
+            mismatches.append(
+                f"{field}: {first_config[field]!r} != {second_config[field]!r}"
+            )
+    first_split = first.get("data_split_identity") or first.get("pseudo_split")
+    second_split = second.get("data_split_identity") or second.get("pseudo_split")
+    if not isinstance(first_split, dict) or not isinstance(second_split, dict):
+        mismatches.append("data split identity: missing")
+    elif first_split.get("sha256") and second_split.get("sha256"):
+        if first_split["sha256"] != second_split["sha256"]:
+            mismatches.append("data split identity hash differs")
+    elif first_split != second_split:
+        mismatches.append("data split identity differs")
+    first_manifest = first.get("data_manifest_identity")
+    second_manifest = second.get("data_manifest_identity")
+    if (first_manifest is None) != (second_manifest is None):
+        mismatches.append("manifest-entry identity: missing")
+    elif first_manifest is not None and first_manifest != second_manifest:
+        mismatches.append("manifest-entry identity differs")
+    return mismatches
+
+
+def assert_same_run_conditions(
+    first: dict[str, Any], second: dict[str, Any], *, label: str = "runs"
+) -> None:
+    """Require two records to share all non-treatment training conditions."""
+    mismatches = _condition_mismatches(first, second)
+    if mismatches:
+        raise ArtifactIntegrityError(f"{label} are not matched: " + "; ".join(mismatches))
+
+
 def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None:
     """Validate the matched base+text versus transport+text causal control."""
     base_config = config_of(base)
@@ -290,39 +329,11 @@ def assert_matched_runs(base: dict[str, Any], transport: dict[str, Any]) -> None
     if transport_config.get("transport_enabled") is not True:
         raise ArtifactIntegrityError("z0_T/q_T must have transport_enabled=true")
     for label, config in (("base", base_config), ("transport", transport_config)):
-        if not config.get("use_text_cls") or float(config.get("lambda_cls", 0.0)) <= 0:
+        if config.get("use_text_cls") is not True or float(config.get("lambda_cls", 0.0)) <= 0:
             raise ArtifactIntegrityError(f"{label} run is not a text-supervised run")
         if float(config.get("lambda_endpoint", 1.0)) != 0.0:
             raise ArtifactIntegrityError(f"{label} run does not use endpoint=0")
-    mismatches = []
-    for field in MATCHED_FIELDS:
-        if field not in base_config or field not in transport_config:
-            mismatches.append(f"{field}: missing")
-        elif not _same(base_config[field], transport_config[field]):
-            mismatches.append(
-                f"{field}: {base_config[field]!r} != {transport_config[field]!r}"
-            )
-    base_split = base.get("data_split_identity") or base.get("pseudo_split")
-    transport_split = transport.get("data_split_identity") or transport.get(
-        "pseudo_split"
-    )
-    if not isinstance(base_split, dict) or not isinstance(transport_split, dict):
-        mismatches.append("data split identity: missing")
-    elif base_split.get("sha256") and transport_split.get("sha256"):
-        if base_split["sha256"] != transport_split["sha256"]:
-            mismatches.append("data split identity hash differs")
-    elif base_split != transport_split:
-        mismatches.append("data split identity differs")
-    base_manifest = base.get("data_manifest_identity")
-    transport_manifest = transport.get("data_manifest_identity")
-    if (base_manifest is None) != (transport_manifest is None):
-        mismatches.append("manifest-entry identity: missing")
-    elif base_manifest is not None and base_manifest != transport_manifest:
-        mismatches.append("manifest-entry identity differs")
-    if mismatches:
-        raise ArtifactIntegrityError(
-            "causal runs are not matched: " + "; ".join(mismatches)
-        )
+    assert_same_run_conditions(base, transport, label="causal runs")
 
 
 def factorial_effects(cells: dict[str, float]) -> dict[str, float]:
@@ -341,6 +352,19 @@ def factorial_effects(cells: dict[str, float]) -> dict[str, float]:
     }
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolved_artifact_path(value: object) -> Path:
+    path = Path(str(value))
+    return (path if path.is_absolute() else ROOT / path).resolve()
+
+
 def validate_freeze_optimizer_role(config: dict[str, Any]) -> dict[str, bool]:
     """Resolve and validate one branch of the step-73 freeze × reset factorial."""
     role = config.get("experiment_role")
@@ -353,18 +377,85 @@ def validate_freeze_optimizer_role(config: dict[str, Any]) -> dict[str, bool]:
     if role not in FREEZE_BRANCHES:
         raise ArtifactIntegrityError(f"unknown freeze/optimizer branch role: {role!r}")
     expected_freeze, expected_reset = FREEZE_BRANCHES[role]
-    observed_freeze = config.get("freeze_encoder_at_step") == 73
-    observed_reset = bool(config.get("reset_optimizer_on_resume"))
+    if "freeze_encoder_at_step" not in config:
+        raise ArtifactIntegrityError(f"{role} is missing freeze_encoder_at_step")
+    freeze_value = config.get("freeze_encoder_at_step")
+    if freeze_value is not None and freeze_value != 73:
+        raise ArtifactIntegrityError(f"{role} freeze step must be null or 73")
+    if not isinstance(config.get("reset_optimizer_on_resume"), bool):
+        raise ArtifactIntegrityError(f"{role} is missing reset_optimizer_on_resume")
+    observed_freeze = freeze_value == 73
+    observed_reset = config["reset_optimizer_on_resume"]
     if observed_freeze != expected_freeze or observed_reset != expected_reset:
         raise ArtifactIntegrityError(
             f"{role} requires freeze={expected_freeze}, reset={expected_reset}; "
             f"observed freeze={observed_freeze}, reset={observed_reset}"
         )
-    if not config.get("resume_checkpoint_path"):
+    if not isinstance(config.get("resume_checkpoint_path"), str) or not config["resume_checkpoint_path"]:
         raise ArtifactIntegrityError(
             f"{role} requires the common step-73 resume checkpoint"
         )
     return {"freeze": expected_freeze, "reset": expected_reset}
+
+
+def validate_freeze_optimizer_artifact(
+    result: dict[str, Any], source: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate recorded P1 resume semantics, hashes, and source identity."""
+    semantics = validate_freeze_optimizer_role(config_of(result))
+    source_path = _resolved_artifact_path(source.get("checkpoint"))
+    resume = result.get("resume")
+    if not source_path.is_file() or not isinstance(resume, dict):
+        raise ArtifactIntegrityError("P1 source/checkpoint or resume metadata is missing")
+    resume_path = _resolved_artifact_path(resume.get("checkpoint"))
+    if resume_path != source_path:
+        raise ArtifactIntegrityError("P1 branch does not resume the source checkpoint")
+    required = (
+        "starting_step",
+        "freeze_applied_before_first_update",
+        "encoder_frozen_immediately",
+        "optimizer_state_restored",
+        "optimizer_state_reset",
+        "transport_head_reinitialized",
+        "checkpoint_sha256",
+    )
+    missing = [key for key in required if key not in resume]
+    if "checkpoint_sha256" not in source or "checkpoint_sha256" not in result:
+        missing.append("artifact checkpoint hash")
+    if missing:
+        return {"status": "legacy", "missing": sorted(set(missing))}
+    if (
+        not isinstance(resume["starting_step"], int)
+        or isinstance(resume["starting_step"], bool)
+        or resume["starting_step"] != 73
+    ):
+        raise ArtifactIntegrityError("P1 branch must start at global step 73")
+    if any(
+        not isinstance(resume[key], bool)
+        for key in required
+        if key != "starting_step" and key != "checkpoint_sha256"
+    ):
+        raise ArtifactIntegrityError("P1 continuation flags have invalid types")
+    expected_freeze = semantics["freeze"]
+    if resume["freeze_applied_before_first_update"] is not expected_freeze:
+        raise ArtifactIntegrityError("P1 freeze was not recorded before the first update")
+    if resume["encoder_frozen_immediately"] is not expected_freeze:
+        raise ArtifactIntegrityError("P1 encoder immediate-freeze state is invalid")
+    if resume["optimizer_state_restored"] is not (not semantics["reset"]):
+        raise ArtifactIntegrityError("P1 optimizer restore state is inconsistent with reset")
+    if resume["optimizer_state_reset"] is not semantics["reset"]:
+        raise ArtifactIntegrityError("P1 optimizer reset state is inconsistent with role")
+    if resume["transport_head_reinitialized"] is not False:
+        raise ArtifactIntegrityError("P1 transport head must be preserved")
+    source_hash = str(source["checkpoint_sha256"])
+    if source_hash != _sha256_file(source_path):
+        raise ArtifactIntegrityError("P1 source checkpoint hash is invalid")
+    if resume["checkpoint_sha256"] != source_hash:
+        raise ArtifactIntegrityError("P1 resume checkpoint hash differs from source")
+    result_path = _resolved_artifact_path(result.get("checkpoint"))
+    if not result_path.is_file() or result["checkpoint_sha256"] != _sha256_file(result_path):
+        raise ArtifactIntegrityError("P1 result checkpoint hash is invalid")
+    return {"status": "validated", "freeze": expected_freeze, "reset": semantics["reset"]}
 
 
 def missing_result(reason: str) -> dict[str, str]:

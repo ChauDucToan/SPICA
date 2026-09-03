@@ -27,8 +27,8 @@ reset_transport_head_on_resume: true
 stage1_selection_manifest_path: outputs/transport_corrected_p2_stage1_selection_2026-09-03.json
 save_optimizer: true
 max_steps: 5400
-probe_steps: []
-probe_step_offsets: [0, 27, 77, 177, 427, 1727, 5327]
+probe_steps: [100, 150, 250, 500, 1800, 5400]
+probe_step_offsets: [0]
 gradient_conflict_steps: [100, 150, 250, 500, 1800, 5400]
 seed: 42
 train_class_scope: pseudo_train

@@ -418,7 +418,9 @@ def _validate_options(args: DictConfig) -> None:
             and bool(args.reset_transport_head_on_resume)
             and args.resume_checkpoint_path is not None
             and args.stage1_selection_manifest_path is not None
+            and [int(value) for value in args.probe_steps] == [100, 150, 250, 500, 1800, 5400]
             and args.probe_step_offsets is not None
+            and [int(value) for value in args.probe_step_offsets] == [0]
             and str(args.train_class_scope) == "pseudo_train"
         ):
             raise ValueError(
@@ -2126,6 +2128,7 @@ def run(args: DictConfig) -> None:
         report = {
             "config": run_config,
             "checkpoint": str(final_path),
+            "checkpoint_sha256": _sha256_file(final_path),
             "step": step,
             "equivalent_epochs": step * equivalent_epochs_per_step,
             "parameter_counts": parameter_counts,
@@ -2171,6 +2174,9 @@ def run(args: DictConfig) -> None:
             "provenance": provenance,
             "resume": {
                 "checkpoint": None if resume_path is None else str(resume_path),
+                "checkpoint_sha256": None
+                if resume_path is None
+                else _sha256_file(resume_path),
                 "starting_step": resume_step,
                 "freeze_encoder_on_resume": bool(args.freeze_encoder_on_resume),
                 "freeze_applied_before_first_update": freeze_applied_before_first_step,
