@@ -844,6 +844,7 @@ def run(args: DictConfig) -> None:
         manifest_path,
         dataset=str(data.name),
         data_config=str(args.data_config),
+        campaign=str(args.experiment_campaign),
     )
     entry_identity = manifest_entry_identity(
         manifest_path,

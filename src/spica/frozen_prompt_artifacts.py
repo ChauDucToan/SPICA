@@ -198,11 +198,13 @@ def expected_probe_steps(role: str) -> tuple[int, ...]:
     raise ValueError(f"unknown frozen-prompt role: {role}")
 
 
-def make_manifest(*, dataset: str, data_config: str) -> dict[str, Any]:
+def make_manifest(
+    *, dataset: str, data_config: str, campaign: str = CAMPAIGN
+) -> dict[str, Any]:
     entries = {
         role: {
             "experiment_role": role,
-            "campaign": CAMPAIGN,
+            "campaign": campaign,
             "resolved_treatment": ROLE_TREATMENTS[role],
             "dataset": dataset,
             "data_config": data_config,
@@ -214,7 +216,7 @@ def make_manifest(*, dataset: str, data_config: str) -> dict[str, Any]:
     }
     return {
         "schema_version": 2,
-        "campaign": CAMPAIGN,
+        "campaign": campaign,
         "dataset": dataset,
         "data_config": data_config,
         "selection_metric": "full_pseudo_unseen_mAP",
@@ -228,8 +230,11 @@ def ensure_manifest(
     *,
     dataset: str,
     data_config: str,
+    campaign: str = CAMPAIGN,
 ) -> tuple[dict[str, Any], str]:
-    expected = make_manifest(dataset=dataset, data_config=data_config)
+    expected = make_manifest(
+        dataset=dataset, data_config=data_config, campaign=campaign
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         actual = json.loads(path.read_text())
