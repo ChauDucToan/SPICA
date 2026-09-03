@@ -1311,7 +1311,7 @@ def run(args: DictConfig) -> None:
             output_dir / "soft_prompt.pt",
         )
 
-    if role == "frozen_prompt_v2_FP5":
+    if role == "frozen_prompt_v2_FP5" and str(args.run_kind) == "primary":
         candidates = [
             row for row in history if int(row["training_global_step"]) in {44, 73}
         ]
