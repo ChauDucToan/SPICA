@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 import random
 import sys
+import time
 from typing import Any
 
 import hydra
@@ -766,6 +767,30 @@ def _gradient_norms(
     return result
 
 
+def _parameter_gradient_norms(
+    model: torch.nn.Module, text_bank: SoftPromptTextBank | None
+) -> dict[str, float | None]:
+    named = _parameter_names(model, text_bank)
+    layernorm_names = (
+        set(model.visual_layernorm_parameter_names)
+        if isinstance(model, FrozenPromptModel)
+        else set()
+    )
+    relevant = {
+        name
+        for name, parameter in named.items()
+        if parameter.requires_grad
+        or name in {"sketch_prompt", "photo_prompt"}
+        or name in layernorm_names
+    }
+    return {
+        name: None
+        if named[name].grad is None
+        else float(named[name].grad.detach().norm().item())
+        for name in sorted(relevant)
+    }
+
+
 def _parameter_norms(
     model: torch.nn.Module, text_bank: SoftPromptTextBank | None
 ) -> dict[str, float]:
@@ -987,6 +1012,8 @@ def run(args: DictConfig) -> None:
 
     last_train = {"rank": None, "classification": None, "accuracy": None}
     last_gradient_norms = {group["name"]: 0.0 for group in optimizer_groups}
+    last_parameter_gradient_norms: dict[str, float | None] = {}
+    start_step = step
     existing_steps = {
         int(row["training_global_step"])
         for row in history
@@ -1161,6 +1188,7 @@ def run(args: DictConfig) -> None:
             if classification is None
             else classification["diagnostic_seen_classification_count"],
             "gradient_norms": dict(last_gradient_norms),
+            "gradient_norms_by_parameter": dict(last_parameter_gradient_norms),
             "prompt_gradient_norm": float(
                 math.sqrt(sum(value * value for value in last_gradient_norms.values()))
             ),
@@ -1216,6 +1244,9 @@ def run(args: DictConfig) -> None:
     elif args.resume_checkpoint_path is None:
         probe(0)
 
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
+    training_started = time.perf_counter()
     if optimizer is not None:
         while step < int(args.max_steps):
             for batch in train_loader:
@@ -1279,6 +1310,10 @@ def run(args: DictConfig) -> None:
                     text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
                     optimizer_groups,
                 )
+                last_parameter_gradient_norms = _parameter_gradient_norms(
+                    prompt_model,
+                    text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
+                )
                 optimizer.step()
                 scheduler.step() if scheduler is not None else None
                 for name, parameter in _parameter_names(
@@ -1301,6 +1336,9 @@ def run(args: DictConfig) -> None:
                         ],
                         "last_train_batch_accuracy": last_train["accuracy"],
                         "gradient_norms": dict(last_gradient_norms),
+                        "gradient_norms_by_parameter": dict(
+                            last_parameter_gradient_norms
+                        ),
                     }
                 )
                 if step in probe_steps:
@@ -1393,6 +1431,14 @@ def run(args: DictConfig) -> None:
         }
         for row in history
     }
+    training_seconds = time.perf_counter() - training_started
+    updates_this_run = max(0, step - start_step)
+    seconds_per_update = (
+        training_seconds / updates_this_run if updates_this_run else None
+    )
+    peak_gpu_memory_bytes = (
+        int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else None
+    )
     final_clip_policy = _assert_clip_policy(prompt_model, clip_before, role)
     final_clip_policy.update(
         {
@@ -1462,6 +1508,18 @@ def run(args: DictConfig) -> None:
         "resume": resume_records,
         "selection": selected,
         "frozen_hold_evaluation": frozen_hold,
+        "runtime": {
+            "training_seconds": training_seconds,
+            "updates_this_run": updates_this_run,
+            "seconds_per_update": seconds_per_update,
+            "estimated_seconds_to_step_500": None
+            if seconds_per_update is None
+            else seconds_per_update * max(0, 500 - start_step),
+            "estimated_seconds_to_step_5400": None
+            if seconds_per_update is None
+            else seconds_per_update * max(0, 5400 - start_step),
+            "peak_gpu_memory_bytes": peak_gpu_memory_bytes,
+        },
         "inference_contract": {
             "required_inputs": ["raw_sketch_image"],
             "text_required": False,
