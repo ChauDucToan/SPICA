@@ -1000,9 +1000,11 @@ def run(args: DictConfig) -> None:
                 "optimizer_state_restored": optimizer is not None,
             }
         )
+        checkpoint_dir = _path(args.resume_checkpoint_path).parent
         prior_candidates = [
             output_dir / "run_result.json",
-            _path(args.resume_checkpoint_path).parent / "run_result.json",
+            checkpoint_dir / "run_result.json",
+            checkpoint_dir.parent / "run_result.json",
         ]
         prior_path = next(
             (candidate for candidate in prior_candidates if candidate.is_file()), None
