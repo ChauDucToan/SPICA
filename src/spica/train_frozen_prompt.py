@@ -44,6 +44,7 @@ from .frozen_prompt_artifacts import (
     SMOKE_CAMPAIGN,
     canonical_sha256,
     ensure_manifest,
+    expected_probe_steps,
     manifest_entry_identity,
     treatment_from_config,
 )
@@ -999,15 +1000,35 @@ def run(args: DictConfig) -> None:
                 "optimizer_state_restored": optimizer is not None,
             }
         )
-        prior_path = output_dir / "run_result.json"
-        if prior_path.is_file():
+        prior_candidates = [
+            output_dir / "run_result.json",
+            _path(args.resume_checkpoint_path).parent / "run_result.json",
+        ]
+        prior_path = next(
+            (candidate for candidate in prior_candidates if candidate.is_file()), None
+        )
+        if prior_path is not None:
             prior = json.loads(prior_path.read_text())
             if prior.get("experiment_role") != role or prior.get("campaign") != str(
                 args.experiment_campaign
             ):
-                raise ValueError("existing output directory belongs to another run")
+                raise ValueError("resume history belongs to another run")
             history = list(prior.get("history", []))
             training_history = list(prior.get("training_history", []))
+            if str(args.run_kind) == "primary":
+                expected_steps = set(expected_probe_steps(role))
+                if {
+                    int(row.get("training_global_step", -1)) for row in history
+                } - expected_steps:
+                    raise ValueError("resume history contains an invalid probe step")
+            for row in history:
+                checkpoint = _path(row.get("checkpoint"))
+                expected_hash = row.get("checkpoint_sha256")
+                if not checkpoint.is_file() or not isinstance(expected_hash, str):
+                    raise ValueError("resume history has a missing checkpoint identity")
+                actual_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+                if actual_hash != expected_hash:
+                    raise ValueError("resume history checkpoint hash mismatch")
             resume_records = list(prior.get("resume", [])) + resume_records
 
     last_train = {"rank": None, "classification": None, "accuracy": None}
