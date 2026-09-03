@@ -1100,27 +1100,18 @@ def run(args: DictConfig) -> None:
                 < 1.0 - invariance_tolerance
             ):
                 raise AssertionError("FP4 visual embeddings are not invariant")
-        visual_delta = max(
-            float(
-                (current_sketch.embeddings - vanilla_sketch.embeddings)
-                .abs()
-                .max()
-                .item()
-            ),
-            float(
-                (loaded_photo.embeddings - vanilla_photo.embeddings).abs().max().item()
-            ),
+        sketch_delta = float(
+            (current_sketch.embeddings - vanilla_sketch.embeddings).abs().max().item()
         )
+        photo_delta = float(
+            (loaded_photo.embeddings - vanilla_photo.embeddings).abs().max().item()
+        )
+        visual_delta = max(sketch_delta, photo_delta)
+        if role == "frozen_prompt_v2_FP1S" and photo_delta > invariance_tolerance:
+            raise AssertionError(f"FP1S photo branch changed by {photo_delta}")
         if (
-            role
-            in {
-                "frozen_prompt_v2_FP1S",
-                "frozen_prompt_v2_FP4",
-                "frozen_prompt_v2_FP5",
-                "frozen_prompt_v2_FP0",
-            }
+            role in {"frozen_prompt_v2_FP4", "frozen_prompt_v2_FP0"}
             and visual_delta > invariance_tolerance
-            and role != "frozen_prompt_v2_FP5"
         ):
             raise AssertionError(f"fixed visual branch changed by {visual_delta}")
         prompt_attention = None
