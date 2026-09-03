@@ -6,6 +6,7 @@ experiment_role: null
 experiment_campaign: frozen_prompt_probe_v2_2026-09-04
 run_kind: primary
 experiment_manifest_path: outputs/experiment_manifest_frozen_prompt_probe_v2_2026-09-04.json
+official_unseen_used_for_selection: false
 
 data_config: configs/data/sketchy_104_21.yaml
 model_name: ViT-B-32-quickgelu
