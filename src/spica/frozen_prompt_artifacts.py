@@ -10,6 +10,8 @@ from typing import Any
 CAMPAIGN = "frozen_prompt_probe_v2_2026-09-04"
 SMOKE_CAMPAIGN = "frozen_prompt_smoke_v2_2026-09-04"
 FINAL_CAMPAIGN = "frozen_prompt_final_2026-09-04"
+FINAL_SMOKE_CAMPAIGN = "frozen_prompt_final_smoke_2026-09-04"
+FINAL_SPLIT_SEEDS = (101, 202, 303)
 MANIFEST_PATH = Path(
     "outputs/experiment_manifest_frozen_prompt_probe_v2_2026-09-04.json"
 )
@@ -249,8 +251,9 @@ def expected_probe_steps(role: str, *, extended: bool = False) -> tuple[int, ...
 def make_manifest(
     *, dataset: str, data_config: str, campaign: str = CAMPAIGN
 ) -> dict[str, Any]:
-    roles = FINAL_ROLES if campaign == FINAL_CAMPAIGN else ROLES
-    treatments = FINAL_ROLE_TREATMENTS if campaign == FINAL_CAMPAIGN else ROLE_TREATMENTS
+    final_roles = campaign in {FINAL_CAMPAIGN, FINAL_SMOKE_CAMPAIGN}
+    roles = FINAL_ROLES if final_roles else ROLES
+    treatments = FINAL_ROLE_TREATMENTS if final_roles else ROLE_TREATMENTS
     result = {
         "schema_version": 1 if campaign == FINAL_CAMPAIGN else 2,
         "campaign": campaign,

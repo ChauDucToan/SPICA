@@ -5,6 +5,7 @@ experiment_name: frozen_prompt_final_${experiment_role}_seed${seed}
 experiment_role: frozen_prompt_final_FP3
 experiment_campaign: frozen_prompt_final_2026-09-04
 run_kind: primary
+split_run_name: null
 experiment_manifest_path: outputs/experiment_manifest_frozen_prompt_final_2026-09-04.json
 official_unseen_used_for_selection: false
 

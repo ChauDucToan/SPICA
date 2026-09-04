@@ -42,6 +42,8 @@ from .frozen_prompt_artifacts import (
     CAMPAIGN,
     FINAL_CAMPAIGN,
     FINAL_ROLES,
+    FINAL_SMOKE_CAMPAIGN,
+    FINAL_SPLIT_SEEDS,
     SMOKE_CAMPAIGN,
     canonical_sha256,
     ensure_manifest,
@@ -128,12 +130,19 @@ def _validate(args: DictConfig) -> None:
     campaign = str(args.experiment_campaign)
     run_kind = str(args.run_kind)
     final_role = _is_final_role(role)
-    if run_kind == "primary" and campaign != (FINAL_CAMPAIGN if final_role else CAMPAIGN):
-        raise ValueError("primary frozen-prompt campaign does not match the role")
-    if run_kind == "smoke" and campaign != SMOKE_CAMPAIGN:
-        raise ValueError("smoke frozen-prompt runs must use the v2 smoke campaign")
-    if run_kind not in {"primary", "smoke"}:
-        raise ValueError("run_kind must be primary or smoke")
+    if run_kind in {"primary", "split_robustness"} and campaign != (
+        FINAL_CAMPAIGN if final_role else CAMPAIGN
+    ):
+        raise ValueError("frozen-prompt campaign does not match the role")
+    if run_kind == "split_robustness" and not final_role:
+        raise ValueError("split robustness is only a final-campaign run")
+    if run_kind == "smoke" and campaign not in {
+        SMOKE_CAMPAIGN,
+        FINAL_SMOKE_CAMPAIGN,
+    }:
+        raise ValueError("smoke frozen-prompt runs must use a smoke campaign")
+    if run_kind not in {"primary", "split_robustness", "smoke"}:
+        raise ValueError("run_kind must be primary, split_robustness, or smoke")
 
     seed = int(args.seed)
     pseudo_seed = int(args.pseudo_val_seed)
@@ -191,7 +200,19 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("invalid loader settings")
     if int(args.query_chunk_size) <= 0:
         raise ValueError("query_chunk_size must be positive")
-    if pseudo_seed != 3407 or (not final_role and seed != 42) or (
+    if run_kind == "split_robustness":
+        if seed != 42 or pseudo_seed not in FINAL_SPLIT_SEEDS:
+            raise ValueError(
+                "split robustness requires training seed 42 and pseudo seed 101, 202, or 303"
+            )
+        expected_name = (
+            f"FP5_split{pseudo_seed}"
+            if _is_fp5(role)
+            else f"selected_prompt_split{pseudo_seed}"
+        )
+        if args.get("split_run_name") != expected_name:
+            raise ValueError(f"split robustness requires split_run_name={expected_name}")
+    elif pseudo_seed != 3407 or (not final_role and seed != 42) or (
         final_role and seed not in {42, 123, 3407}
     ):
         raise ValueError(
@@ -203,9 +224,11 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("selection requires pseudo-train classes")
     if str(args.classification_location) not in {"none", "query", "z0"}:
         raise ValueError("classification_location must be none, query, or z0")
-    if run_kind == "primary" and not bool(args.allow_short_run):
+    if run_kind in {"primary", "split_robustness"} and not bool(args.allow_short_run):
         steps = tuple(int(value) for value in args.probe_steps)
         resume = args.resume_checkpoint_path is not None
+        if run_kind == "split_robustness" and resume:
+            raise ValueError("split robustness runs must train from scratch")
         if role == "frozen_prompt_v2_FP0":
             if int(args.max_steps) != 0 or steps != (0,) or resume:
                 raise ValueError("FP0 requires one step-0 evaluation and no resume")
@@ -225,7 +248,18 @@ def _validate(args: DictConfig) -> None:
                     "prompt continuation requires probes 1000, 1800, and 5400"
                 )
         elif final_role:
-            if int(args.max_steps) != 5400 or steps != PRIMARY_PROBE_STEPS:
+            if run_kind == "split_robustness":
+                if _is_fp5(role):
+                    expected_steps = (0, 15, 44, 73)
+                    expected_max_steps = 73
+                else:
+                    expected_steps = PRIMARY_PROBE_STEPS
+                    expected_max_steps = 5400
+                if int(args.max_steps) != expected_max_steps or steps != expected_steps:
+                    raise ValueError(
+                        "split robustness requires a from-scratch run through its matched horizon"
+                    )
+            elif int(args.max_steps) != 5400 or steps != PRIMARY_PROBE_STEPS:
                 raise ValueError("final prompt primary stage requires probes through step 5400")
         elif int(args.max_steps) != 500 or steps != (0, 15, 44, 73, 100, 250, 500):
             raise ValueError("prompt primary stage requires probes through step 500")
@@ -646,6 +680,17 @@ def _save_checkpoint(
         "scheduler_state_dict": None if scheduler is None else scheduler.state_dict(),
         "optimizer_groups": optimizer_groups,
         "rng_state": capture_rng_state(loader_generator),
+        "experiment_code_commit": provenance.get("head_commit"),
+        "source_snapshot_hash": provenance.get("source_snapshot", {}).get("sha256"),
+        "training_seed": int(args.seed),
+        "split_seed": int(args.pseudo_val_seed),
+        "training_class_list": list(split_identity["train_class_ids"]),
+        "validation_class_list": list(split_identity["validation_class_ids"]),
+        "class_list_hashes": {
+            "train": canonical_sha256(split_identity["train_class_ids"]),
+            "validation": canonical_sha256(split_identity["validation_class_ids"]),
+        },
+        "split_specific_training_artifact": str(args.run_kind) == "split_robustness",
         "resolved_config": OmegaConf.to_container(args, resolve=True),
         "resolved_treatment": treatment_from_config(
             OmegaConf.to_container(args, resolve=True)
@@ -685,17 +730,11 @@ def _restore_checkpoint(
         raise ValueError("invalid frozen-prompt v2 checkpoint")
     parent_role = payload.get("experiment_role")
     parent_campaign = payload.get("campaign")
-    compatible_historical_parent = (
-        _is_final_role(str(args.experiment_role))
-        and str(args.experiment_role) == "frozen_prompt_final_FP3"
-        and parent_role == "frozen_prompt_v2_FP3"
-        and parent_campaign == CAMPAIGN
-    )
     if payload.get("model_type") != "frozen_prompt_v2":
         raise ValueError("checkpoint model_type does not match this run")
-    if not (
-        parent_role == str(args.experiment_role) and parent_campaign == str(args.experiment_campaign)
-    ) and not compatible_historical_parent:
+    if parent_role != str(args.experiment_role) or parent_campaign != str(
+        args.experiment_campaign
+    ):
         raise ValueError("checkpoint role/campaign does not match this run")
     if (
         payload.get("data_split_identity") != split_identity
@@ -896,12 +935,15 @@ def _assert_clip_policy(
         raise RuntimeError(
             f"FP4 mutated frozen visual parameters: {sorted(changed)[:5]}"
         )
+    frozen_changed = changed - allowed
     return {
         "role": role,
         "clip_owned_parameter_names": sorted(before),
         "approved_trainable_clip_parameter_names": sorted(allowed),
+        "frozen_clip_parameter_names": sorted(set(before) - allowed),
         "changed_clip_parameter_names": sorted(changed),
         "all_clip_owned_parameters_byte_identical": not changed,
+        "frozen_clip_parameter_byte_identical": not frozen_changed,
         "fully_frozen": not allowed,
     }
 
@@ -1032,10 +1074,6 @@ def run(args: DictConfig) -> None:
     resume_records: list[dict[str, Any]] = []
     step = 0
     parent_payload: dict[str, Any] | None = None
-    compatible_historical_parent = (
-        role == "frozen_prompt_final_FP3"
-        and str(args.experiment_campaign) == FINAL_CAMPAIGN
-    )
     if args.resume_checkpoint_path is not None:
         step, parent_payload = _restore_checkpoint(
             _path(args.resume_checkpoint_path),
@@ -1049,6 +1087,19 @@ def run(args: DictConfig) -> None:
             loader_generator=loader_generator,
             optimizer_groups=optimizer_groups,
         )
+        if str(args.run_kind) == "primary" and _is_final_role(role):
+            if step != 5400:
+                raise ValueError(
+                    "final prompt continuation must restore the new step-5400 checkpoint"
+                )
+            if parent_payload.get("experiment_code_commit") != provenance.get(
+                "head_commit"
+            ) or parent_payload.get("source_snapshot_hash") != provenance.get(
+                "source_snapshot", {}
+            ).get("sha256"):
+                raise ValueError(
+                    "final prompt continuation checkpoint was produced by another code snapshot"
+                )
         initial_hash = str(parent_payload["initial_model_state_hash"])
         parent_hash = hashlib.sha256(
             _path(args.resume_checkpoint_path).read_bytes()
@@ -1062,6 +1113,14 @@ def run(args: DictConfig) -> None:
                 if parent_payload is not None
                 else None,
                 "source_campaign": parent_payload.get("campaign")
+                if parent_payload is not None
+                else None,
+                "source_experiment_code_commit": parent_payload.get(
+                    "experiment_code_commit"
+                )
+                if parent_payload is not None
+                else None,
+                "source_snapshot_hash": parent_payload.get("source_snapshot_hash")
                 if parent_payload is not None
                 else None,
                 "optimizer_state_restored": optimizer is not None,
@@ -1081,7 +1140,7 @@ def run(args: DictConfig) -> None:
             same_run = prior.get("experiment_role") == role and prior.get(
                 "campaign"
             ) == str(args.experiment_campaign)
-            if not same_run and not compatible_historical_parent:
+            if not same_run:
                 raise ValueError("resume history belongs to another run")
             if same_run:
                 history = list(prior.get("history", []))
@@ -1193,6 +1252,12 @@ def run(args: DictConfig) -> None:
             device=device,
         )
         val_metrics = _metrics(evaluation)
+        val_metrics.update(
+            {
+                "query_identity": _entry_identity(split.validation_sketch_entries),
+                "gallery_identity": _entry_identity(split.validation_photo_entries),
+            }
+        )
         if role.endswith("FP4"):
             _assert_close(
                 val_metrics["full_mAP"],
@@ -1497,6 +1562,9 @@ def run(args: DictConfig) -> None:
                     "checkpoint_sha256": selected["checkpoint_sha256"],
                     "val": selected_row["val"],
                     "geometry": selected_row["geometry"],
+                    "pseudo_split_identity": split_identity,
+                    "class_list_hashes": selected_row["class_list_hashes"],
+                    "official_unseen_used_for_selection": False,
                 }
             )
     else:
@@ -1563,7 +1631,15 @@ def run(args: DictConfig) -> None:
         "working_tree_state": provenance.get("working_tree_state"),
         "provenance": provenance,
         "seed": seed,
+        "training_seed": seed,
         "pseudo_validation_seed": int(args.pseudo_val_seed),
+        "split_seed": int(args.pseudo_val_seed),
+        "split_run_name": args.get("split_run_name"),
+        "split_specific_training_artifact": str(args.run_kind) == "split_robustness",
+        "retrained_from_scratch": str(args.run_kind) == "split_robustness"
+        and args.resume_checkpoint_path is None,
+        "training_class_list": list(split_identity["train_class_ids"]),
+        "validation_class_list": list(split_identity["validation_class_ids"]),
         "pseudo_split_identity": split_identity,
         "manifest_identity": data_manifest_identity,
         "manifest_entry_identity": entry_identity,
@@ -1624,6 +1700,18 @@ def run(args: DictConfig) -> None:
         "resume": resume_records,
         "selection": selected,
         "frozen_hold_evaluation": frozen_hold,
+        "gradient_validation": {
+            "active_optimizer_groups_have_nonzero_last_update": {
+                group["name"]: bool(
+                    group["active"] and last_gradient_norms[group["name"]] > 0.0
+                )
+                for group in optimizer_groups
+            },
+            "last_update_gradient_norms": dict(last_gradient_norms),
+            "last_update_gradient_norms_by_parameter": dict(
+                last_parameter_gradient_norms
+            ),
+        },
         "runtime": {
             "training_seconds": training_seconds,
             "updates_this_run": updates_this_run,
@@ -1641,10 +1729,17 @@ def run(args: DictConfig) -> None:
             "text_required": False,
             "photo_required": False,
             "oracle_class_required": False,
+            "text_used_for_predictor": False,
+            "photo_prompt_used_for_query": False,
+            "photo_prompt_used_for_gallery": not fixed_photo,
         },
         "protocol": {
             "selection_metric": "full_pseudo_unseen_mAP",
             "official_unseen_used_for_selection": False,
+            "split_specific_training": str(args.run_kind) == "split_robustness",
+            "text_used_for_predictor": False,
+            "photo_prompt_used_for_query": False,
+            "photo_prompt_used_for_gallery": not fixed_photo,
             "transport_enabled": False,
             "direction_supervision": False,
             "distance_prediction": False,
