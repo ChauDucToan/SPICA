@@ -583,7 +583,10 @@ def _load_retrieval_model(
         model = _EarlyAdaptModel(bundle).to(device)
         model.load_state_dict(payload["model_state_dict"], strict=False)
         model.eval()
-        return model, _FrozenEncoderAdapter(bundle.encoder), bundle.transform
+        photo_clip = load_frozen_clip(
+            model_name="ViT-B-32-quickgelu", pretrained="openai", device=device
+        )
+        return model, _FrozenEncoderAdapter(photo_clip.encoder), bundle.transform
     clip = load_frozen_clip(
         model_name="ViT-B-32-quickgelu", pretrained="openai", device=device
     )
