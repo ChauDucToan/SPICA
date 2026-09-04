@@ -268,6 +268,10 @@ def _discover_final_runs(root: Path) -> dict[tuple[str, int], dict[str, Any]]:
         value = _json(path)
         if value.get("experiment_role") not in FINAL_ROLES:
             continue
+        if value.get("run_kind") != "primary" or value.get(
+            "resolved_config", {}
+        ).get("allow_short_run"):
+            continue
         checked = _validate_final_run(path, expected_commit=expected_commit)
         expected_commit = expected_commit or str(checked["experiment_code_commit"])
         key = (str(checked["experiment_role"]), int(checked["seed"]))
