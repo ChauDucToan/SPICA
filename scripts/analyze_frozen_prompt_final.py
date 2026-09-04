@@ -330,6 +330,7 @@ def _as_final_metric_run(
         result["final_continuation_artifact_path"] = final.get("artifact_path")
         result["final_continuation_provenance"] = final.get("provenance")
         result["parameter_counts"] = final.get("parameter_counts", result.get("parameter_counts"))
+        result["continuation_runtime"] = final.get("runtime")
         result["clip_freeze_policy"] = final.get(
             "clip_freeze_policy", result.get("clip_freeze_policy")
         )
@@ -377,8 +378,13 @@ def _probe_fields(run: dict[str, Any], step: int) -> dict[str, Any]:
     geometry = row.get("geometry", {})
     alignment = geometry.get("representation_alignment", {}).get("sketch", {})
     token = geometry.get("prompt_token_geometry", {})
+    parameter_counts = run.get("parameter_counts", {})
+    runtime = run.get("runtime", {})
     return {
         "mAP": _map_at(run, step),
+        "mAP@500": _map_at(run, 500),
+        "mAP@1800": _map_at(run, 1800),
+        "mAP@5400": _map_at(run, 5400),
         "peak_step": int(step),
         "semantic_margin": row.get("semantic_margin"),
         "classification_accuracy": row.get("diagnostic_seen_classification_accuracy"),
@@ -393,6 +399,10 @@ def _probe_fields(run: dict[str, Any], step: int) -> dict[str, Any]:
             "min": token.get("min_prompt_cosine"),
             "max": token.get("max_prompt_cosine"),
         },
+        "parameter_count": parameter_counts.get("trainable_parameters"),
+        "parameter_counts": parameter_counts,
+        "runtime": runtime,
+        "gpu_memory_bytes": runtime.get("peak_gpu_memory_bytes"),
         "attention": row.get("prompt_attention"),
         "gradient_norms": row.get("gradient_norms"),
         "prompt_norms": {
@@ -704,8 +714,8 @@ def _split_robustness(
     }
 
 
-def _new_plot(path: Path, title: str, draw: Any) -> None:
-    if path.exists():
+def _new_plot(path: Path, title: str, draw: Any, *, overwrite: bool = False) -> None:
+    if path.exists() and not overwrite:
         raise FileExistsError(f"refusing to overwrite existing artifact: {path}")
     figure = plt.figure(figsize=(9, 5))
     try:
@@ -717,7 +727,7 @@ def _new_plot(path: Path, title: str, draw: Any) -> None:
         plt.close(figure)
 
 
-def _plots(report: dict[str, Any]) -> dict[str, str]:
+def _plots(report: dict[str, Any], *, overwrite: bool = False) -> dict[str, str]:
     photo = report["probe_A_photo_ablation"]
     layernorm = report["probe_C_layernorm"]
     extended = report["probe_B_extended_training"]
@@ -845,7 +855,7 @@ def _plots(report: dict[str, Any]) -> dict[str, str]:
     }
     result = {}
     for key, (title, draw) in draws.items():
-        _new_plot(PLOT_PATHS[key], title, draw)
+        _new_plot(PLOT_PATHS[key], title, draw, overwrite=overwrite)
         result[key] = str(PLOT_PATHS[key])
     return result
 
@@ -1003,7 +1013,7 @@ def _markdown(report: dict[str, Any], verdict: str) -> str:
     return "\n".join(lines)
 
 
-def analyze(*, final_dir: Path = FINAL_DIR) -> dict[str, Any]:
+def analyze(*, final_dir: Path = FINAL_DIR, overwrite: bool = False) -> dict[str, Any]:
     manifest, manifest_hash = ensure_manifest(
         FINAL_MANIFEST_PATH,
         dataset="sketchy_104_21",
@@ -1069,17 +1079,34 @@ def analyze(*, final_dir: Path = FINAL_DIR) -> dict[str, Any]:
         "hard_text": hard_text,
         "probe_D_seed_confirmation": seed_confirmation,
         "probe_E_split_robustness": split_robustness,
+        "run_provenance": {
+            f"{role}:{seed}": {
+                "artifact_path": run.get("artifact_path"),
+                "experiment_code_commit": run.get("experiment_code_commit"),
+                "source_snapshot_hash": run.get("source_snapshot_hash"),
+                "tracked_working_tree_state": run.get("provenance", {}).get(
+                    "tracked_working_tree_state"
+                ),
+                "untracked_files": run.get("provenance", {}).get(
+                    "untracked_files", []
+                ),
+                "official_unseen_used_for_selection": run.get(
+                    "official_unseen_used_for_selection"
+                ),
+            }
+            for (role, seed), run in final_runs.items()
+        },
         "plots": {},
         "_metric_runs": metric_runs,
     }
-    report["plots"] = _plots(report)
+    report["plots"] = _plots(report, overwrite=overwrite)
     verdict = _verdict(report, common_commit, tracked_clean)
     report["verdict"] = verdict
     report.pop("_metric_runs")
     output_json = ROOT / "outputs/research_summary_frozen_prompt_final_2026-09-04.json"
     output_md = ROOT / "outputs/research_summary_frozen_prompt_final_2026-09-04.md"
     for path in (output_json, output_md):
-        if path.exists():
+        if path.exists() and not overwrite:
             raise FileExistsError(f"refusing to overwrite existing artifact: {path}")
     output_json.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     output_md.write_text(_markdown({**report, "_metric_runs": metric_runs}, verdict))
@@ -1089,8 +1116,13 @@ def analyze(*, final_dir: Path = FINAL_DIR) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--final-dir", type=Path, default=FINAL_DIR)
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="refresh only this campaign's newly generated report and plots",
+    )
     args = parser.parse_args()
-    analyze(final_dir=args.final_dir)
+    analyze(final_dir=args.final_dir, overwrite=args.refresh)
 
 
 if __name__ == "__main__":
