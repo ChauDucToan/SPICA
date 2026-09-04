@@ -371,6 +371,55 @@ def _metric(run: dict[str, Any], step: int, key: str = "full_mAP") -> float | No
     return None if values.get(key) is None else float(values[key])
 
 
+COMPARISON_ROLE_PAIRS = {
+    "hard_text_peak_effect": (
+        "frozen_prompt_v2_FP2",
+        "frozen_prompt_v2_FP1",
+    ),
+    "hard_text_matched_late_effect": (
+        "frozen_prompt_v2_FP2",
+        "frozen_prompt_v2_FP1",
+    ),
+    "layernorm_effect": (
+        "frozen_prompt_v2_FP_LN",
+        "frozen_prompt_v2_FP2",
+    ),
+}
+
+
+def validate_comparison_roles(
+    comparison: str, left_role: str, right_role: str
+) -> None:
+    expected = COMPARISON_ROLE_PAIRS.get(comparison)
+    if expected is None:
+        raise ValueError(f"unknown frozen-prompt comparison: {comparison}")
+    if (left_role, right_role) != expected:
+        raise ValueError(
+            f"{comparison} requires {expected[0]} - {expected[1]}, "
+            f"not {left_role} - {right_role}"
+        )
+
+
+def comparison_effect(
+    runs: dict[str, dict[str, Any]], comparison: str
+) -> float | None:
+    left_role, right_role = COMPARISON_ROLE_PAIRS[comparison]
+    validate_comparison_roles(comparison, left_role, right_role)
+    if left_role not in runs or right_role not in runs:
+        return None
+    left = runs[left_role]
+    right = runs[right_role]
+    if comparison.endswith("matched_late_effect") or comparison == "layernorm_effect":
+        left_value = _metric(left, 5400)
+        right_value = _metric(right, 5400)
+    else:
+        left_peak = _peak(left)
+        right_peak = _peak(right)
+        left_value = None if left_peak is None else float(left_peak["full_pseudo_unseen_mAP"])
+        right_value = None if right_peak is None else float(right_peak["full_pseudo_unseen_mAP"])
+    return None if left_value is None or right_value is None else left_value - right_value
+
+
 def _peak(run: dict[str, Any]) -> dict[str, Any] | None:
     rows = run.get("history", [])
     return (
@@ -753,7 +802,6 @@ def _derived(runs: dict[str, dict[str, Any]]) -> dict[str, Any]:
     fp2 = runs.get("frozen_prompt_v2_FP2")
     fp3 = runs.get("frozen_prompt_v2_FP3")
     fp5 = runs.get("frozen_prompt_v2_FP5")
-    fpln = runs.get("frozen_prompt_v2_FP_LN")
     best = _best_prompt(runs)
     best_prompt_peak = None if best is None else float(best["full_pseudo_unseen_mAP"])
     fp0_peak = None if fp0 is None else float(_peak(fp0)["full_pseudo_unseen_mAP"])
@@ -798,9 +846,13 @@ def _derived(runs: dict[str, dict[str, Any]]) -> dict[str, Any]:
         "photo_prompt_necessary": None
         if fp1 is None or fp1s is None
         else abs(effect(fp1, fp1s) or 0.0) > 0.005,
-        "hard_text_effect": effect(fp2, fp1),
+        "hard_text_effect": comparison_effect(runs, "hard_text_peak_effect"),
+        "hard_text_peak_effect": comparison_effect(runs, "hard_text_peak_effect"),
+        "hard_text_matched_late_effect": comparison_effect(
+            runs, "hard_text_matched_late_effect"
+        ),
         "soft_text_effect": effect(fp3, fp2),
-        "layernorm_effect": effect(fpln, fp3 if fp3 is not None else fp2),
+        "layernorm_effect": comparison_effect(runs, "layernorm_effect"),
         "prompt_vs_fp5_delta": None
         if best_prompt_peak is None or fp5_peak is None
         else best_prompt_peak - fp5_peak,
@@ -903,6 +955,12 @@ def _markdown(
             "## Attention",
             "",
             "Attention rows carry exact block indices and all four directions: CLS→prompt, patch→prompt, prompt→CLS, and prompt→patch.",
+            "",
+            "## Hard-text and LayerNorm comparisons",
+            "",
+            f"Peak hard-text effect (FP2 − FP1): {_fmt(derived['hard_text_peak_effect'])}.",
+            f"Matched late hard-text effect (FP2@5400 − FP1@5400): {_fmt(derived['hard_text_matched_late_effect'])}.",
+            f"LayerNorm effect (FP-LN − FP2, both hard-text CE): {_fmt(derived['layernorm_effect'])}.",
             "",
             "## Soft-text verdict",
             "",

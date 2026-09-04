@@ -38,14 +38,16 @@ from .evaluation.text_bank import (
     encode_class_text_bank,
 )
 from .frozen_prompt_artifacts import (
+    ALL_ROLES,
     CAMPAIGN,
-    ROLE_TREATMENTS,
-    ROLES,
+    FINAL_CAMPAIGN,
+    FINAL_ROLES,
     SMOKE_CAMPAIGN,
     canonical_sha256,
     ensure_manifest,
     expected_probe_steps,
     manifest_entry_identity,
+    treatment_for_role,
     treatment_from_config,
 )
 from .models.clip import (
@@ -66,7 +68,23 @@ PROMPT_ROLES = {
     "frozen_prompt_v2_FP2",
     "frozen_prompt_v2_FP3",
     "frozen_prompt_v2_FP_LN",
+    "frozen_prompt_final_FP3",
+    "frozen_prompt_final_FP3S",
+    "frozen_prompt_final_FP2",
+    "frozen_prompt_final_FP_LN",
 }
+
+
+def _is_final_role(role: str) -> bool:
+    return role in FINAL_ROLES
+
+
+def _is_fp5(role: str) -> bool:
+    return role.endswith("FP5")
+
+
+def _is_layernorm(role: str) -> bool:
+    return role.endswith("FP_LN")
 
 
 def _device(value: str) -> torch.device:
@@ -105,19 +123,24 @@ def _same_value(left: object, right: object) -> bool:
 
 def _validate(args: DictConfig) -> None:
     role = str(args.experiment_role)
-    if role not in ROLES:
-        raise ValueError(f"experiment_role must be exactly one of {ROLES}")
+    if role not in ALL_ROLES:
+        raise ValueError(f"experiment_role must be exactly one of {ALL_ROLES}")
     campaign = str(args.experiment_campaign)
     run_kind = str(args.run_kind)
-    if run_kind == "primary" and campaign != CAMPAIGN:
-        raise ValueError("primary frozen-prompt runs must use the v2 campaign")
+    final_role = _is_final_role(role)
+    if run_kind == "primary" and campaign != (FINAL_CAMPAIGN if final_role else CAMPAIGN):
+        raise ValueError("primary frozen-prompt campaign does not match the role")
     if run_kind == "smoke" and campaign != SMOKE_CAMPAIGN:
         raise ValueError("smoke frozen-prompt runs must use the v2 smoke campaign")
     if run_kind not in {"primary", "smoke"}:
         raise ValueError("run_kind must be primary or smoke")
 
+    seed = int(args.seed)
+    pseudo_seed = int(args.pseudo_val_seed)
     observed = treatment_from_config(OmegaConf.to_container(args, resolve=True))
-    expected = ROLE_TREATMENTS[role]
+    expected = treatment_for_role(
+        role, seed=seed if final_role else 42, pseudo_val_seed=pseudo_seed
+    )
     mismatches = {
         key: (observed[key], expected[key])
         for key in expected
@@ -168,9 +191,13 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("invalid loader settings")
     if int(args.query_chunk_size) <= 0:
         raise ValueError("query_chunk_size must be positive")
-    if int(args.pseudo_val_seed) != 3407 or int(args.seed) != 42:
+    if pseudo_seed != 3407 or (not final_role and seed != 42) or (
+        final_role and seed not in {42, 123, 3407}
+    ):
         raise ValueError(
-            "v2 primary matching requires training seed 42 and pseudo seed 3407"
+            "final matching requires training seed 42, 123, or 3407 and pseudo seed 3407"
+            if final_role
+            else "v2 primary matching requires training seed 42 and pseudo seed 3407"
         )
     if str(args.train_class_scope) != "pseudo_train":
         raise ValueError("selection requires pseudo-train classes")
@@ -182,16 +209,24 @@ def _validate(args: DictConfig) -> None:
         if role == "frozen_prompt_v2_FP0":
             if int(args.max_steps) != 0 or steps != (0,) or resume:
                 raise ValueError("FP0 requires one step-0 evaluation and no resume")
-        elif role == "frozen_prompt_v2_FP5":
+        elif _is_fp5(role):
             if int(args.max_steps) != 73 or steps != (0, 15, 44, 73) or resume:
                 raise ValueError(
                     "FP5 requires real checkpoints at steps 0, 15, 44, and 73"
+                )
+        elif resume and final_role:
+            if int(args.max_steps) != 10800 or steps != (6000, 7200, 9000, 10800):
+                raise ValueError(
+                    "final prompt continuation requires probes 6000, 7200, 9000, and 10800"
                 )
         elif resume:
             if int(args.max_steps) != 5400 or steps != (1000, 1800, 5400):
                 raise ValueError(
                     "prompt continuation requires probes 1000, 1800, and 5400"
                 )
+        elif final_role:
+            if int(args.max_steps) != 5400 or steps != PRIMARY_PROBE_STEPS:
+                raise ValueError("final prompt primary stage requires probes through step 5400")
         elif int(args.max_steps) != 500 or steps != (0, 15, 44, 73, 100, 250, 500):
             raise ValueError("prompt primary stage requires probes through step 500")
     elif run_kind == "smoke":
@@ -331,7 +366,7 @@ def _prompt_model(
     args: DictConfig, device: torch.device, photo_clip: Any
 ) -> tuple[torch.nn.Module, Any]:
     role = str(args.experiment_role)
-    if role == "frozen_prompt_v2_FP5":
+    if _is_fp5(role):
         bundle = load_trainable_sketch_hidden_encoder(
             model_name=str(args.model_name),
             pretrained=args.pretrained,
@@ -373,9 +408,9 @@ def _clip_changed(model: torch.nn.Module, before: dict[str, Tensor]) -> set[str]
 
 
 def _approved_clip_names(model: torch.nn.Module, role: str) -> set[str]:
-    if role == "frozen_prompt_v2_FP_LN" and isinstance(model, FrozenPromptModel):
+    if _is_layernorm(role) and isinstance(model, FrozenPromptModel):
         return set(model.visual_layernorm_parameter_names)
-    if role == "frozen_prompt_v2_FP5":
+    if _is_fp5(role):
         return {
             name
             for name, parameter in model.named_parameters()
@@ -407,7 +442,7 @@ def build_optimizer_parameter_groups(
     role = str(args.experiment_role)
     named = _parameter_names(model, text_bank)
     groups: list[tuple[str, list[str], float, float]] = []
-    if role == "frozen_prompt_v2_FP5":
+    if _is_fp5(role):
         groups.append(
             (
                 "early_adapt_encoder",
@@ -648,13 +683,20 @@ def _restore_checkpoint(
     payload = torch.load(path, map_location="cpu", weights_only=True)
     if not isinstance(payload, dict) or payload.get("format_version") != 2:
         raise ValueError("invalid frozen-prompt v2 checkpoint")
-    for key, expected in (
-        ("model_type", "frozen_prompt_v2"),
-        ("experiment_role", str(args.experiment_role)),
-        ("campaign", str(args.experiment_campaign)),
-    ):
-        if payload.get(key) != expected:
-            raise ValueError(f"checkpoint {key} does not match this run")
+    parent_role = payload.get("experiment_role")
+    parent_campaign = payload.get("campaign")
+    compatible_historical_parent = (
+        _is_final_role(str(args.experiment_role))
+        and str(args.experiment_role) == "frozen_prompt_final_FP3"
+        and parent_role == "frozen_prompt_v2_FP3"
+        and parent_campaign == CAMPAIGN
+    )
+    if payload.get("model_type") != "frozen_prompt_v2":
+        raise ValueError("checkpoint model_type does not match this run")
+    if not (
+        parent_role == str(args.experiment_role) and parent_campaign == str(args.experiment_campaign)
+    ) and not compatible_historical_parent:
+        raise ValueError("checkpoint role/campaign does not match this run")
     if (
         payload.get("data_split_identity") != split_identity
         or payload.get("data_manifest_identity") != manifest_identity
@@ -792,6 +834,18 @@ def _parameter_gradient_norms(
     }
 
 
+def _parameter_counts(
+    model: torch.nn.Module, text_bank: SoftPromptTextBank | None
+) -> dict[str, int]:
+    named = _parameter_names(model, text_bank)
+    trainable = [parameter for parameter in named.values() if parameter.requires_grad]
+    return {
+        "total_parameters": int(sum(parameter.numel() for parameter in named.values())),
+        "trainable_parameters": int(sum(parameter.numel() for parameter in trainable)),
+        "trainable_parameter_name_count": len(trainable),
+    }
+
+
 def _parameter_norms(
     model: torch.nn.Module, text_bank: SoftPromptTextBank | None
 ) -> dict[str, float]:
@@ -838,11 +892,12 @@ def _assert_clip_policy(
     forbidden = sorted(changed - allowed)
     if forbidden:
         raise RuntimeError(f"unexpected CLIP-owned parameter mutation: {forbidden[:5]}")
-    if role == "frozen_prompt_v2_FP4" and changed:
+    if role.endswith("FP4") and changed:
         raise RuntimeError(
             f"FP4 mutated frozen visual parameters: {sorted(changed)[:5]}"
         )
     return {
+        "role": role,
         "clip_owned_parameter_names": sorted(before),
         "approved_trainable_clip_parameter_names": sorted(allowed),
         "changed_clip_parameter_names": sorted(changed),
@@ -889,6 +944,8 @@ def run(args: DictConfig) -> None:
         "frozen_prompt_v2_FP1S",
         "frozen_prompt_v2_FP4",
         "frozen_prompt_v2_FP5",
+        "frozen_prompt_final_FP3S",
+        "frozen_prompt_final_FP5",
     }
     photo_model: Any = (
         _FrozenEncoderAdapter(photo_clip.encoder) if fixed_photo else prompt_model
@@ -975,6 +1032,10 @@ def run(args: DictConfig) -> None:
     resume_records: list[dict[str, Any]] = []
     step = 0
     parent_payload: dict[str, Any] | None = None
+    compatible_historical_parent = (
+        role == "frozen_prompt_final_FP3"
+        and str(args.experiment_campaign) == FINAL_CAMPAIGN
+    )
     if args.resume_checkpoint_path is not None:
         step, parent_payload = _restore_checkpoint(
             _path(args.resume_checkpoint_path),
@@ -997,6 +1058,12 @@ def run(args: DictConfig) -> None:
                 "checkpoint": str(_path(args.resume_checkpoint_path)),
                 "checkpoint_sha256": parent_hash,
                 "source_training_global_step": step,
+                "source_experiment_role": parent_payload.get("experiment_role")
+                if parent_payload is not None
+                else None,
+                "source_campaign": parent_payload.get("campaign")
+                if parent_payload is not None
+                else None,
                 "optimizer_state_restored": optimizer is not None,
             }
         )
@@ -1011,27 +1078,29 @@ def run(args: DictConfig) -> None:
         )
         if prior_path is not None:
             prior = json.loads(prior_path.read_text())
-            if prior.get("experiment_role") != role or prior.get("campaign") != str(
-                args.experiment_campaign
-            ):
+            same_run = prior.get("experiment_role") == role and prior.get(
+                "campaign"
+            ) == str(args.experiment_campaign)
+            if not same_run and not compatible_historical_parent:
                 raise ValueError("resume history belongs to another run")
-            history = list(prior.get("history", []))
-            training_history = list(prior.get("training_history", []))
-            if str(args.run_kind) == "primary":
-                expected_steps = set(expected_probe_steps(role))
-                if {
-                    int(row.get("training_global_step", -1)) for row in history
-                } - expected_steps:
-                    raise ValueError("resume history contains an invalid probe step")
-            for row in history:
-                checkpoint = _path(row.get("checkpoint"))
-                expected_hash = row.get("checkpoint_sha256")
-                if not checkpoint.is_file() or not isinstance(expected_hash, str):
-                    raise ValueError("resume history has a missing checkpoint identity")
-                actual_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
-                if actual_hash != expected_hash:
-                    raise ValueError("resume history checkpoint hash mismatch")
-            resume_records = list(prior.get("resume", [])) + resume_records
+            if same_run:
+                history = list(prior.get("history", []))
+                training_history = list(prior.get("training_history", []))
+                if str(args.run_kind) == "primary":
+                    expected_steps = set(expected_probe_steps(role))
+                    if {
+                        int(row.get("training_global_step", -1)) for row in history
+                    } - expected_steps:
+                        raise ValueError("resume history contains an invalid probe step")
+                for row in history:
+                    checkpoint = _path(row.get("checkpoint"))
+                    expected_hash = row.get("checkpoint_sha256")
+                    if not checkpoint.is_file() or not isinstance(expected_hash, str):
+                        raise ValueError("resume history has a missing checkpoint identity")
+                    actual_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+                    if actual_hash != expected_hash:
+                        raise ValueError("resume history checkpoint hash mismatch")
+                resume_records = list(prior.get("resume", [])) + resume_records
 
     last_train = {"rank": None, "classification": None, "accuracy": None}
     last_gradient_norms = {group["name"]: 0.0 for group in optimizer_groups}
@@ -1054,7 +1123,7 @@ def run(args: DictConfig) -> None:
         photo_changed = _clip_changed(photo_clip.encoder.model, photo_before)
         photo_allowed = (
             set(prompt_model.visual_layernorm_parameter_names)
-            if role == "frozen_prompt_v2_FP_LN"
+            if _is_layernorm(role)
             else set()
         )
         if photo_changed - photo_allowed:
@@ -1063,7 +1132,7 @@ def run(args: DictConfig) -> None:
             )
         clip_policy_current.update(
             {
-                "photo_encoder_frozen": role != "frozen_prompt_v2_FP_LN",
+                "photo_encoder_frozen": not _is_layernorm(role),
                 "visual_projection_frozen": True,
                 "text_tower_frozen": True,
             }
@@ -1124,7 +1193,7 @@ def run(args: DictConfig) -> None:
             device=device,
         )
         val_metrics = _metrics(evaluation)
-        if role == "frozen_prompt_v2_FP4":
+        if role.endswith("FP4"):
             _assert_close(
                 val_metrics["full_mAP"],
                 vanilla_evaluation.metrics.mean_average_precision,
@@ -1169,7 +1238,7 @@ def run(args: DictConfig) -> None:
             (loaded_photo.embeddings - vanilla_photo.embeddings).abs().max().item()
         )
         visual_delta = max(sketch_delta, photo_delta)
-        if role == "frozen_prompt_v2_FP1S" and photo_delta > invariance_tolerance:
+        if role in {"frozen_prompt_v2_FP1S", "frozen_prompt_final_FP3S"} and photo_delta > invariance_tolerance:
             raise AssertionError(f"FP1S photo branch changed by {photo_delta}")
         if (
             role in {"frozen_prompt_v2_FP4", "frozen_prompt_v2_FP0"}
@@ -1183,6 +1252,10 @@ def run(args: DictConfig) -> None:
                 prompt="sketch",
             )
         parameter_norms = _parameter_norms(
+            prompt_model,
+            text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
+        )
+        parameter_counts = _parameter_counts(
             prompt_model,
             text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
         )
@@ -1217,6 +1290,7 @@ def run(args: DictConfig) -> None:
             ),
             "prompt_parameter_norm": parameter_norms["visual_prompts"],
             "soft_prompt_parameter_norm": parameter_norms["soft_text_prompt"],
+            "parameter_counts": parameter_counts,
             "geometry": geometry,
             "same_class_sketch_photo_cosine": geometry["cross_modal"][
                 "same_class_sketch_photo_cosine"
@@ -1245,6 +1319,10 @@ def run(args: DictConfig) -> None:
                 if parameter.requires_grad
             ],
             "pseudo_split_identity": split_identity,
+            "class_list_hashes": {
+                "train": canonical_sha256(split_identity["train_class_ids"]),
+                "validation": canonical_sha256(split_identity["validation_class_ids"]),
+            },
             "manifest_identity": data_manifest_identity,
             "manifest_entry_identity": entry_identity,
             "official_unseen_used_for_selection": False,
@@ -1384,7 +1462,7 @@ def run(args: DictConfig) -> None:
             output_dir / "soft_prompt.pt",
         )
 
-    if role == "frozen_prompt_v2_FP5" and str(args.run_kind) == "primary":
+    if _is_fp5(role) and str(args.run_kind) == "primary":
         candidates = [
             row for row in history if int(row["training_global_step"]) in {44, 73}
         ]
@@ -1465,7 +1543,7 @@ def run(args: DictConfig) -> None:
     final_clip_policy = _assert_clip_policy(prompt_model, clip_before, role)
     final_clip_policy.update(
         {
-            "photo_encoder_frozen": role != "frozen_prompt_v2_FP_LN",
+            "photo_encoder_frozen": not _is_layernorm(role),
             "visual_projection_frozen": True,
             "text_tower_frozen": True,
         }
@@ -1490,6 +1568,10 @@ def run(args: DictConfig) -> None:
         "manifest_identity": data_manifest_identity,
         "manifest_entry_identity": entry_identity,
         "manifest_path": str(manifest_path),
+        "class_list_hashes": {
+            "train": canonical_sha256(split_identity["train_class_ids"]),
+            "validation": canonical_sha256(split_identity["validation_class_ids"]),
+        },
         "diagnostic_subset_identity": _entry_identity(diagnostic_entries),
         "diagnostic_subset_selected_before_training": True,
         "official_unseen_used_for_selection": False,
@@ -1511,6 +1593,17 @@ def run(args: DictConfig) -> None:
             if not parameter.requires_grad
         ],
         "clip_freeze_policy": final_clip_policy,
+        "parameter_counts": _parameter_counts(
+            prompt_model,
+            text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
+        ),
+        "checkpoint_state_fields": [
+            "model_state_dict",
+            "optimizer_state_dict",
+            "scheduler_state_dict",
+            "rng_state",
+            "training_global_step",
+        ],
         "model_state": {
             "stored_in_checkpoints": True,
             "checkpoint_format_version": 2,

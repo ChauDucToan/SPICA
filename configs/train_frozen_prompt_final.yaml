@@ -1,0 +1,69 @@
+defaults:
+  - _self_
+
+experiment_name: frozen_prompt_final_${experiment_role}_seed${seed}
+experiment_role: frozen_prompt_final_FP3
+experiment_campaign: frozen_prompt_final_2026-09-04
+run_kind: primary
+experiment_manifest_path: outputs/experiment_manifest_frozen_prompt_final_2026-09-04.json
+official_unseen_used_for_selection: false
+
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+visual_prompt_length: 3
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+prompt_mode: prompt_only
+text_mode: soft
+prompt_template: a photo of a {}
+soft_prompt_length: 4
+
+batch_size: 32
+eval_batch_size: 256
+num_workers: 4
+pin_memory: true
+drop_last: true
+visual_prompt_learning_rate: 1.0e-3
+soft_prompt_learning_rate: 1.0e-3
+visual_layernorm_learning_rate: 1.0e-6
+encoder_learning_rate: 1.0e-5
+visual_prompt_weight_decay: 1.0e-4
+soft_prompt_weight_decay: 1.0e-4
+visual_layernorm_weight_decay: 0.0
+encoder_weight_decay: 1.0e-4
+margin: 0.2
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+tau_cls: 0.07
+
+pseudo_val_seed: 3407
+train_class_scope: pseudo_train
+probe_steps: [0, 15, 44, 73, 100, 250, 500, 1000, 1800, 5400]
+max_steps: 5400
+log_every: 10
+query_chunk_size: 256
+resume_checkpoint_path: null
+allow_short_run: false
+seed: 42
+pseudo_val_num_classes: 20
+diagnostic_num_seen: 512
+visual_invariance_tolerance: 1.0e-6
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+encoder_train_ln_post: false
+transport_enabled: false
+transport_mode: none
+num_positive_photos: 1
+save_optimizer: true
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/experiments/frozen_prompt_final/${experiment_role}/seed${seed}/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: .hydra

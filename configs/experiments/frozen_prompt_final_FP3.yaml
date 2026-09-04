@@ -1,0 +1,13 @@
+# @package _global_
+experiment_role: frozen_prompt_final_FP3
+visual_prompt_length: 3
+prompt_mode: prompt_only
+text_mode: soft
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0

@@ -1,0 +1,22 @@
+# @package _global_
+experiment_role: frozen_prompt_final_FP3S
+visual_prompt_length: 3
+prompt_mode: sketch_prompt_only
+train_sketch_prompt: true
+train_photo_prompt: false
+text_mode: soft
+soft_prompt_length: 4
+train_visual_layernorm: false
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+visual_prompt_learning_rate: 1.0e-3
+visual_prompt_weight_decay: 1.0e-4
+soft_prompt_learning_rate: 1.0e-3
+soft_prompt_weight_decay: 1.0e-4
+seed: 42
+pseudo_val_seed: 3407
+max_steps: 5400
+probe_steps: [0, 15, 44, 73, 100, 250, 500, 1000, 1800, 5400]

@@ -64,6 +64,12 @@ def capture_provenance(
     """Capture enough information to identify a dirty source tree exactly."""
     try:
         commit = _git(root, "rev-parse", "HEAD").strip()
+        tracked_status = _git(
+            root, "status", "--porcelain", "--untracked-files=no"
+        ).splitlines()
+        untracked_files = _git(
+            root, "ls-files", "--others", "--exclude-standard"
+        ).splitlines()
         status = _git(
             root, "status", "--porcelain", "--untracked-files=all"
         ).splitlines()
@@ -80,8 +86,11 @@ def capture_provenance(
         "status": "valid",
         "head_commit": commit,
         "working_tree_state": "dirty" if status else "clean",
+        "tracked_working_tree_state": "dirty" if tracked_status else "clean",
+        "tracked_dirty_files": tracked_status,
+        "untracked_files": sorted(untracked_files),
         "dirty_files": status,
-        "git_diff": patch if status else "",
+        "git_diff": patch if tracked_status else "",
         "git_diff_sha256": _sha256(patch.encode()),
         "source_snapshot": snapshot,
         "resolved_config": resolved_config,

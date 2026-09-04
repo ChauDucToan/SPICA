@@ -1,0 +1,16 @@
+# @package _global_
+experiment_role: frozen_prompt_final_FP5
+visual_prompt_length: 0
+prompt_mode: early_adapt_then_freeze
+text_mode: hard
+train_visual_layernorm: false
+train_sketch_prompt: false
+train_photo_prompt: false
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: z0
+encoder_mode: partial
+encoder_unfreeze_depth: 4
+encoder_learning_rate: 1.0e-5
+max_steps: 73
+probe_steps: [0, 15, 44, 73]

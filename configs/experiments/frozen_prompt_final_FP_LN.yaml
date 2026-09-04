@@ -1,0 +1,15 @@
+# @package _global_
+experiment_role: frozen_prompt_final_FP_LN
+visual_prompt_length: 3
+prompt_mode: prompt_plus_layernorm
+text_mode: hard
+train_visual_layernorm: true
+train_sketch_prompt: true
+train_photo_prompt: true
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+visual_layernorm_learning_rate: 1.0e-6
+visual_layernorm_weight_decay: 0.0

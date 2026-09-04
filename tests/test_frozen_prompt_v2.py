@@ -7,7 +7,12 @@ from omegaconf import OmegaConf
 from open_clip.model import VisionTransformer
 from torch import nn
 
-from scripts.summarize_frozen_prompt import summarize, validate_run
+from scripts.summarize_frozen_prompt import (
+    comparison_effect,
+    summarize,
+    validate_comparison_roles,
+    validate_run,
+)
 from spica.evaluation.embeddings import EncodedRetrievalSet
 from spica.evaluation.frozen_prompt import (
     linear_cka,
@@ -174,6 +179,43 @@ def test_strict_summarizer_rejects_legacy_and_wrong_campaign(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="wrong campaign"):
         validate_run(wrong)
+
+
+def test_reporting_comparisons_reject_mismatched_roles() -> None:
+    validate_comparison_roles(
+        "layernorm_effect", "frozen_prompt_v2_FP_LN", "frozen_prompt_v2_FP2"
+    )
+    with pytest.raises(ValueError, match="requires"):
+        validate_comparison_roles(
+            "layernorm_effect", "frozen_prompt_v2_FP_LN", "frozen_prompt_v2_FP3"
+        )
+    with pytest.raises(ValueError, match="requires"):
+        validate_comparison_roles(
+            "hard_text_matched_late_effect",
+            "frozen_prompt_v2_FP_LN",
+            "frozen_prompt_v2_FP2",
+        )
+
+
+def test_reporting_layernorm_effect_uses_hard_text_fp2() -> None:
+    def run(role: str, value: float) -> dict:
+        return {
+            "experiment_role": role,
+            "history": [
+                {
+                    "training_global_step": 5400,
+                    "full_pseudo_unseen_mAP": value,
+                    "val": {"full_mAP": value},
+                }
+            ],
+        }
+
+    runs = {
+        "frozen_prompt_v2_FP_LN": run("frozen_prompt_v2_FP_LN", 0.652266),
+        "frozen_prompt_v2_FP2": run("frozen_prompt_v2_FP2", 0.646514),
+        "frozen_prompt_v2_FP3": run("frozen_prompt_v2_FP3", 0.672752),
+    }
+    assert comparison_effect(runs, "layernorm_effect") == pytest.approx(0.005752)
 
 
 def test_split_identity_hash_is_deterministic() -> None:
