@@ -1527,7 +1527,7 @@ def run(args: DictConfig) -> None:
             output_dir / "soft_prompt.pt",
         )
 
-    if _is_fp5(role) and str(args.run_kind) == "primary":
+    if _is_fp5(role) and str(args.run_kind) in {"primary", "split_robustness"}:
         candidates = [
             row for row in history if int(row["training_global_step"]) in {44, 73}
         ]
