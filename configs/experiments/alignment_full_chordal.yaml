@@ -1,0 +1,6 @@
+# @package _global_
+experiment_role: alignment_full_chordal
+alignment_geometry: chordal
+alignment_anchor: text
+lambda_alignment_mean: 1.0
+lambda_alignment_covariance: 1.0

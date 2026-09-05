@@ -51,6 +51,7 @@ spica-train-jepa = "spica.train_jepa:main"
 spica-eval-transport = "spica.evaluate_transport:main"
 spica-train-transport = "spica.train_transport:main"
 spica-train-frozen-prompt = "spica.train_frozen_prompt:main"
+spica-train-alignment = "spica.train_alignment:main"
 spica-eval-frozen-prompt = "spica.evaluate_frozen_prompt:main"
 
 [build-system]

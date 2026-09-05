@@ -1,0 +1,75 @@
+defaults:
+  - _self_
+  - experiments: alignment_control
+
+experiment_name: objective_alignment_${experiment_role}
+experiment_role: null
+experiment_campaign: objective_alignment_pilot_2026-09-05
+run_kind: pilot
+experiment_manifest_path: outputs/experiment_manifest_objective_alignment_pilot_2026-09-05.json
+official_unseen_used_for_selection: false
+
+data_config: configs/data/sketchy_104_21.yaml
+model_name: ViT-B-32-quickgelu
+pretrained: openai
+device: auto
+
+visual_prompt_length: 3
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+prompt_mode: prompt_only
+text_mode: soft
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+encoder_train_ln_post: false
+transport_enabled: false
+transport_mode: none
+prompt_template: a photo of a {}
+soft_prompt_length: 4
+
+batch_size: 32
+classes_per_batch: 16
+sketches_per_class: 2
+num_positive_photos: 4
+batches_per_epoch: null
+eval_batch_size: 256
+num_workers: 0
+pin_memory: true
+visual_prompt_learning_rate: 1.0e-3
+soft_prompt_learning_rate: 1.0e-3
+visual_layernorm_learning_rate: 1.0e-6
+encoder_learning_rate: 1.0e-5
+visual_prompt_weight_decay: 1.0e-4
+soft_prompt_weight_decay: 1.0e-4
+visual_layernorm_weight_decay: 0.0
+encoder_weight_decay: 1.0e-4
+margin: 0.2
+lambda_rank: 1.0
+lambda_cls: 1.0
+tau_cls: 0.07
+
+alignment_geometry: log_map
+alignment_anchor: text
+lambda_alignment_mean: 0.0
+lambda_alignment_covariance: 0.0
+
+pseudo_val_seed: 3407
+pseudo_val_num_classes: 20
+train_class_scope: pseudo_train
+probe_steps: [0, 15, 44, 73, 100]
+max_steps: 100
+log_every: 10
+query_chunk_size: 256
+resume_checkpoint_path: null
+seed: 42
+diagnostic_num_seen: 512
+save_optimizer: true
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/experiments/objective_alignment/${experiment_campaign}/${experiment_role}/seed${seed}/${now:%Y-%m-%d_%H-%M-%S}
+  output_subdir: .hydra
