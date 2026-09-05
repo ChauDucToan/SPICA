@@ -1,0 +1,7 @@
+# @package _global_
+experiment_role: alignment_mean_text_log_symmetric
+alignment_geometry: log_map
+alignment_anchor: text
+alignment_target_gradient: symmetric
+lambda_alignment_mean: 1.0
+lambda_alignment_covariance: 0.0

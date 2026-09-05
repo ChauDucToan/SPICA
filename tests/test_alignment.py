@@ -1,3 +1,4 @@
+import pytest
 import torch
 import torch.nn.functional as F
 from spica.models.alignment import (
@@ -10,18 +11,28 @@ from spica.models.alignment import (
 def test_spherical_log_exp_round_trip_and_tangent_constraint() -> None:
     anchor = F.normalize(torch.tensor([1.0, 2.0, -1.0]), dim=0)
     points = F.normalize(torch.tensor([[1.0, -1.0, 2.0], [-2.0, 1.0, 1.0]]), dim=-1)
-    tangent = spherical_log_map(anchor, points)
+    tangent, valid = spherical_log_map(anchor, points)
+    assert valid.all()
     assert torch.allclose((tangent * anchor).sum(-1), torch.zeros(2), atol=1e-5)
     assert torch.allclose(spherical_exp_map(anchor, tangent), points, atol=1e-5)
-    assert torch.equal(spherical_log_map(anchor, anchor), torch.zeros_like(anchor))
+    tangent_self, valid_self = spherical_log_map(anchor, anchor)
+    assert valid_self
+    assert torch.equal(tangent_self, torch.zeros_like(anchor))
 
 
 def test_alignment_matches_equal_class_moments() -> None:
+    """When sketch and photo are identical samples (same n), loss should be ~0.
+
+    With n-1 covariance estimator, different sample counts produce different
+    covariance values even from the same underlying data. This test uses
+    1 positive photo per sketch so n_sketch == n_photo per class.
+    """
     torch.manual_seed(7)
     text = F.normalize(torch.randn(2, 8), dim=-1)
     labels = torch.tensor([3, 3, 9, 9])
     sketches = F.normalize(torch.randn(4, 8), dim=-1)
-    photos = sketches.reshape(4, 1, 8).expand(-1, 3, -1).clone()
+    # 1 positive photo per sketch, identical to sketch -> same n, same moments
+    photos = sketches.reshape(4, 1, 8).clone()
     result = class_conditional_alignment_loss(
         sketches,
         photos,
@@ -32,7 +43,7 @@ def test_alignment_matches_equal_class_moments() -> None:
         covariance_weight=1.0,
     )
     assert result.num_classes == 2
-    assert result.num_photos == 12
+    assert result.num_photos == 4
     assert result.total.item() < 1e-10
 
 
@@ -52,6 +63,39 @@ def test_alignment_detaches_photo_target_and_text_anchor() -> None:
     assert sketches.grad is not None
     assert photos.grad is None
     assert text.grad is None
+
+
+def test_alignment_symmetric_routes_alignment_gradient_to_photos() -> None:
+    torch.manual_seed(10)
+    sketches = F.normalize(torch.randn(4, 6), dim=-1).requires_grad_()
+    photos = F.normalize(torch.randn(4, 2, 6), dim=-1).requires_grad_()
+    text = F.normalize(torch.randn(2, 6), dim=-1).requires_grad_()
+    result = class_conditional_alignment_loss(
+        sketches,
+        photos,
+        torch.tensor([0, 0, 1, 1]),
+        text_embeddings=text,
+        text_labels=torch.tensor([0, 1]),
+        mean_weight=1.0,
+        covariance_weight=0.0,
+        target_gradient="symmetric",
+    )
+    result.total.backward()
+    assert sketches.grad is not None and torch.isfinite(sketches.grad).all()
+    assert photos.grad is not None and torch.isfinite(photos.grad).all()
+    assert text.grad is None
+
+
+def test_alignment_rejects_unknown_gradient_policy() -> None:
+    with pytest.raises(ValueError, match="target_gradient"):
+        class_conditional_alignment_loss(
+            torch.eye(4),
+            torch.eye(4).reshape(4, 1, 4),
+            torch.tensor([0, 0, 1, 1]),
+            text_embeddings=torch.eye(2, 4),
+            text_labels=torch.tensor([0, 1]),
+            target_gradient="adaptive",  # type: ignore[arg-type]
+        )
 
 
 def test_alignment_photo_anchor_does_not_need_text() -> None:

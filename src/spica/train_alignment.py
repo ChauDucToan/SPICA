@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import statistics
 import sys
 import time
 from typing import Any
@@ -19,10 +20,13 @@ from torch.utils.data import DataLoader
 
 from .alignment_artifacts import (
     ALIGNMENT_CAMPAIGN,
+    ALIGNMENT_CORRECTED_PILOT_CAMPAIGN,
     ALIGNMENT_PILOT_CAMPAIGN,
     ALIGNMENT_REPLICATION_CAMPAIGN,
-    ALIGNMENT_ROLES,
+    ALL_ALIGNMENT_ROLES,
+    CORRECTED_PILOT_ROLES,
     canonical_sha256,
+    ensure_corrected_run_manifest,
     ensure_manifest,
     manifest_entry_identity,
     treatment_for_role,
@@ -41,10 +45,11 @@ from .evaluation.frozen_prompt import (
 )
 from .evaluation.text_bank import SoftPromptTextBank, encode_class_text_bank
 from .models.alignment import AlignmentLoss, class_conditional_alignment_loss
+from .models.checkpoint import visual_backbone_identity
 from .models.clip import load_frozen_clip
 from .models.frozen_prompt import FrozenPromptModel
 from .models.jepa import classification_accuracy, jepa_text_classification_loss
-from .provenance import capture_provenance, capture_rng_state
+from .provenance import capture_provenance, capture_rng_state, restore_rng_state
 from .train_frozen_prompt import (
     _FrozenEncoderAdapter,
     _assert_clip_policy,
@@ -73,17 +78,18 @@ HYDRA_CONFIG_DIR = str(PROJECT_ROOT / "configs")
 
 def _validate(args: DictConfig) -> None:
     role = str(args.experiment_role)
-    if role not in ALIGNMENT_ROLES:
-        raise ValueError(f"experiment_role must be exactly one of {ALIGNMENT_ROLES}")
+    if role not in ALL_ALIGNMENT_ROLES:
+        raise ValueError(f"experiment_role must be exactly one of {ALL_ALIGNMENT_ROLES}")
     campaign = str(args.experiment_campaign)
     if campaign not in {
         ALIGNMENT_PILOT_CAMPAIGN,
         ALIGNMENT_CAMPAIGN,
         ALIGNMENT_REPLICATION_CAMPAIGN,
+        ALIGNMENT_CORRECTED_PILOT_CAMPAIGN,
     }:
         raise ValueError("unknown alignment campaign")
-    if str(args.run_kind) not in {"pilot", "primary", "replication"}:
-        raise ValueError("run_kind must be pilot, primary, or replication")
+    if str(args.run_kind) not in {"smoke", "pilot", "primary", "replication"}:
+        raise ValueError("run_kind must be smoke, pilot, primary, or replication")
     if args.resume_checkpoint_path is not None:
         raise ValueError("alignment campaign runs are from scratch; resume is not enabled")
     observed = treatment_from_config(OmegaConf.to_container(args, resolve=True))
@@ -94,15 +100,29 @@ def _validate(args: DictConfig) -> None:
         key: (observed.get(key), value)
         for key, value in expected.items()
         if observed.get(key) != value
+        and not (
+            campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+            and role in CORRECTED_PILOT_ROLES
+            and key == "lambda_alignment_mean"
+        )
     }
     if mismatches:
         raise ValueError(f"{role} has an ambiguous treatment: {mismatches}")
+    if (
+        campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        and role in {"alignment_mean_text_log", "alignment_mean_text_log_symmetric"}
+        and not bool(args.calibration_only)
+        and args.alignment_calibration_artifact is None
+    ):
+        raise ValueError("corrected mean-only pilot requires a calibration artifact")
     if str(args.train_class_scope) != "pseudo_train":
         raise ValueError("selection requires pseudo-train classes")
     if bool(args.official_unseen_used_for_selection):
         raise ValueError("official unseen data cannot be used for selection")
     if int(args.max_steps) <= 0 or not args.probe_steps:
         raise ValueError("max_steps and probe_steps must be positive")
+    if str(args.run_kind) == "smoke" and not 20 <= int(args.max_steps) <= 50:
+        raise ValueError("smoke runs must use 20-50 steps")
     probe_steps = tuple(int(step) for step in args.probe_steps)
     if probe_steps[0] != 0 or probe_steps[-1] != int(args.max_steps):
         raise ValueError("probe_steps must start at 0 and end at max_steps")
@@ -118,6 +138,8 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("alignment_geometry must be log_map or chordal")
     if str(args.alignment_anchor) not in {"text", "photo_mean"}:
         raise ValueError("alignment_anchor must be text or photo_mean")
+    if str(args.alignment_target_gradient) not in {"detached", "symmetric"}:
+        raise ValueError("alignment_target_gradient must be detached or symmetric")
     for name in (
         "visual_prompt_learning_rate",
         "soft_prompt_learning_rate",
@@ -142,6 +164,10 @@ def _validate(args: DictConfig) -> None:
             raise ValueError(f"{name} must be positive")
     if int(args.pseudo_val_num_classes) <= 0 or int(args.diagnostic_num_seen) < 2:
         raise ValueError("diagnostic and pseudo-validation class counts must be positive")
+    if int(args.calibration_batches) <= 0:
+        raise ValueError("calibration_batches must be positive")
+    if not math.isfinite(float(args.calibration_target_ratio)) or float(args.calibration_target_ratio) <= 0:
+        raise ValueError("calibration_target_ratio must be finite and positive")
     if int(args.eval_batch_size) <= 0 or int(args.num_workers) < 0:
         raise ValueError("invalid loader settings")
     if int(args.query_chunk_size) <= 0:
@@ -209,6 +235,7 @@ def _alignment_checkpoint(
             "initial_model_state_hash": initial_hash,
             "resolved_config": OmegaConf.to_container(args, resolve=True),
             "resolved_treatment": treatment,
+            "backbone_identity": visual_backbone_identity(model),
             "clip_freeze_policy": clip_freeze_policy,
             "provenance": provenance,
         },
@@ -225,6 +252,9 @@ def _alignment_metrics(value: AlignmentLoss | None) -> dict[str, float | int | N
             "num_classes": 0,
             "num_sketches": 0,
             "num_photos": 0,
+            "invalid_sketches": 0,
+            "invalid_photos": 0,
+            "skipped_classes": 0,
         }
     return {
         "total": float(value.total.item()),
@@ -233,6 +263,215 @@ def _alignment_metrics(value: AlignmentLoss | None) -> dict[str, float | int | N
         "num_classes": value.num_classes,
         "num_sketches": value.num_sketches,
         "num_photos": value.num_photos,
+        "invalid_sketches": value.invalid_sketches,
+        "invalid_photos": value.invalid_photos,
+        "skipped_classes": value.skipped_classes,
+    }
+
+
+def _batch_objectives(
+    model: FrozenPromptModel,
+    text_bank: SoftPromptTextBank,
+    hard_text_values: torch.Tensor,
+    hard_text_labels: torch.Tensor,
+    batch: dict[str, Any],
+    args: DictConfig,
+    device: torch.device,
+    *,
+    alignment_mean_weight: float | None = None,
+    alignment_covariance_weight: float | None = None,
+    alignment_target_gradient: str | None = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, AlignmentLoss | None]:
+    """Compute the exact training objectives for one fixed batch."""
+    images = batch["sketch"].to(device, non_blocking=device.type == "cuda")
+    positives = batch["positive_photos"].to(device, non_blocking=device.type == "cuda")
+    negatives = batch["negative_photo"].to(device, non_blocking=device.type == "cuda")
+    labels = batch["label"].long().to(device)
+    query = model(images)
+    photo_values = model.encode_photo(
+        torch.cat((positives.reshape(-1, *positives.shape[2:]), negatives), dim=0)
+    )
+    positive, negative = photo_values.split(
+        (images.shape[0] * positives.shape[1], images.shape[0]), dim=0
+    )
+    positive = positive.reshape(images.shape[0], positives.shape[1], -1)
+    query_normalized = F.normalize(query, dim=-1)
+    positive_normalized = F.normalize(positive, dim=-1)
+    negative_normalized = F.normalize(negative, dim=-1)
+    rank = F.softplus(
+        float(args.margin)
+        - (query_normalized.unsqueeze(1) * positive_normalized).sum(-1)
+        + (query_normalized * negative_normalized).sum(-1, keepdim=True)
+    ).mean()
+    bank_values = text_bank()
+    bank_labels = text_bank.class_labels.to(device)
+    cls, logits = jepa_text_classification_loss(
+        query,
+        bank_values,
+        bank_labels,
+        labels,
+        temperature=float(args.tau_cls),
+        detach_text=False,
+    )
+    accuracy = classification_accuracy(logits, bank_labels, labels)
+    mean_weight = (
+        float(args.lambda_alignment_mean)
+        if alignment_mean_weight is None
+        else alignment_mean_weight
+    )
+    covariance_weight = (
+        float(args.lambda_alignment_covariance)
+        if alignment_covariance_weight is None
+        else alignment_covariance_weight
+    )
+    target_gradient = (
+        str(args.alignment_target_gradient)
+        if alignment_target_gradient is None
+        else alignment_target_gradient
+    )
+    alignment = None
+    if mean_weight or covariance_weight:
+        alignment = class_conditional_alignment_loss(
+            query,
+            positive,
+            labels,
+            text_embeddings=hard_text_values,
+            text_labels=hard_text_labels,
+            mean_weight=mean_weight,
+            covariance_weight=covariance_weight,
+            geometry=str(args.alignment_geometry),  # type: ignore[arg-type]
+            anchor=str(args.alignment_anchor),  # type: ignore[arg-type]
+            target_gradient=target_gradient,  # type: ignore[arg-type]
+        )
+    return rank, cls, accuracy, alignment
+
+
+def _grad_norms_for(
+    gradients: tuple[torch.Tensor | None, ...], parameters: tuple[torch.Tensor, ...]
+) -> list[float]:
+    return [
+        0.0 if gradient is None else float(gradient.detach().norm().item())
+        for gradient, _ in zip(gradients, parameters)
+    ]
+
+
+def _calibrate_mean_alignment(
+    model: FrozenPromptModel,
+    text_bank: SoftPromptTextBank,
+    hard_text_values: torch.Tensor,
+    hard_text_labels: torch.Tensor,
+    train_loader: DataLoader,
+    sampler: MatchedClassBatchSampler,
+    loader_generator: torch.Generator,
+    args: DictConfig,
+    device: torch.device,
+) -> dict[str, Any]:
+    """Calibrate one fixed mean-loss weight without updating model/RNG state."""
+    target_ratio = float(args.calibration_target_ratio)
+    count = int(args.calibration_batches)
+    saved_rng = capture_rng_state(loader_generator)
+    saved_epoch = getattr(sampler, "_epoch", None)
+    batches: list[dict[str, Any]] = []
+    try:
+        iterator = iter(train_loader)
+        for _ in range(count):
+            try:
+                batches.append(next(iterator))
+            except StopIteration as error:
+                raise ValueError("not enough fixed pseudo-train batches for calibration") from error
+    finally:
+        restore_rng_state(saved_rng, loader_generator)
+        if saved_epoch is not None:
+            sampler._epoch = saved_epoch
+
+    sketch_prompt = model.sketch_prompt
+    photo_prompt = model.photo_prompt
+    prompt_parameters = (sketch_prompt, photo_prompt)
+    base_norms: list[float] = []
+    mean_norms: list[float] = []
+    photo_base_norms: list[float] = []
+    photo_mean_norms: list[float] = []
+    cosines: list[float] = []
+    for batch in batches:
+        model.train()
+        rank, cls, _, _ = _batch_objectives(
+            model,
+            text_bank,
+            hard_text_values,
+            hard_text_labels,
+            batch,
+            args,
+            device,
+            alignment_mean_weight=0.0,
+            alignment_covariance_weight=0.0,
+        )
+        base = float(args.lambda_rank) * rank + float(args.lambda_cls) * cls
+        base_grads = torch.autograd.grad(base, prompt_parameters, allow_unused=True)
+        base_norm = _grad_norms_for(base_grads, prompt_parameters)[0]
+        photo_base_norm = _grad_norms_for(base_grads, prompt_parameters)[1]
+        _, _, _, mean_alignment = _batch_objectives(
+            model,
+            text_bank,
+            hard_text_values,
+            hard_text_labels,
+            batch,
+            args,
+            device,
+            alignment_mean_weight=1.0,
+            alignment_covariance_weight=0.0,
+            alignment_target_gradient="detached",
+        )
+        if mean_alignment is None:
+            raise RuntimeError("mean calibration did not produce a mean alignment loss")
+        mean_grads = torch.autograd.grad(
+            mean_alignment.mean, prompt_parameters, allow_unused=True
+        )
+        mean_norm = _grad_norms_for(mean_grads, prompt_parameters)[0]
+        photo_mean_norm = _grad_norms_for(mean_grads, prompt_parameters)[1]
+        if base_norm <= 1e-12 or mean_norm <= 1e-12:
+            raise ValueError(
+                "mean calibration encountered a near-zero sketch-prompt gradient; "
+                "choose a different fixed batch rule"
+            )
+        base_vector = base_grads[0]
+        mean_vector = mean_grads[0]
+        assert base_vector is not None and mean_vector is not None
+        cosine = float(
+            torch.nn.functional.cosine_similarity(
+                base_vector.reshape(1, -1), mean_vector.reshape(1, -1)
+            ).item()
+        )
+        base_norms.append(base_norm)
+        mean_norms.append(mean_norm)
+        photo_base_norms.append(photo_base_norm)
+        photo_mean_norms.append(photo_mean_norm)
+        cosines.append(cosine)
+
+    ratios = [base / mean for base, mean in zip(base_norms, mean_norms)]
+    calibrated = target_ratio * statistics.median(ratios)
+    weighted_ratios = [calibrated * mean / base for base, mean in zip(base_norms, mean_norms)]
+    photo_ratios = [
+        None
+        if base <= 1e-12
+        else calibrated * mean / base
+        for base, mean in zip(photo_base_norms, photo_mean_norms)
+    ]
+    return {
+        "rule": "lambda = target_ratio * median(base_sketch_norm / mean_norm)",
+        "target_ratio": target_ratio,
+        "lambda_alignment_mean": calibrated,
+        "batches": count,
+        "base_sketch_gradient_norms": base_norms,
+        "mean_sketch_gradient_norms": mean_norms,
+        "unweighted_sketch_norm_ratios": ratios,
+        "weighted_sketch_gradient_ratios": weighted_ratios,
+        "gradient_cosines_sketch": cosines,
+        "base_photo_gradient_norms": photo_base_norms,
+        "mean_photo_gradient_norms": photo_mean_norms,
+        "weighted_photo_gradient_ratios_if_symmetric": photo_ratios,
+        "median_actual_sketch_ratio": statistics.median(weighted_ratios),
+        "mean_actual_sketch_ratio": statistics.fmean(weighted_ratios),
+        "rng_and_sampler_state_restored": True,
     }
 
 
@@ -244,16 +483,7 @@ def run(args: DictConfig) -> None:
     data = load_data_config(_path(args.data_config))
     split, names, split_identity, data_manifest_identity = _load_split(data, args)
     manifest_path = _path(args.experiment_manifest_path)
-    manifest, manifest_sha256 = ensure_manifest(
-        manifest_path,
-        dataset=str(data.name),
-        data_config=str(args.data_config),
-        campaign=str(args.experiment_campaign),
-    )
     role = str(args.experiment_role)
-    entry_identity = manifest_entry_identity(
-        manifest_path, manifest, role=role, manifest_sha256=manifest_sha256
-    )
     train_names = {class_id: names[class_id] for class_id in split.train_class_ids}
     photo_clip = load_frozen_clip(
         model_name=str(args.model_name), pretrained=args.pretrained, device=device
@@ -261,9 +491,9 @@ def run(args: DictConfig) -> None:
     model = FrozenPromptModel(
         photo_clip.encoder.model.visual,
         prompt_length=int(args.visual_prompt_length),
-        train_visual_layernorm=False,
-        train_sketch_prompt=True,
-        train_photo_prompt=True,
+        train_visual_layernorm=bool(args.train_visual_layernorm),
+        train_sketch_prompt=bool(args.train_sketch_prompt),
+        train_photo_prompt=bool(args.train_photo_prompt),
     ).to(device)
     model.train(False)
     text_bank = SoftPromptTextBank(
@@ -334,6 +564,40 @@ def run(args: DictConfig) -> None:
         resolved_config=OmegaConf.to_container(args, resolve=True),
         command=[sys.executable, *sys.argv],
     )
+    resolved_config = OmegaConf.to_container(args, resolve=True)
+    if str(args.experiment_campaign) == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN:
+        manifest, manifest_sha256 = ensure_corrected_run_manifest(
+            manifest_path,
+            dataset=str(data.name),
+            data_config=str(args.data_config),
+            campaign=str(args.experiment_campaign),
+            role=role,
+            training_seed=seed,
+            pseudo_validation_seed=int(args.pseudo_val_seed),
+            split_identity=split_identity,
+            resolved_config=resolved_config,
+            source_hash=provenance.get("source_snapshot", {}).get("sha256"),
+            initial_model_state_hash=initial_hash,
+            training_horizon=int(args.max_steps),
+            replicate_id=f"{args.run_kind}-seed{seed}-{canonical_sha256(resolved_config)[:12]}",
+        )
+    else:
+        manifest, manifest_sha256 = ensure_manifest(
+            manifest_path,
+            dataset=str(data.name),
+            data_config=str(args.data_config),
+            campaign=str(args.experiment_campaign),
+        )
+    entry_identity = manifest_entry_identity(
+        manifest_path,
+        manifest,
+        role=role,
+        manifest_sha256=manifest_sha256,
+        training_seed=seed if str(args.experiment_campaign) == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN else None,
+        config_hash=canonical_sha256(resolved_config)
+        if str(args.experiment_campaign) == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        else None,
+    )
     attention_images = next(iter(val_sketch_loader))["image"][:8]
     history: list[dict[str, Any]] = []
     training_history: list[dict[str, Any]] = []
@@ -347,6 +611,54 @@ def run(args: DictConfig) -> None:
     }
     last_gradient_norms = {group["name"]: 0.0 for group in optimizer_groups}
     last_parameter_gradient_norms: dict[str, float | None] = {}
+    gradient_calibration: dict[str, Any] | None = None
+    calibration_artifact = args.alignment_calibration_artifact
+    if calibration_artifact is not None:
+        calibration_path = _path(calibration_artifact)
+        if not calibration_path.is_file():
+            raise FileNotFoundError(f"alignment calibration artifact not found: {calibration_path}")
+        calibration_payload = json.loads(calibration_path.read_text())
+        calibrated_lambda = float(calibration_payload["lambda_alignment_mean"])
+        if not math.isclose(
+            calibrated_lambda,
+            float(args.lambda_alignment_mean),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError(
+                "configured lambda_alignment_mean does not match calibration artifact"
+            )
+        gradient_calibration = {
+            "artifact": str(calibration_path.resolve()),
+            "artifact_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest(),
+            "lambda_alignment_mean": calibrated_lambda,
+        }
+    if bool(args.calibration_only):
+        calibration = _calibrate_mean_alignment(
+            model,
+            text_bank,
+            hard_text_values,
+            hard_text_labels,
+            train_loader,
+            sampler,
+            loader_generator,
+            args,
+            device,
+        )
+        calibration.update(
+            {
+                "experiment_role": role,
+                "campaign": str(args.experiment_campaign),
+                "training_seed": seed,
+                "initial_model_state_hash": initial_hash,
+                "config_hash": canonical_sha256(resolved_config),
+            }
+        )
+        (output_dir / "calibration.json").write_text(
+            json.dumps(calibration, indent=2, sort_keys=True) + "\n"
+        )
+        print(json.dumps(calibration, indent=2, sort_keys=True))
+        return
 
     def probe(probe_step: int) -> None:
         checkpoint = output_dir / "checkpoints" / f"alignment_step{probe_step}.pt"
@@ -545,53 +857,18 @@ def run(args: DictConfig) -> None:
         for batch in train_loader:
             if step >= int(args.max_steps):
                 break
-            images = batch["sketch"].to(device, non_blocking=device.type == "cuda")
-            positives = batch["positive_photos"].to(device, non_blocking=device.type == "cuda")
-            negatives = batch["negative_photo"].to(device, non_blocking=device.type == "cuda")
-            labels = batch["label"].long().to(device)
             optimizer.zero_grad(set_to_none=True)
             model.train()
-            query = model(images)
-            photo_values = model.encode_photo(
-                torch.cat((positives.reshape(-1, *positives.shape[2:]), negatives), dim=0)
+            rank, cls, accuracy, alignment = _batch_objectives(
+                model,
+                text_bank,
+                hard_text_values,
+                hard_text_labels,
+                batch,
+                args,
+                device,
             )
-            positive, negative = photo_values.split(
-                (images.shape[0] * positives.shape[1], images.shape[0]), dim=0
-            )
-            positive = positive.reshape(images.shape[0], positives.shape[1], -1)
-            query_normalized = F.normalize(query, dim=-1)
-            positive_normalized = F.normalize(positive, dim=-1)
-            negative_normalized = F.normalize(negative, dim=-1)
-            rank = F.softplus(
-                float(args.margin)
-                - (query_normalized.unsqueeze(1) * positive_normalized).sum(-1)
-                + (query_normalized * negative_normalized).sum(-1, keepdim=True)
-            ).mean()
-            bank_values = text_bank()
-            bank_labels = text_bank.class_labels.to(device)
-            cls, logits = jepa_text_classification_loss(
-                query,
-                bank_values,
-                bank_labels,
-                labels,
-                temperature=float(args.tau_cls),
-                detach_text=False,
-            )
-            accuracy = classification_accuracy(logits, bank_labels, labels)
-            alignment = None
-            if float(args.lambda_alignment_mean) or float(args.lambda_alignment_covariance):
-                alignment = class_conditional_alignment_loss(
-                    query,
-                    positive,
-                    labels,
-                    text_embeddings=hard_text_values,
-                    text_labels=hard_text_labels,
-                    mean_weight=float(args.lambda_alignment_mean),
-                    covariance_weight=float(args.lambda_alignment_covariance),
-                    geometry=str(args.alignment_geometry),  # type: ignore[arg-type]
-                    anchor=str(args.alignment_anchor),  # type: ignore[arg-type]
-                )
-            alignment_total = query.new_zeros(()) if alignment is None else alignment.total
+            alignment_total = rank.new_zeros(()) if alignment is None else alignment.total
             total = (
                 float(args.lambda_rank) * rank
                 + float(args.lambda_cls) * cls
@@ -731,7 +1008,7 @@ def run(args: DictConfig) -> None:
             "name": "class_conditional_spherical_moment_alignment",
             "sketch_distribution": "matched class sketches",
             "photo_distribution": "matched class positive photos",
-            "target_gradient": "detached photo moments",
+            "target_gradient": str(args.alignment_target_gradient),
             "text_anchor": str(args.alignment_anchor) == "text",
             "anchor_mode": str(args.alignment_anchor),
             "geometry": str(args.alignment_geometry),
@@ -753,6 +1030,7 @@ def run(args: DictConfig) -> None:
         "history": history,
         "training_history": training_history,
         "selection": selected,
+        "gradient_calibration": gradient_calibration,
         "gradient_validation": {
             "active_optimizer_groups_have_nonzero_last_update": {
                 group["name"]: bool(

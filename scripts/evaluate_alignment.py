@@ -14,6 +14,7 @@ from spica.config.data import load_data_config
 from spica.data.datasets import RetrievalEvalDataset
 from spica.data.manifest import read_manifest
 from spica.evaluation.frozen_prompt import encode_prompted_loader, evaluate_prompted
+from spica.models.checkpoint import load_prompt_checkpoint
 from spica.models.clip import load_frozen_clip
 from spica.models.frozen_prompt import FrozenPromptModel
 
@@ -42,11 +43,22 @@ def run(checkpoint_path: Path, data_config_path: Path, output_path: Path, device
     model = FrozenPromptModel(
         clip.encoder.model.visual,
         prompt_length=int(resolved["visual_prompt_length"]),
-        train_visual_layernorm=False,
-        train_sketch_prompt=True,
-        train_photo_prompt=True,
+        train_visual_layernorm=bool(resolved.get("train_visual_layernorm", False)),
+        train_sketch_prompt=bool(resolved.get("train_sketch_prompt", True)),
+        train_photo_prompt=bool(resolved.get("train_photo_prompt", True)),
     ).to(selected_device)
-    model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+    checkpoint_loading = load_prompt_checkpoint(
+        model,
+        checkpoint,
+        expected_config={
+            "model_name": str(resolved["model_name"]),
+            "pretrained": resolved.get("pretrained"),
+            "visual_prompt_length": int(resolved["visual_prompt_length"]),
+            "train_visual_layernorm": bool(resolved.get("train_visual_layernorm", False)),
+            "train_sketch_prompt": bool(resolved.get("train_sketch_prompt", True)),
+            "train_photo_prompt": bool(resolved.get("train_photo_prompt", True)),
+        },
+    )
     model.eval()
     data = load_data_config(data_config_path)
     sketch_loader = DataLoader(
@@ -80,6 +92,7 @@ def run(checkpoint_path: Path, data_config_path: Path, output_path: Path, device
         "checkpoint": str(checkpoint_path),
         "checkpoint_sha256": _sha256(checkpoint_path),
         "training_global_step": checkpoint["training_global_step"],
+        "checkpoint_loading": checkpoint_loading,
         "official_unseen_diagnostic_only": True,
         "official_unseen_used_for_selection": False,
         "text_used_for_inference": False,

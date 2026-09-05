@@ -65,13 +65,7 @@ def test_photo_routing_distinct_outputs() -> None:
     )
 
 
-def test_diagnose_encode_helper_passes_photo_flag() -> None:
-    """The _encode helper in diagnose script must forward the photo kwarg.
-
-    We verify by inspecting the source: _encode signature has photo kwarg
-    and passes it to encode_prompted_loader.
-    """
-    import inspect
+def _load_diagnose_module():
     import importlib.util
     from pathlib import Path
 
@@ -82,7 +76,37 @@ def test_diagnose_encode_helper_passes_photo_flag() -> None:
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(mod)
+    return mod
 
+
+def test_actual_diagnostic_callers_route_each_modality() -> None:
+    """Execute the real four-way caller, not just encode_prompted_loader."""
+    from types import SimpleNamespace
+
+    mod = _load_diagnose_module()
+    calls: list[bool] = []
+
+    def fake_encode(entries, transform, model, batch_size, *, photo):
+        calls.append(photo)
+        return SimpleNamespace(embeddings=None, labels=None)
+
+    original = mod._encode
+    mod._encode = fake_encode
+    try:
+        mod._encode_diagnostic_sets("ts", "tp", "vs", "vp", "transform", "model", 4)
+    finally:
+        mod._encode = original
+    assert calls == [False, True, False, True, False, False]
+
+
+def test_diagnose_encode_helper_passes_photo_flag() -> None:
+    """The _encode helper in diagnose script must forward the photo kwarg.
+
+    We verify by inspecting the source: _encode signature has photo kwarg
+    and passes it to encode_prompted_loader.
+    """
+    import inspect
+    mod = _load_diagnose_module()
     sig = inspect.signature(mod._encode)
     assert "photo" in sig.parameters, "_encode must accept photo kwarg"
 

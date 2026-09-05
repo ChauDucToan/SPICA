@@ -16,6 +16,7 @@ from .config.data import load_data_config
 from .data.datasets import RetrievalEvalDataset
 from .data.manifest import read_manifest
 from .evaluation.frozen_prompt import encode_prompted_loader, evaluate_prompted
+from .models.checkpoint import load_trainable_state
 from .models.clip import load_frozen_clip, load_trainable_sketch_hidden_encoder
 from .models.frozen_prompt import FrozenPromptModel
 from .frozen_prompt_artifacts import CAMPAIGN
@@ -72,7 +73,13 @@ def _load_model(
             ),
         ).to(device)
         transform = clip.transform
-    model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+    load_trainable_state(
+        model,
+        checkpoint["model_state_dict"],
+        required_keys={"sketch_prompt", "photo_prompt"}
+        if isinstance(model, FrozenPromptModel)
+        else set(),
+    )
     model.eval()
     return model, transform
 

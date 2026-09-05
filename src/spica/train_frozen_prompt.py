@@ -57,6 +57,7 @@ from .models.clip import (
     load_frozen_clip,
     load_trainable_sketch_hidden_encoder,
 )
+from .models.checkpoint import load_trainable_state
 from .models.frozen_prompt import FrozenPromptModel
 from .models.jepa import classification_accuracy, jepa_text_classification_loss
 from .provenance import capture_provenance, capture_rng_state, restore_rng_state
@@ -747,7 +748,14 @@ def _restore_checkpoint(
         raise ValueError("checkpoint treatment does not match this run")
     if payload.get("optimizer_groups") != optimizer_groups:
         raise ValueError("checkpoint optimizer-group mapping does not match")
-    model.load_state_dict(payload.get("model_state_dict", {}), strict=False)
+    model_state = payload.get("model_state_dict", {})
+    load_trainable_state(
+        model,
+        model_state,
+        required_keys={"sketch_prompt", "photo_prompt"}
+        if isinstance(model, FrozenPromptModel)
+        else set(),
+    )
     if text_bank is not None:
         state = payload.get("soft_prompt_state_dict")
         if not isinstance(state, dict):
