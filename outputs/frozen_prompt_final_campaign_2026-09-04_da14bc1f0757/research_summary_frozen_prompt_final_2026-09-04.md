@@ -39,7 +39,7 @@ FINAL SPICA FROZEN-PROMPT VERDICT
 
 Repository commit: da14bc1f07575c74a23ee9afd31deb92c70f26e1
 Experiment-code commit: da14bc1f07575c74a23ee9afd31deb92c70f26e1
-Results commit: pending artifact commit
+Results commit: 71eea287c052225071a8e2bc32ba581c88e9bde6
 Working tree tracked files clean: YES
 Historical artifacts preserved: YES
 Artifact provenance valid: YES
