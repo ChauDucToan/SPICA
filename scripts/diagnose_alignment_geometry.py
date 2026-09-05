@@ -37,14 +37,14 @@ def _select(entries: Any, max_per_class: int) -> tuple[Any, ...]:
     )
 
 
-def _encode(entries: Any, transform: Any, model: Any, batch_size: int) -> Any:
+def _encode(entries: Any, transform: Any, model: Any, batch_size: int, *, photo: bool = False) -> Any:
     loader = DataLoader(
         RetrievalEvalDataset(entries, transform),
         batch_size=batch_size,
         shuffle=False,
         num_workers=0,
     )
-    return encode_prompted_loader(model, loader)
+    return encode_prompted_loader(model, loader, photo=photo)
 
 
 def run(
@@ -95,10 +95,10 @@ def run(
     train_photos = _select(split.train_photo_entries, max_per_class)
     val_sketches = _select(split.validation_sketch_entries, max_per_class)
     val_photos = _select(split.validation_photo_entries, max_per_class)
-    train_sketch_values = _encode(train_sketches, clip.transform, model, batch_size)
-    train_photo_values = _encode(train_photos, clip.transform, model, batch_size)
-    val_sketch_values = _encode(val_sketches, clip.transform, model, batch_size)
-    val_photo_values = _encode(val_photos, clip.transform, model, batch_size)
+    train_sketch_values = _encode(train_sketches, clip.transform, model, batch_size, photo=False)
+    train_photo_values = _encode(train_photos, clip.transform, model, batch_size, photo=True)
+    val_sketch_values = _encode(val_sketches, clip.transform, model, batch_size, photo=False)
+    val_photo_values = _encode(val_photos, clip.transform, model, batch_size, photo=True)
     train_names = {label: names[label] for label in split.train_class_ids}
     val_names = {label: names[label] for label in split.validation_class_ids}
     train_text = encode_class_text_bank(

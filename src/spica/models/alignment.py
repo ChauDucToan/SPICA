@@ -39,6 +39,15 @@ def _normalize(points: Tensor) -> Tensor:
 def spherical_log_map(anchor: Tensor, points: Tensor, *, eps: float = 1e-6) -> Tensor:
     """Map unit-sphere points to the tangent plane at ``anchor``.
 
+    Uses the numerically stable formulation:
+        a = dot(t, z); v = z - a*t; theta = atan2(||v||, a)
+        Log_t(z) = (theta / ||v||) * v
+
+    This avoids the acos/sin ratio singularity at both the anchor (a~1)
+    and antipode (a~-1). At the anchor itself the result is exactly zero.
+    Antipodal points produce a finite-magnitude tangent with direction
+    determined by the residual v.
+
     ``anchor`` may be one vector or broadcast over ``points``.  The returned
     vectors have the same leading shape as ``points`` and are orthogonal to the
     normalized anchor up to floating-point error.
@@ -52,15 +61,28 @@ def spherical_log_map(anchor: Tensor, points: Tensor, *, eps: float = 1e-6) -> T
 
     base = _normalize(anchor)
     values = _normalize(points)
-    raw_cosine = (values * base).sum(dim=-1)
-    cosine = raw_cosine.clamp(-1.0 + eps, 1.0 - eps)
-    angle = torch.acos(cosine)
-    sine = torch.sqrt((1.0 - cosine.square()).clamp_min(0.0))
-    factor = angle / sine.clamp_min(eps)
-    tangent = values - raw_cosine.unsqueeze(-1) * base
-    # Avoid an arbitrary direction and the 0/0 limit when a point is the base.
-    near_anchor = (1.0 - raw_cosine).le(eps)
-    return torch.where(near_anchor.unsqueeze(-1), torch.zeros_like(tangent), tangent * factor.unsqueeze(-1))
+    # Compute in at least float32 for numerical stability
+    base_f = base.float() if base.dtype != torch.float64 else base
+    values_f = values.float() if values.dtype != torch.float64 else values
+
+    a = (values_f * base_f).sum(dim=-1)  # cos(theta), unclamped
+    v = values_f - a.unsqueeze(-1) * base_f  # component orthogonal to anchor
+    v_norm = v.norm(dim=-1)
+
+    # atan2 gives correct angle in [0, pi] without acos singularity
+    theta = torch.atan2(v_norm, a)
+
+    # theta/v_norm -> 1.0 as v_norm->0 (small-angle limit preserves gradient)
+    # At exact anchor: v_norm=0, theta=0, result=0 (correct)
+    factor = theta / v_norm.clamp_min(eps)
+
+    tangent = v * factor.unsqueeze(-1)
+
+    # Exact anchor case: return clean zeros
+    at_anchor = v_norm.le(eps)
+    tangent = torch.where(at_anchor.unsqueeze(-1), torch.zeros_like(tangent), tangent)
+
+    return tangent.to(values.dtype)
 
 
 def spherical_exp_map(anchor: Tensor, tangent: Tensor) -> Tensor:
