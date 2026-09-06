@@ -1,0 +1,6 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python - (validate completed pilot MD and R-MD)
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+VALID [] MATCHED
+fixed_step {'status': 'VALID', 'mAP': 0.6671100875995982}
+paired_delta -0.004465165413888195
+EXIT_CODE=0

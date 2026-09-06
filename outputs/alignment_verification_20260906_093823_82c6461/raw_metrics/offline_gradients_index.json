@@ -1,0 +1,47 @@
+[
+  {
+    "arm": "R",
+    "step": 0,
+    "checkpoint_sha256": "e86704ad737910d396d7404a22ec50576a469370aa6dff486a2ea11cc57e8bf3"
+  },
+  {
+    "arm": "R",
+    "step": 500,
+    "checkpoint_sha256": "253107baf25148104a0e640f7710db1a9dca3371054d35a36be568e2bcc3ed32"
+  },
+  {
+    "arm": "R",
+    "step": 1800,
+    "checkpoint_sha256": "e411790ff79ff972109fac2861767c41ce6c6cee61a1f027e6c6416e80e6c897"
+  },
+  {
+    "arm": "MD",
+    "step": 0,
+    "checkpoint_sha256": "a8a757fb2eab531582f168ff08f46b5208d1209299fc51f4ca2d02bdca7519b9"
+  },
+  {
+    "arm": "MD",
+    "step": 500,
+    "checkpoint_sha256": "52063ea1e904f7ac793ee6d50937eba09c3354c83f54d176ce92112d430ae3ea"
+  },
+  {
+    "arm": "MD",
+    "step": 1800,
+    "checkpoint_sha256": "725c5a0fe88e1a73e98edcab706d218ca1d751e766ba1a69384c8c85d8aaf12c"
+  },
+  {
+    "arm": "MS",
+    "step": 0,
+    "checkpoint_sha256": "6a354fa0763ff7e205dc1eaaccc7d82b1a3119cbccf5100afcb81f564682f682"
+  },
+  {
+    "arm": "MS",
+    "step": 500,
+    "checkpoint_sha256": "f4c8b1431ce22c09c1f1470959b1072da9e014ec25906ca0b0abdd471699e07d"
+  },
+  {
+    "arm": "MS",
+    "step": 1800,
+    "checkpoint_sha256": "37e046591c5e777132ef16d6fe917171b21969c8e61fd9c91ac51fb3e645e6e4"
+  }
+]

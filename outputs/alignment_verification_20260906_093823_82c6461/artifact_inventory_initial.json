@@ -1,0 +1,329 @@
+{
+  "search_roots": [
+    "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05",
+    "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598",
+    "/home/oslamelon/Desktop/Projects/spica/datasets/Sketchy"
+  ],
+  "filesystem_scope": "configured project roots only; no whole-filesystem scan",
+  "artifacts": [
+    {
+      "role": "alignment_control",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 50,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-26-06",
+      "run_kind": "smoke",
+      "status": "INCOMPLETE",
+      "reuse_eligibility": "No result/history/checkpoints; no resume supported. Preserve only."
+    },
+    {
+      "role": "alignment_control",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 50,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-27-06",
+      "run_kind": "smoke",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "61bfc59b3b8a1491571565efa22dbe5f3e33526af1c06a85fbacf71f21f1d930",
+      "source_hash": "4d38e185def9e981abc5a61eda84439d183e50d2adf2147341ae4b5326078bd5",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-27-06/checkpoints/alignment_step0.pt",
+          "sha256": "0840af282e416600abb8686a530095a4cd478c333af2df6b998535842db8d12d",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 50,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-27-06/checkpoints/alignment_step50.pt",
+          "sha256": "b724bb55d9200dd6c30f980d36f7659dddcb91ac26cd0023a244e14fb5b41033",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "alignment_control",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 1800,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41",
+      "run_kind": "pilot",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "86b3cc896a77dbff5306d672e145186c1cbebab6e1a4b96e1fb942fec6015ac5",
+      "source_hash": "c19e3646c415b643441b2a3b038af4a71aea734f439b423139b0d293287e43f4",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41/checkpoints/alignment_step0.pt",
+          "sha256": "faf565ed182917ef768fdc685270c7da86a5a881a93035f01f1cae63d1051151",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 100,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41/checkpoints/alignment_step100.pt",
+          "sha256": "51a10256a9159a343b25d341782d13c1d30ef3bc6b5e9be7efbc3efcb905aac2",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 500,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41/checkpoints/alignment_step500.pt",
+          "sha256": "1fd9ca1d7eaa4d35e3eee18de8a684abf370b17ccc7820247580651fbabc480e",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1000,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41/checkpoints/alignment_step1000.pt",
+          "sha256": "9f0d3eeb43f646f75c01e8fe4f76d96d65c81e7e9ad63d9eeca9689a5ec0b773",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1800,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_control/seed42/2026-09-05_19-35-41/checkpoints/alignment_step1800.pt",
+          "sha256": "0b04f5cb489fde3beaeddd85cc0f6edc7bb5510d91bf3c7ac697a0e267b1918a",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "alignment_mean_text_log",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 1800,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-24-23",
+      "run_kind": "pilot",
+      "status": "INVALID",
+      "reuse_eligibility": "Legacy calibration does not measure symmetric policy or fixed batch identities; preserve, do not attach new calibration to old runs.",
+      "calibration_path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-24-23/calibration.json",
+      "calibration_sha256": "1b544e7059e3f2c773fbb8618cb3c7c4e09407797fc5b221ee5d17dc879e18b6"
+    },
+    {
+      "role": "alignment_mean_text_log",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 50,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-30-03",
+      "run_kind": "smoke",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "8f13a30156bbb368f82c6d9e954553bb76bc58d756e51c6f9e989317323800ba",
+      "source_hash": "4d38e185def9e981abc5a61eda84439d183e50d2adf2147341ae4b5326078bd5",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-30-03/checkpoints/alignment_step0.pt",
+          "sha256": "cec7755f25d41ec4f46cb67df8f70e713d53d4b40dfddade8567a2bd669178a7",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 50,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-30-03/checkpoints/alignment_step50.pt",
+          "sha256": "5e010177c9667ba8c98380c6add695033ecd02fccf21aaeb2e7a471322547409",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "alignment_mean_text_log",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 1800,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24",
+      "run_kind": "pilot",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "a5a11771becb1d98197ca9720c50bdaffe286d356262624248e76522dff4c1ce",
+      "source_hash": "c19e3646c415b643441b2a3b038af4a71aea734f439b423139b0d293287e43f4",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24/checkpoints/alignment_step0.pt",
+          "sha256": "3a4a72038ee5dfec1547bf4821c2afdbeb3e53063a18ceba055b2a7971a8bad2",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 100,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24/checkpoints/alignment_step100.pt",
+          "sha256": "45a9e2155b3701ee26f3900915f2c77195c62ab9150b3fdef0f5a09ef4ee0f94",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 500,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24/checkpoints/alignment_step500.pt",
+          "sha256": "d9fea00edfbf7c27e472065576899d52526f31fba29af83a39f719f5d66f8d63",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1000,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24/checkpoints/alignment_step1000.pt",
+          "sha256": "909cc7010d20e72eb5e3506beca9ae084a17426864b5b9408d6f78011d9456a2",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1800,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log/seed42/2026-09-05_19-58-24/checkpoints/alignment_step1800.pt",
+          "sha256": "d4be40d17bb7906eb32baf929d967e3be40042773a01684eaabb3399b67e1c6f",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "alignment_mean_text_log_symmetric",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 50,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_19-32-37",
+      "run_kind": "smoke",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "cbe8ac1da1ab01682981f6f1429736c61b1f38e16b65156425c9a6ac6a78b1d4",
+      "source_hash": "4d38e185def9e981abc5a61eda84439d183e50d2adf2147341ae4b5326078bd5",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_19-32-37/checkpoints/alignment_step0.pt",
+          "sha256": "a6c0035ae758e49620d4e5b663613f88986e9925a0cd85a5f00ab3dc33e2ec23",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 50,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_19-32-37/checkpoints/alignment_step50.pt",
+          "sha256": "b0fdeafc60499ea7c162ec09d9c7c1d4ed9cf96f60b96b6e8118dbebd4b9615b",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "alignment_mean_text_log_symmetric",
+      "seed": 42,
+      "split": 3407,
+      "horizon": 1800,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59",
+      "run_kind": "pilot",
+      "status": "UNVERIFIED",
+      "execution_status": "COMPLETED",
+      "reuse_eligibility": "Descriptive raw-metric replay only; not corrected-v2 matched evidence.",
+      "result_sha256": "8232d1b88cb830d2d0af19e79021d46e33f7993ca8f9a6bdf14dc7c247eaa9be",
+      "source_hash": "c19e3646c415b643441b2a3b038af4a71aea734f439b423139b0d293287e43f4",
+      "checkpoints": [
+        {
+          "step": 0,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59/checkpoints/alignment_step0.pt",
+          "sha256": "d2b5d257c6efb8c6664d1459c003ef2d370f9b0cc1c0686e55c7f374f732ffdf",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 100,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59/checkpoints/alignment_step100.pt",
+          "sha256": "70e6a2dfd462bffb2362bba3f2d60c7673d72adc1afbe7f8f6a9eb2f87262eb6",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 500,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59/checkpoints/alignment_step500.pt",
+          "sha256": "cd10000286145eb0aca1e47533e4256a3f83f990d32090fd9a026e45364d3ec9",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1000,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59/checkpoints/alignment_step1000.pt",
+          "sha256": "65a78a99ff2ce8d0d9890f68a12184b761c9f2edf7780216a27eb071d12389c7",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        },
+        {
+          "step": 1800,
+          "path": "/home/oslamelon/Desktop/Projects/spica/outputs/experiments/objective_alignment/objective_alignment_corrected_pilot_2026-09-05/alignment_mean_text_log_symmetric/seed42/2026-09-05_20-21-59/checkpoints/alignment_step1800.pt",
+          "sha256": "a7ebe404b12f810d5e11a1487c7015721b62aa3a5b6292fba050d595fe386314",
+          "status": "COMPLETED",
+          "verification": "bytes match history; not re-evaluated"
+        }
+      ]
+    },
+    {
+      "role": "gpu_preflight.md",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/gpu_preflight.md",
+      "status": "UNVERIFIED",
+      "evidence_status": "REPORTED_ONLY",
+      "reuse_eligibility": "Context only; raw GPU/test transcripts missing for historical claims"
+    },
+    {
+      "role": "tests_and_validation.md",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/tests_and_validation.md",
+      "status": "UNVERIFIED",
+      "evidence_status": "REPORTED_ONLY",
+      "reuse_eligibility": "Context only; raw GPU/test transcripts missing for historical claims"
+    },
+    {
+      "role": "corrected_geometry.json",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/corrected_geometry.json",
+      "status": "UNVERIFIED",
+      "evidence_status": "RAW_INDEX_OR_REPORT",
+      "reuse_eligibility": "Historical index/report, not corrected-v2 validation"
+    },
+    {
+      "role": "corrected_historical_results.json",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/corrected_historical_results.json",
+      "status": "UNVERIFIED",
+      "evidence_status": "RAW_INDEX_OR_REPORT",
+      "reuse_eligibility": "Historical index/report, not corrected-v2 validation"
+    },
+    {
+      "role": "corrected_pilot_manifest.json",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/corrected_pilot_manifest.json",
+      "status": "UNVERIFIED",
+      "evidence_status": "RAW_INDEX_OR_REPORT",
+      "reuse_eligibility": "Historical index/report, not corrected-v2 validation"
+    },
+    {
+      "role": "corrected_manifest_final.json",
+      "seed": null,
+      "split": null,
+      "horizon": null,
+      "path": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_corrected_20260905_175854_d3c0598/corrected_manifest_final.json",
+      "status": "UNVERIFIED",
+      "evidence_status": "RAW_INDEX_OR_REPORT",
+      "reuse_eligibility": "Historical index/report, not corrected-v2 validation"
+    }
+  ]
+}

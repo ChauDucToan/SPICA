@@ -1,0 +1,8 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python outputs/alignment_verification_20260906_093823_82c6461/check_pairing.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+Traceback (most recent call last):
+  File "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/check_pairing.py", line 40, in <module>
+    assert result['status'] != 'MATCHED' and result['paired_delta'] is None
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+EXIT_CODE=1

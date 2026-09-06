@@ -1,0 +1,8 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" direnv exec . uv run --frozen --no-sync python - (R-MD checkpoint RNG/prompt checks)
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+0 R-MD RNG_EQUAL
+100 R-MD RNG_EQUAL
+500 R-MD RNG_EQUAL
+1000 R-MD RNG_EQUAL
+1800 R-MD RNG_EQUAL
+EXIT_CODE=0

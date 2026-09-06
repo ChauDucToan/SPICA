@@ -1,0 +1,10 @@
+{
+  "pretrained_checkpoint": "/home/oslamelon/.cache/huggingface/hub/models--timm--vit_base_patch32_clip_224.openai/snapshots/a6f597a30f7b82c51704746581f9a4e41421e878/open_clip_model.safetensors",
+  "sha256": "e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31",
+  "bytes": 605143284,
+  "model_name": "ViT-B-32-quickgelu",
+  "pretrained": "openai",
+  "runtime_driver": "/nix/store/5pfbkh57zv5znqhd1n0zc2qwliawvgq8-nvidia-x11-595.91.07/lib/libcuda.so.595.91.07",
+  "uv_lock_sha256": "353a5076eaeb76c536a0d1d76a7d58415ffc265c831a2276add0777658bd9051",
+  "weights_in_review_bundle": false
+}

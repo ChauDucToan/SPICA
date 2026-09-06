@@ -1,0 +1,56 @@
+{
+  "status": "COMPLETED_NEGATIVE_PILOT",
+  "head": "82c6461df7931c2c9cc4d8815aab9fe16517e399",
+  "source_patch": "execution_fix.patch",
+  "pilot_budget_steps_per_arm": 1800,
+  "smoke_budget_steps_per_arm": 50,
+  "seed": 42,
+  "pseudo_split_seed": 3407,
+  "covariance_weight": 0,
+  "official_unseen_run": false,
+  "multi_seed_run": false,
+  "expanded_horizon_run": false,
+  "historical_artifacts_preserved": true,
+  "retrain_reason": "Historical calibration lacks actual symmetric gradients/fixed batch replay evidence. Current HEAD smoke additionally reproduced probe(0) CategoryRetrievalEvaluation mapping-access TypeError; three accesses fixed. New source-bound calibration and runs are separate from all prior attempts.",
+  "completed_arms": [
+    "R",
+    "MD",
+    "MS"
+  ],
+  "steps_per_arm": 1800,
+  "smoke_steps_per_arm": 50,
+  "matching_mode": "corrected_v2",
+  "matching_status": {
+    "R-MD": "MATCHED",
+    "R-MS": "MATCHED",
+    "MD-MS": "MATCHED"
+  },
+  "source_snapshot_hash": "a30cb43ecc0dfebafc47d3a214c6c61803d03148f1ebc901b4d9bab1546ff3b9",
+  "calibration_sha256": "f038ba8797c48ec26ef0bb77c6c8459f4f3d76d0853daa98f19d452569df67fd",
+  "targeted_tests": {
+    "passed": 82,
+    "failed": 0,
+    "exit_code": 0
+  },
+  "additional_pairing_checks": {
+    "passed": 13,
+    "failed": 0,
+    "exit_code": 0
+  },
+  "cuda_forward_backward_synchronize": "PASS",
+  "real_model_calibration": "VALID",
+  "offline_gradient_checks": "PASS",
+  "offline_geometry_checks": "PASS",
+  "checkpoint_count_verified": 15,
+  "checkpoint_rng_pair_checks_passed": 10,
+  "blocker": null,
+  "scientific_conclusion": "Negative result for this seed42/pseudo-split pilot: MD and MS both lose to R at step1800. No mainline promotion.",
+  "review_bundle": "outputs/alignment_verification_20260906_093823_82c6461/review_bundle.tar.gz",
+  "published": false,
+  "remaining_unverified": [
+    "Multi-seed/split robustness and official-unseen generalization (not authorized).",
+    "Full reconstruction of historical source bytes for 9/212 recorded files.",
+    "Resume correctness (not enabled, never attempted).",
+    "Per-step sampling trace beyond four-batch replay and five matched checkpoint RNG states."
+  ]
+}

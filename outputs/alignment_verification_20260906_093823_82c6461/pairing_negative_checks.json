@@ -1,0 +1,522 @@
+[
+  {
+    "mutation": "batch_size",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "batch_size": [
+          32,
+          64
+        ],
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ]
+      },
+      "disallowed_config_differences": [
+        "batch_size"
+      ],
+      "config_mismatches": [
+        {
+          "field": "batch_size",
+          "control": 32,
+          "candidate": 64
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "num_positive_photos",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ],
+        "num_positive_photos": [
+          4,
+          2
+        ]
+      },
+      "disallowed_config_differences": [
+        "num_positive_photos"
+      ],
+      "config_mismatches": [
+        {
+          "field": "num_positive_photos",
+          "control": 4,
+          "candidate": 2
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "lambda_rank",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ],
+        "lambda_rank": [
+          1.0,
+          2.0
+        ]
+      },
+      "disallowed_config_differences": [
+        "lambda_rank"
+      ],
+      "config_mismatches": [
+        {
+          "field": "lambda_rank",
+          "control": 1.0,
+          "candidate": 2.0
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "lambda_cls",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ],
+        "lambda_cls": [
+          1.0,
+          2.0
+        ]
+      },
+      "disallowed_config_differences": [
+        "lambda_cls"
+      ],
+      "config_mismatches": [
+        {
+          "field": "lambda_cls",
+          "control": 1.0,
+          "candidate": 2.0
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "visual_prompt_learning_rate",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ],
+        "visual_prompt_learning_rate": [
+          0.001,
+          0.01
+        ]
+      },
+      "disallowed_config_differences": [
+        "visual_prompt_learning_rate"
+      ],
+      "config_mismatches": [
+        {
+          "field": "visual_prompt_learning_rate",
+          "control": 0.001,
+          "candidate": 0.01
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "visual_prompt_weight_decay",
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ],
+        "visual_prompt_weight_decay": [
+          0.0001,
+          0.01
+        ]
+      },
+      "disallowed_config_differences": [
+        "visual_prompt_weight_decay"
+      ],
+      "config_mismatches": [
+        {
+          "field": "visual_prompt_weight_decay",
+          "control": 0.0001,
+          "candidate": 0.01
+        }
+      ],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "config differs outside the pair specification",
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "optimizer_groups",
+    "value": [],
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ]
+      },
+      "disallowed_config_differences": [],
+      "config_mismatches": [],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_PROVENANCE",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "dataset/manifest/backbone/sampler/optimizer evidence is incomplete",
+      "identity_mismatches": [
+        "optimizer_identity"
+      ],
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "optimizer_groups",
+    "value": [
+      {
+        "name": "different_optimizer"
+      }
+    ],
+    "result": {
+      "pair_id": "R-MD",
+      "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+      "control_seed": 42,
+      "config_differences": {
+        "experiment_role": [
+          "alignment_control",
+          "alignment_mean_text_log"
+        ],
+        "lambda_alignment_mean": [
+          0.0,
+          0.2
+        ]
+      },
+      "disallowed_config_differences": [],
+      "config_mismatches": [],
+      "source_hashes": [
+        "source",
+        "source"
+      ],
+      "duplicate_control_count": 1,
+      "status": "UNMATCHED_CONFIG",
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "mandatory dataset/model/sampler identities differ",
+      "identity_mismatches": [
+        {
+          "field": "optimizer_identity",
+          "control": [
+            {
+              "name": "visual_prompts",
+              "parameter_names": [
+                "sketch_prompt",
+                "photo_prompt"
+              ],
+              "parameter_count": 10,
+              "lr": 0.001,
+              "weight_decay": 0.0001
+            }
+          ],
+          "candidate": [
+            {
+              "name": "different_optimizer"
+            }
+          ]
+        }
+      ],
+      "calibration_mismatches": []
+    }
+  },
+  {
+    "mutation": "MD-MS unequal lambda",
+    "result": {
+      "pair_id": "MD-MS",
+      "left_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+      "right_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+      "left_seed": 42,
+      "right_seed": 42,
+      "config_differences": {
+        "alignment_target_gradient": [
+          "detached",
+          "symmetric"
+        ],
+        "experiment_role": [
+          "alignment_mean_text_log",
+          "alignment_mean_text_log_symmetric"
+        ],
+        "lambda_alignment_mean": [
+          0.2,
+          0.3
+        ]
+      },
+      "disallowed_config_differences": [
+        "lambda_alignment_mean"
+      ],
+      "config_mismatches": [
+        {
+          "field": "lambda_alignment_mean",
+          "control": 0.2,
+          "candidate": 0.3
+        }
+      ],
+      "calibration_mismatches": [],
+      "status": "UNMATCHED_CONFIG",
+      "reason": "MD/MS config or mandatory identity differs",
+      "identity_mismatches": []
+    }
+  },
+  {
+    "mutation": "MD-MS artifact_path",
+    "result": {
+      "pair_id": "MD-MS",
+      "left_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+      "right_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+      "left_seed": 42,
+      "right_seed": 42,
+      "config_differences": {
+        "alignment_target_gradient": [
+          "detached",
+          "symmetric"
+        ],
+        "experiment_role": [
+          "alignment_mean_text_log",
+          "alignment_mean_text_log_symmetric"
+        ]
+      },
+      "disallowed_config_differences": [],
+      "config_mismatches": [],
+      "calibration_mismatches": [
+        {
+          "field": "calibration_artifact.canonical_path",
+          "expected": "/tmp/spica-pairing-1i8x5077/other_calibration.json",
+          "actual": "/tmp/spica-pairing-1i8x5077/calibration.json",
+          "message": "MD/MS calibration artifacts are not the same canonical file"
+        }
+      ],
+      "status": "UNMATCHED_CALIBRATION",
+      "reason": "calibration evidence is UNVERIFIED"
+    }
+  },
+  {
+    "mutation": "MD-MS artifact_sha256",
+    "result": {
+      "pair_id": "MD-MS",
+      "left_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+      "right_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+      "left_seed": 42,
+      "right_seed": 42,
+      "config_differences": {
+        "alignment_target_gradient": [
+          "detached",
+          "symmetric"
+        ],
+        "experiment_role": [
+          "alignment_mean_text_log",
+          "alignment_mean_text_log_symmetric"
+        ]
+      },
+      "disallowed_config_differences": [],
+      "config_mismatches": [],
+      "calibration_mismatches": [
+        {
+          "field": "calibration_artifact.artifact_sha256",
+          "expected": "bad-hash",
+          "actual": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+          "message": "MD/MS calibration artifact SHA-256 values differ"
+        }
+      ],
+      "status": "UNMATCHED_CALIBRATION",
+      "reason": "calibration evidence is UNVERIFIED"
+    }
+  },
+  {
+    "mutation": "only control has different seed",
+    "result": {
+      "pair_id": "R-MD",
+      "status": "UNMATCHED",
+      "control_artifact": null,
+      "control_seed": null,
+      "paired_delta": null,
+      "peak_delta": null,
+      "reason": "no control with identical campaign/seed/split/init/horizon/protocol"
+    }
+  },
+  {
+    "mutation": "duplicate with higher mAP",
+    "result": [
+      {
+        "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+        "training_seed": 42,
+        "pair_id": "R-MD",
+        "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+        "control_seed": 42,
+        "config_differences": {
+          "experiment_role": [
+            "alignment_control",
+            "alignment_mean_text_log"
+          ],
+          "lambda_alignment_mean": [
+            0.0,
+            0.2
+          ]
+        },
+        "disallowed_config_differences": [],
+        "config_mismatches": [],
+        "source_hashes": [
+          "source",
+          "source"
+        ],
+        "duplicate_control_count": 1,
+        "status": "DUPLICATE_ARM",
+        "paired_delta": null,
+        "peak_delta": null,
+        "calibration_mismatches": [],
+        "reason": "ambiguous duplicate alignment_mean_text_log arm; delta suppressed"
+      },
+      {
+        "artifact_path": "/tmp/spica-pairing-1i8x5077/higher_map_duplicate/run_result.json",
+        "training_seed": 42,
+        "pair_id": "R-MD",
+        "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+        "control_seed": 42,
+        "config_differences": {
+          "experiment_role": [
+            "alignment_control",
+            "alignment_mean_text_log"
+          ],
+          "lambda_alignment_mean": [
+            0.0,
+            0.2
+          ]
+        },
+        "disallowed_config_differences": [],
+        "config_mismatches": [],
+        "source_hashes": [
+          "source",
+          "source"
+        ],
+        "duplicate_control_count": 1,
+        "status": "DUPLICATE_ARM",
+        "paired_delta": null,
+        "peak_delta": null,
+        "reason": "ambiguous duplicate alignment_mean_text_log arm; delta suppressed",
+        "calibration_mismatches": []
+      }
+    ]
+  }
+]

@@ -1,0 +1,31 @@
++ direnv exec . env LD_LIBRARY_PATH=/run/opengl-driver/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/run/opengl-driver/lib:/nix/store/p5c2hfgw9pipp2vd0xvxjmly99nbsdki-pipewire-1.6.8-jack/lib uv run --frozen --no-sync spica-train-alignment seed=42 device=cuda lambda_alignment_covariance=0.0 log_every=100 experiment_manifest_path=outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/corrected_pilot_manifest_v2.json run_kind=pilot max_steps=1800 'probe_steps=[0,100,500,1000,1800]' experiments=alignment_mean_text_log lambda_alignment_mean=0.2603831284137216 alignment_calibration_artifact=outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/calibration/calibration.json hydra.run.dir=outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MD
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+[2026-09-06 10:14:18,381][root][INFO] - Parsing model identifier. Schema: None, Identifier: ViT-B-32-quickgelu
+[2026-09-06 10:14:18,381][root][INFO] - Loaded built-in ViT-B-32-quickgelu model config.
+[2026-09-06 10:14:18,672][httpx][INFO] - HTTP Request: HEAD https://huggingface.co/timm/vit_base_patch32_clip_224.openai/resolve/main/open_clip_model.safetensors "HTTP/1.1 302 Found"
+[2026-09-06 10:14:18,673][root][INFO] - Instantiating model architecture: CLIP
+[2026-09-06 10:14:19,252][root][INFO] - Loading full pretrained weights from: /home/oslamelon/.cache/huggingface/hub/models--timm--vit_base_patch32_clip_224.openai/snapshots/a6f597a30f7b82c51704746581f9a4e41421e878/open_clip_model.safetensors
+[2026-09-06 10:14:19,302][root][INFO] - Final image preprocessing configuration set: {'size': (224, 224), 'mode': 'RGB', 'mean': (0.48145466, 0.4578275, 0.40821073), 'std': (0.26862954, 0.26130258, 0.27577711), 'interpolation': 'bicubic', 'resize_mode': 'shortest', 'fill_color': 0}
+[2026-09-06 10:14:19,303][root][INFO] - Model ViT-B-32-quickgelu creation process complete.
+[2026-09-06 10:14:19,303][root][INFO] - Parsing tokenizer identifier. Schema: None, Identifier: ViT-B-32-quickgelu
+[2026-09-06 10:14:19,303][root][INFO] - Attempting to load config from built-in: ViT-B-32-quickgelu
+[2026-09-06 10:14:19,303][root][INFO] - Using default SimpleTokenizer.
+step=100 rank=0.65990 cls=1.54510 align=0.27364417910575867
+step=200 rank=0.63882 cls=1.49778 align=0.243196040391922
+step=300 rank=0.61714 cls=1.22368 align=0.1929863542318344
+step=400 rank=0.66136 cls=1.25502 align=0.24113178253173828
+step=500 rank=0.61056 cls=1.12278 align=0.19305537641048431
+step=600 rank=0.62058 cls=1.28847 align=0.20413942635059357
+step=700 rank=0.62020 cls=1.10167 align=0.22108013927936554
+step=800 rank=0.62481 cls=1.44804 align=0.2178167700767517
+step=900 rank=0.58367 cls=0.81436 align=0.18599149584770203
+step=1000 rank=0.60636 cls=0.66459 align=0.19091784954071045
+step=1100 rank=0.58715 cls=1.03766 align=0.20639732480049133
+step=1200 rank=0.63173 cls=0.95266 align=0.21992267668247223
+step=1300 rank=0.56972 cls=0.79053 align=0.17812564969062805
+step=1400 rank=0.60216 cls=1.10187 align=0.2251477986574173
+step=1500 rank=0.57519 cls=0.95257 align=0.1754244565963745
+step=1600 rank=0.57504 cls=0.82753 align=0.19007308781147003
+step=1700 rank=0.58830 cls=1.09411 align=0.19690871238708496
+step=1800 rank=0.61505 cls=1.13448 align=0.20832039415836334
+EXIT_CODE=0

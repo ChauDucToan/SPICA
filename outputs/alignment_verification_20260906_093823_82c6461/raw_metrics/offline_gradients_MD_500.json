@@ -1,0 +1,530 @@
+{
+  "arm": "MD",
+  "step": 500,
+  "checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MD/checkpoints/alignment_step500.pt",
+  "checkpoint_sha256": "52063ea1e904f7ac793ee6d50937eba09c3354c83f54d176ce92112d430ae3ea",
+  "checkpoint_loading": {
+    "loaded_prompt_keys": [
+      "photo_prompt",
+      "sketch_prompt"
+    ],
+    "missing_frozen_backbone_keys": [
+      "visual.class_embedding",
+      "visual.conv1.weight",
+      "visual.ln_post.bias",
+      "visual.ln_post.weight",
+      "visual.ln_pre.bias",
+      "visual.ln_pre.weight",
+      "visual.positional_embedding",
+      "visual.proj",
+      "visual.transformer.resblocks.0.attn.in_proj_bias",
+      "visual.transformer.resblocks.0.attn.in_proj_weight",
+      "visual.transformer.resblocks.0.attn.out_proj.bias",
+      "visual.transformer.resblocks.0.attn.out_proj.weight",
+      "visual.transformer.resblocks.0.ln_1.bias",
+      "visual.transformer.resblocks.0.ln_1.weight",
+      "visual.transformer.resblocks.0.ln_2.bias",
+      "visual.transformer.resblocks.0.ln_2.weight",
+      "visual.transformer.resblocks.0.mlp.c_fc.bias",
+      "visual.transformer.resblocks.0.mlp.c_fc.weight",
+      "visual.transformer.resblocks.0.mlp.c_proj.bias",
+      "visual.transformer.resblocks.0.mlp.c_proj.weight",
+      "visual.transformer.resblocks.1.attn.in_proj_bias",
+      "visual.transformer.resblocks.1.attn.in_proj_weight",
+      "visual.transformer.resblocks.1.attn.out_proj.bias",
+      "visual.transformer.resblocks.1.attn.out_proj.weight",
+      "visual.transformer.resblocks.1.ln_1.bias",
+      "visual.transformer.resblocks.1.ln_1.weight",
+      "visual.transformer.resblocks.1.ln_2.bias",
+      "visual.transformer.resblocks.1.ln_2.weight",
+      "visual.transformer.resblocks.1.mlp.c_fc.bias",
+      "visual.transformer.resblocks.1.mlp.c_fc.weight",
+      "visual.transformer.resblocks.1.mlp.c_proj.bias",
+      "visual.transformer.resblocks.1.mlp.c_proj.weight",
+      "visual.transformer.resblocks.10.attn.in_proj_bias",
+      "visual.transformer.resblocks.10.attn.in_proj_weight",
+      "visual.transformer.resblocks.10.attn.out_proj.bias",
+      "visual.transformer.resblocks.10.attn.out_proj.weight",
+      "visual.transformer.resblocks.10.ln_1.bias",
+      "visual.transformer.resblocks.10.ln_1.weight",
+      "visual.transformer.resblocks.10.ln_2.bias",
+      "visual.transformer.resblocks.10.ln_2.weight",
+      "visual.transformer.resblocks.10.mlp.c_fc.bias",
+      "visual.transformer.resblocks.10.mlp.c_fc.weight",
+      "visual.transformer.resblocks.10.mlp.c_proj.bias",
+      "visual.transformer.resblocks.10.mlp.c_proj.weight",
+      "visual.transformer.resblocks.11.attn.in_proj_bias",
+      "visual.transformer.resblocks.11.attn.in_proj_weight",
+      "visual.transformer.resblocks.11.attn.out_proj.bias",
+      "visual.transformer.resblocks.11.attn.out_proj.weight",
+      "visual.transformer.resblocks.11.ln_1.bias",
+      "visual.transformer.resblocks.11.ln_1.weight",
+      "visual.transformer.resblocks.11.ln_2.bias",
+      "visual.transformer.resblocks.11.ln_2.weight",
+      "visual.transformer.resblocks.11.mlp.c_fc.bias",
+      "visual.transformer.resblocks.11.mlp.c_fc.weight",
+      "visual.transformer.resblocks.11.mlp.c_proj.bias",
+      "visual.transformer.resblocks.11.mlp.c_proj.weight",
+      "visual.transformer.resblocks.2.attn.in_proj_bias",
+      "visual.transformer.resblocks.2.attn.in_proj_weight",
+      "visual.transformer.resblocks.2.attn.out_proj.bias",
+      "visual.transformer.resblocks.2.attn.out_proj.weight",
+      "visual.transformer.resblocks.2.ln_1.bias",
+      "visual.transformer.resblocks.2.ln_1.weight",
+      "visual.transformer.resblocks.2.ln_2.bias",
+      "visual.transformer.resblocks.2.ln_2.weight",
+      "visual.transformer.resblocks.2.mlp.c_fc.bias",
+      "visual.transformer.resblocks.2.mlp.c_fc.weight",
+      "visual.transformer.resblocks.2.mlp.c_proj.bias",
+      "visual.transformer.resblocks.2.mlp.c_proj.weight",
+      "visual.transformer.resblocks.3.attn.in_proj_bias",
+      "visual.transformer.resblocks.3.attn.in_proj_weight",
+      "visual.transformer.resblocks.3.attn.out_proj.bias",
+      "visual.transformer.resblocks.3.attn.out_proj.weight",
+      "visual.transformer.resblocks.3.ln_1.bias",
+      "visual.transformer.resblocks.3.ln_1.weight",
+      "visual.transformer.resblocks.3.ln_2.bias",
+      "visual.transformer.resblocks.3.ln_2.weight",
+      "visual.transformer.resblocks.3.mlp.c_fc.bias",
+      "visual.transformer.resblocks.3.mlp.c_fc.weight",
+      "visual.transformer.resblocks.3.mlp.c_proj.bias",
+      "visual.transformer.resblocks.3.mlp.c_proj.weight",
+      "visual.transformer.resblocks.4.attn.in_proj_bias",
+      "visual.transformer.resblocks.4.attn.in_proj_weight",
+      "visual.transformer.resblocks.4.attn.out_proj.bias",
+      "visual.transformer.resblocks.4.attn.out_proj.weight",
+      "visual.transformer.resblocks.4.ln_1.bias",
+      "visual.transformer.resblocks.4.ln_1.weight",
+      "visual.transformer.resblocks.4.ln_2.bias",
+      "visual.transformer.resblocks.4.ln_2.weight",
+      "visual.transformer.resblocks.4.mlp.c_fc.bias",
+      "visual.transformer.resblocks.4.mlp.c_fc.weight",
+      "visual.transformer.resblocks.4.mlp.c_proj.bias",
+      "visual.transformer.resblocks.4.mlp.c_proj.weight",
+      "visual.transformer.resblocks.5.attn.in_proj_bias",
+      "visual.transformer.resblocks.5.attn.in_proj_weight",
+      "visual.transformer.resblocks.5.attn.out_proj.bias",
+      "visual.transformer.resblocks.5.attn.out_proj.weight",
+      "visual.transformer.resblocks.5.ln_1.bias",
+      "visual.transformer.resblocks.5.ln_1.weight",
+      "visual.transformer.resblocks.5.ln_2.bias",
+      "visual.transformer.resblocks.5.ln_2.weight",
+      "visual.transformer.resblocks.5.mlp.c_fc.bias",
+      "visual.transformer.resblocks.5.mlp.c_fc.weight",
+      "visual.transformer.resblocks.5.mlp.c_proj.bias",
+      "visual.transformer.resblocks.5.mlp.c_proj.weight",
+      "visual.transformer.resblocks.6.attn.in_proj_bias",
+      "visual.transformer.resblocks.6.attn.in_proj_weight",
+      "visual.transformer.resblocks.6.attn.out_proj.bias",
+      "visual.transformer.resblocks.6.attn.out_proj.weight",
+      "visual.transformer.resblocks.6.ln_1.bias",
+      "visual.transformer.resblocks.6.ln_1.weight",
+      "visual.transformer.resblocks.6.ln_2.bias",
+      "visual.transformer.resblocks.6.ln_2.weight",
+      "visual.transformer.resblocks.6.mlp.c_fc.bias",
+      "visual.transformer.resblocks.6.mlp.c_fc.weight",
+      "visual.transformer.resblocks.6.mlp.c_proj.bias",
+      "visual.transformer.resblocks.6.mlp.c_proj.weight",
+      "visual.transformer.resblocks.7.attn.in_proj_bias",
+      "visual.transformer.resblocks.7.attn.in_proj_weight",
+      "visual.transformer.resblocks.7.attn.out_proj.bias",
+      "visual.transformer.resblocks.7.attn.out_proj.weight",
+      "visual.transformer.resblocks.7.ln_1.bias",
+      "visual.transformer.resblocks.7.ln_1.weight",
+      "visual.transformer.resblocks.7.ln_2.bias",
+      "visual.transformer.resblocks.7.ln_2.weight",
+      "visual.transformer.resblocks.7.mlp.c_fc.bias",
+      "visual.transformer.resblocks.7.mlp.c_fc.weight",
+      "visual.transformer.resblocks.7.mlp.c_proj.bias",
+      "visual.transformer.resblocks.7.mlp.c_proj.weight",
+      "visual.transformer.resblocks.8.attn.in_proj_bias",
+      "visual.transformer.resblocks.8.attn.in_proj_weight",
+      "visual.transformer.resblocks.8.attn.out_proj.bias",
+      "visual.transformer.resblocks.8.attn.out_proj.weight",
+      "visual.transformer.resblocks.8.ln_1.bias",
+      "visual.transformer.resblocks.8.ln_1.weight",
+      "visual.transformer.resblocks.8.ln_2.bias",
+      "visual.transformer.resblocks.8.ln_2.weight",
+      "visual.transformer.resblocks.8.mlp.c_fc.bias",
+      "visual.transformer.resblocks.8.mlp.c_fc.weight",
+      "visual.transformer.resblocks.8.mlp.c_proj.bias",
+      "visual.transformer.resblocks.8.mlp.c_proj.weight",
+      "visual.transformer.resblocks.9.attn.in_proj_bias",
+      "visual.transformer.resblocks.9.attn.in_proj_weight",
+      "visual.transformer.resblocks.9.attn.out_proj.bias",
+      "visual.transformer.resblocks.9.attn.out_proj.weight",
+      "visual.transformer.resblocks.9.ln_1.bias",
+      "visual.transformer.resblocks.9.ln_1.weight",
+      "visual.transformer.resblocks.9.ln_2.bias",
+      "visual.transformer.resblocks.9.ln_2.weight",
+      "visual.transformer.resblocks.9.mlp.c_fc.bias",
+      "visual.transformer.resblocks.9.mlp.c_fc.weight",
+      "visual.transformer.resblocks.9.mlp.c_proj.bias",
+      "visual.transformer.resblocks.9.mlp.c_proj.weight"
+    ],
+    "unexpected_keys": [],
+    "backbone_identity": {
+      "visual_class": "open_clip.transformer.VisionTransformer",
+      "visual_width": 768,
+      "positional_embedding_shape": [
+        50,
+        768
+      ],
+      "projection_shape": [
+        768,
+        512
+      ],
+      "transformer_block_count": 12,
+      "pool_type": "tok",
+      "attn_pool": false,
+      "output_tokens": false
+    },
+    "embedded_backbone_identity_verified": true,
+    "backbone_identity_status": "VERIFIED",
+    "resolved_model_name": "ViT-B-32-quickgelu",
+    "resolved_pretrained": "openai"
+  },
+  "fixed_batch_identity_sha256": "d7aa6a48e69c82763146a4b7e512b41a288aab85b932191b8f44ef81d04d4fd1",
+  "run_lambda": 0.2603831284137216,
+  "run_policy": "detached",
+  "diagnostic_only": true,
+  "lambda_selection_performed": false,
+  "state_restoration_verified": true,
+  "frozen_full_clip_state_sha256": "32374912ff6cfeda95da53959a21a974eecfae79da06e09a40e107c2abe05b6d",
+  "frozen_full_clip_unchanged": true,
+  "hard_text_anchor_requires_grad": false,
+  "batches": [
+    {
+      "detached": {
+        "raw_rank_loss": 0.5913728475570679,
+        "raw_cls_loss": 0.9792315363883972,
+        "raw_mean_loss": 0.7828131914138794,
+        "weighted_rank_loss": 0.5913728475570679,
+        "weighted_cls_loss": 0.9792315363883972,
+        "weighted_mean_loss": 0.20383134774387537,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.5650546550750732,
+            "cls_gradient_norm": 8.599305152893066,
+            "base_gradient_norm": 8.879072189331055,
+            "mean_gradient_norm": 6.506289958953857,
+            "weighted_mean_to_base_ratio": 0.19080013066171775,
+            "ratio_reason": null,
+            "cosine_with_base": 0.5191143751144409,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.561564564704895,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.561564564704895,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 4.987325668334961,
+            "base_gradient_norm": 4.987325668334961,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "symmetric": {
+        "raw_rank_loss": 0.5913728475570679,
+        "raw_cls_loss": 0.9792315363883972,
+        "raw_mean_loss": 0.7828131914138794,
+        "weighted_rank_loss": 0.5913728475570679,
+        "weighted_cls_loss": 0.9792315363883972,
+        "weighted_mean_loss": 0.20383134774387537,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.5650546550750732,
+            "cls_gradient_norm": 8.599305152893066,
+            "base_gradient_norm": 8.879072189331055,
+            "mean_gradient_norm": 6.506289958953857,
+            "weighted_mean_to_base_ratio": 0.19080013066171775,
+            "ratio_reason": null,
+            "cosine_with_base": 0.5191143751144409,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.561564564704895,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.561564564704895,
+            "mean_gradient_norm": 6.963484287261963,
+            "weighted_mean_to_base_ratio": 3.2287895948881604,
+            "ratio_reason": null,
+            "cosine_with_base": 0.2089722752571106,
+            "cosine_reason": null
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 4.987325668334961,
+            "base_gradient_norm": 4.987325668334961,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "sketch_gradient_max_abs_difference": 0.0
+    },
+    {
+      "detached": {
+        "raw_rank_loss": 0.6491975784301758,
+        "raw_cls_loss": 1.3140246868133545,
+        "raw_mean_loss": 0.849957287311554,
+        "weighted_rank_loss": 0.6491975784301758,
+        "weighted_cls_loss": 1.3140246868133545,
+        "weighted_mean_loss": 0.2213145374882228,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.5829854011535645,
+            "cls_gradient_norm": 7.82694673538208,
+            "base_gradient_norm": 7.992638111114502,
+            "mean_gradient_norm": 5.75535249710083,
+            "weighted_mean_to_base_ratio": 0.1874971276673845,
+            "ratio_reason": null,
+            "cosine_with_base": 0.5846289992332458,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.3995637893676758,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.3995637893676758,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 6.8649797439575195,
+            "base_gradient_norm": 6.8649797439575195,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "symmetric": {
+        "raw_rank_loss": 0.6491975784301758,
+        "raw_cls_loss": 1.3140246868133545,
+        "raw_mean_loss": 0.849957287311554,
+        "weighted_rank_loss": 0.6491975784301758,
+        "weighted_cls_loss": 1.3140246868133545,
+        "weighted_mean_loss": 0.2213145374882228,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.5829854011535645,
+            "cls_gradient_norm": 7.82694673538208,
+            "base_gradient_norm": 7.992638111114502,
+            "mean_gradient_norm": 5.75535249710083,
+            "weighted_mean_to_base_ratio": 0.1874971276673845,
+            "ratio_reason": null,
+            "cosine_with_base": 0.5846289992332458,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.3995637893676758,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.3995637893676758,
+            "mean_gradient_norm": 4.7105231285095215,
+            "weighted_mean_to_base_ratio": 3.0696994605230508,
+            "ratio_reason": null,
+            "cosine_with_base": 0.5770881772041321,
+            "cosine_reason": null
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 6.8649797439575195,
+            "base_gradient_norm": 6.8649797439575195,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "sketch_gradient_max_abs_difference": 0.0
+    },
+    {
+      "detached": {
+        "raw_rank_loss": 0.6351790428161621,
+        "raw_cls_loss": 1.329017996788025,
+        "raw_mean_loss": 0.8805218935012817,
+        "weighted_rank_loss": 0.6351790428161621,
+        "weighted_cls_loss": 1.329017996788025,
+        "weighted_mean_loss": 0.22927304526663753,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.7867923974990845,
+            "cls_gradient_norm": 8.67911148071289,
+            "base_gradient_norm": 8.496800422668457,
+            "mean_gradient_norm": 5.40817403793335,
+            "weighted_mean_to_base_ratio": 0.16573265287555197,
+            "ratio_reason": null,
+            "cosine_with_base": -0.15787939727306366,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.4468746483325958,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.4468746483325958,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 5.425343036651611,
+            "base_gradient_norm": 5.425343036651611,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "symmetric": {
+        "raw_rank_loss": 0.6351790428161621,
+        "raw_cls_loss": 1.329017996788025,
+        "raw_mean_loss": 0.8805218935012817,
+        "weighted_rank_loss": 0.6351790428161621,
+        "weighted_cls_loss": 1.329017996788025,
+        "weighted_mean_loss": 0.22927304526663753,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.7867923974990845,
+            "cls_gradient_norm": 8.67911148071289,
+            "base_gradient_norm": 8.496800422668457,
+            "mean_gradient_norm": 5.40817403793335,
+            "weighted_mean_to_base_ratio": 0.16573265287555197,
+            "ratio_reason": null,
+            "cosine_with_base": -0.15787939727306366,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.4468746483325958,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.4468746483325958,
+            "mean_gradient_norm": 5.702925205230713,
+            "weighted_mean_to_base_ratio": 3.32295759356265,
+            "ratio_reason": null,
+            "cosine_with_base": 0.34349533915519714,
+            "cosine_reason": null
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 5.425343036651611,
+            "base_gradient_norm": 5.425343036651611,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "sketch_gradient_max_abs_difference": 0.0
+    },
+    {
+      "detached": {
+        "raw_rank_loss": 0.6055899858474731,
+        "raw_cls_loss": 0.8864727020263672,
+        "raw_mean_loss": 0.8044010996818542,
+        "weighted_rank_loss": 0.6055899858474731,
+        "weighted_cls_loss": 0.8864727020263672,
+        "weighted_mean_loss": 0.2094524748345991,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.6275907158851624,
+            "cls_gradient_norm": 5.929688453674316,
+            "base_gradient_norm": 6.3333539962768555,
+            "mean_gradient_norm": 5.010592460632324,
+            "weighted_mean_to_base_ratio": 0.20600044476790988,
+            "ratio_reason": null,
+            "cosine_with_base": 0.020549722015857697,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.5460479855537415,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.5460479855537415,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 6.07117223739624,
+            "base_gradient_norm": 6.07117223739624,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "symmetric": {
+        "raw_rank_loss": 0.6055899858474731,
+        "raw_cls_loss": 0.8864727020263672,
+        "raw_mean_loss": 0.8044010996818542,
+        "weighted_rank_loss": 0.6055899858474731,
+        "weighted_cls_loss": 0.8864727020263672,
+        "weighted_mean_loss": 0.2094524748345991,
+        "gradients": {
+          "sketch_prompt": {
+            "rank_gradient_norm": 0.6275907158851624,
+            "cls_gradient_norm": 5.929688453674316,
+            "base_gradient_norm": 6.3333539962768555,
+            "mean_gradient_norm": 5.010592460632324,
+            "weighted_mean_to_base_ratio": 0.20600044476790988,
+            "ratio_reason": null,
+            "cosine_with_base": 0.020549722015857697,
+            "cosine_reason": null
+          },
+          "photo_prompt": {
+            "rank_gradient_norm": 0.5460479855537415,
+            "cls_gradient_norm": 0.0,
+            "base_gradient_norm": 0.5460479855537415,
+            "mean_gradient_norm": 5.979681968688965,
+            "weighted_mean_to_base_ratio": 2.851412951093316,
+            "ratio_reason": null,
+            "cosine_with_base": 0.7589353919029236,
+            "cosine_reason": null
+          },
+          "soft_text_context": {
+            "rank_gradient_norm": 0.0,
+            "cls_gradient_norm": 6.07117223739624,
+            "base_gradient_norm": 6.07117223739624,
+            "mean_gradient_norm": 0.0,
+            "weighted_mean_to_base_ratio": 0.0,
+            "ratio_reason": null,
+            "cosine_with_base": null,
+            "cosine_reason": "alignment_gradient_zero"
+          }
+        }
+      },
+      "sketch_gradient_max_abs_difference": 0.0
+    }
+  ]
+}

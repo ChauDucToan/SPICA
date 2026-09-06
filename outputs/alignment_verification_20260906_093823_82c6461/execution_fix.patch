@@ -1,0 +1,24 @@
+diff --git a/src/spica/train_alignment.py b/src/spica/train_alignment.py
+index bbb4b38..81a5bdf 100644
+--- a/src/spica/train_alignment.py
++++ b/src/spica/train_alignment.py
+@@ -1670,7 +1670,7 @@ def run(args: DictConfig) -> None:
+             initial_hash=initial_hash,
+             initial_text_bank_hash=initial_text_bank_hash,
+             clip_freeze_policy=clip_policy,
+-            full_pseudo_unseen_mAP=float(uncached_evaluation["full_mAP"]),
++            full_pseudo_unseen_mAP=uncached_evaluation.metrics.mean_average_precision,
+             calibration_identity=(
+                 None
+                 if gradient_calibration is None
+@@ -1710,8 +1710,8 @@ def run(args: DictConfig) -> None:
+             device=device,
+         )
+         if not math.isclose(
+-            float(uncached_evaluation["full_mAP"]),
+-            float(evaluation["full_mAP"]),
++            uncached_evaluation.metrics.mean_average_precision,
++            evaluation.metrics.mean_average_precision,
+             rel_tol=0.0,
+             abs_tol=1e-12,
+         ):

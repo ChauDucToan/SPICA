@@ -1,0 +1,4 @@
+COMMAND: direnv exec . uv run --frozen --no-sync ruff check outputs/alignment_verification_20260906_093823_82c6461/check_pairing.py outputs/alignment_verification_20260906_093823_82c6461/offline_gradients.py outputs/alignment_verification_20260906_093823_82c6461/finalize_summary.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+All checks passed!
+EXIT_CODE=0

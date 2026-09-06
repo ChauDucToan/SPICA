@@ -1,0 +1,14 @@
++ direnv exec . env LD_LIBRARY_PATH=/run/opengl-driver/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/run/opengl-driver/lib:/nix/store/p5c2hfgw9pipp2vd0xvxjmly99nbsdki-pipewire-1.6.8-jack/lib uv run --frozen --no-sync python scripts/bootstrap_alignment.py --candidate outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MD/run_result.json --control outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/R/run_result.json --horizon 1800 --output outputs/alignment_verification_20260906_093823_82c6461/raw_metrics/bootstrap_MD_R.json --repetitions 10000 --seed 3407
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+{
+  "n_queries": 10963,
+  "repetitions": 10000,
+  "bootstrap_seed": 3407,
+  "mean_delta": -0.004465165413888247,
+  "sample_std_query_delta": 0.0919128466027398,
+  "ci_95": [
+    -0.006198697360701404,
+    -0.002797231170596287
+  ]
+}
+EXIT_CODE=0

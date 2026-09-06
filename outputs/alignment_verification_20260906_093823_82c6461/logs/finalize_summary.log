@@ -1,0 +1,30 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python outputs/alignment_verification_20260906_093823_82c6461/finalize_summary.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+{
+  "arms": [
+    {
+      "arm": "R",
+      "mAP@1800": 0.6715752530134864,
+      "delta_vs_R": 0.0,
+      "peak_mAP": 0.6715752530134864,
+      "peak_step": 1800
+    },
+    {
+      "arm": "MD",
+      "mAP@1800": 0.6671100875995982,
+      "delta_vs_R": -0.004465165413888195,
+      "peak_mAP": 0.6671100875995982,
+      "peak_step": 1800
+    },
+    {
+      "arm": "MS",
+      "mAP@1800": 0.654153226937208,
+      "delta_vs_R": -0.017422026076278407,
+      "peak_mAP": 0.654153226937208,
+      "peak_step": 1800
+    }
+  ],
+  "MS_minus_MD": -0.012956860662390213,
+  "conclusion": "Negative result for this seed42/pseudo-split pilot: MD and MS both lose to R at step1800. No mainline promotion."
+}
+EXIT_CODE=0

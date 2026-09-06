@@ -1,0 +1,29 @@
+{
+  "artifact_hashes": {
+    "candidate_run_result_sha256": "d2d047466cbb7cb16eb4df187f7350b11808fad88c8b963b2352a7fb936f6826",
+    "control_run_result_sha256": "61900d77614f23aa45ce156f86429c5c4e2e94262f16ad8d856f4f294c7a29f9"
+  },
+  "bootstrap": {
+    "bootstrap_seed": 3407,
+    "ci_95": [
+      -0.014351133733630504,
+      -0.011567708489228617
+    ],
+    "mean_delta": -0.012956860662390149,
+    "n_queries": 10963,
+    "repetitions": 10000,
+    "sample_std_query_delta": 0.07453567812634108
+  },
+  "candidate": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MS/run_result.json",
+  "candidate_checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MS/checkpoints/alignment_step1800.pt",
+  "candidate_checkpoint_sha256": "37e046591c5e777132ef16d6fe917171b21969c8e61fd9c91ac51fb3e645e6e4",
+  "control": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MD/run_result.json",
+  "control_checkpoint": "/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/fixed_attempt/pilot/MD/checkpoints/alignment_step1800.pt",
+  "control_checkpoint_sha256": "725c5a0fe88e1a73e98edcab706d218ca1d751e766ba1a69384c8c85d8aaf12c",
+  "horizon": 1800,
+  "metric": "pseudo_unseen_per_query_average_precision",
+  "official_unseen_used": false,
+  "query_identity_sha256": "108df5d1ae3f19d5bba50b60bf09275c4632fdd45ad078f2dde09092b9912fd1",
+  "raw_mAP_delta": -0.012956860662390213,
+  "schema_version": 1
+}

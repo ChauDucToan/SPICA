@@ -1,0 +1,15 @@
++ direnv exec . env LD_LIBRARY_PATH=/run/opengl-driver/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/run/opengl-driver/lib:/nix/store/p5c2hfgw9pipp2vd0xvxjmly99nbsdki-pipewire-1.6.8-jack/lib uv run --frozen --no-sync env PYTHONPATH=. python outputs/alignment_verification_20260906_093823_82c6461/offline_gradients.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+/home/oslamelon/Desktop/Projects/spica/outputs/alignment_verification_20260906_093823_82c6461/offline_gradients.py:99: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /__w/pytorch/pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:822.)
+  policies[policy] = dict(raw_rank_loss=float(rank), raw_cls_loss=float(cls), raw_mean_loss=float(align.mean), weighted_rank_loss=float(objectives[0]), weighted_cls_loss=float(objectives[1]), weighted_mean_loss=weight*float(align.mean), gradients=groups)
+R 0 PASS
+R 500 PASS
+R 1800 PASS
+MD 0 PASS
+MD 500 PASS
+MD 1800 PASS
+MS 0 PASS
+MS 500 PASS
+MS 1800 PASS
+EXIT_CODE=0

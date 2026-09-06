@@ -1,0 +1,6 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" direnv exec . uv run --frozen --no-sync pytest -q tests/test_spherical_log_map.py tests/test_alignment.py tests/test_diagnose_photo_routing.py tests/test_alignment_sampler.py tests/test_alignment_calibration.py tests/test_checkpoint_loading.py tests/test_alignment_reporting.py tests/test_alignment_corrected_reporting.py tests/test_frozen_prompt_integrity.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+........................................................................ [ 87%]
+..........                                                               [100%]
+82 passed in 2.77s
+EXIT_CODE=0

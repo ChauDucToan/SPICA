@@ -1,0 +1,10 @@
+COMMAND: direnv exec . env LD_LIBRARY_PATH="/run/opengl-driver/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" uv run --frozen --no-sync python - (environment metadata)
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+executable /home/oslamelon/Desktop/Projects/spica/.venv/bin/python3
+base_executable /home/oslamelon/.local/share/uv/python/cpython-3.12-linux-x86_64-gnu/bin/python3.12
+resolved_python /home/oslamelon/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/bin/python3.12
+torch_version 2.13.0+cu130 torch.version.cuda 13.0
+LD_LIBRARY_PATH /run/opengl-driver/lib:/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib:/run/opengl-driver/lib:/nix/store/p5c2hfgw9pipp2vd0xvxjmly99nbsdki-pipewire-1.6.8-jack/lib
+uv.lock_sha256 353a5076eaeb76c536a0d1d76a7d58415ffc265c831a2276add0777658bd9051
+nix_environment None /home/oslamelon/Desktop/Projects/spica/.venv
+EXIT_CODE=0

@@ -1,0 +1,2230 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python outputs/alignment_verification_20260906_093823_82c6461/check_pairing.py
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+{
+  "campaign_root": "/tmp/spica-pairing-1i8x5077",
+  "campaigns": [
+    {
+      "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+      "campaign_status": "UNMATCHED",
+      "duplicate_arms": [
+        {
+          "artifacts": [
+            "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+            "/tmp/spica-pairing-1i8x5077/higher_map_duplicate/run_result.json"
+          ],
+          "reason": "multiple alignment_mean_text_log runs for one training seed",
+          "role": "alignment_mean_text_log",
+          "status": "DUPLICATE_ARM",
+          "training_seed": 42
+        }
+      ],
+      "matching_mode": "corrected_v2",
+      "missing_arms": [],
+      "pairs": {
+        "alignment_mean_text_log": [
+          {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+            "calibration_mismatches": [],
+            "config_differences": {
+              "experiment_role": [
+                "alignment_control",
+                "alignment_mean_text_log"
+              ],
+              "lambda_alignment_mean": [
+                0.0,
+                0.2
+              ]
+            },
+            "config_mismatches": [],
+            "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+            "control_seed": 42,
+            "disallowed_config_differences": [],
+            "duplicate_control_count": 1,
+            "pair_id": "R-MD",
+            "paired_delta": null,
+            "peak_delta": null,
+            "reason": "ambiguous duplicate alignment_mean_text_log arm; delta suppressed",
+            "source_hashes": [
+              "source",
+              "source"
+            ],
+            "status": "DUPLICATE_ARM",
+            "training_seed": 42
+          },
+          {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/higher_map_duplicate/run_result.json",
+            "calibration_mismatches": [],
+            "config_differences": {
+              "experiment_role": [
+                "alignment_control",
+                "alignment_mean_text_log"
+              ],
+              "lambda_alignment_mean": [
+                0.0,
+                0.2
+              ]
+            },
+            "config_mismatches": [],
+            "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+            "control_seed": 42,
+            "disallowed_config_differences": [],
+            "duplicate_control_count": 1,
+            "pair_id": "R-MD",
+            "paired_delta": null,
+            "peak_delta": null,
+            "reason": "ambiguous duplicate alignment_mean_text_log arm; delta suppressed",
+            "source_hashes": [
+              "source",
+              "source"
+            ],
+            "status": "DUPLICATE_ARM",
+            "training_seed": 42
+          }
+        ],
+        "alignment_mean_text_log_symmetric": [
+          {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+            "calibration_mismatches": [],
+            "config_differences": {
+              "alignment_target_gradient": [
+                "detached",
+                "symmetric"
+              ],
+              "experiment_role": [
+                "alignment_control",
+                "alignment_mean_text_log_symmetric"
+              ],
+              "lambda_alignment_mean": [
+                0.0,
+                0.2
+              ]
+            },
+            "config_mismatches": [],
+            "control_artifact": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+            "control_seed": 42,
+            "disallowed_config_differences": [],
+            "duplicate_control_count": 1,
+            "pair_id": "R-MS",
+            "paired_delta": 0.09999999999999998,
+            "peak_delta": 0.09999999999999998,
+            "source_hashes": [
+              "source",
+              "source"
+            ],
+            "status": "MATCHED",
+            "training_seed": 42
+          }
+        ]
+      },
+      "pairwise_comparisons": [
+        {
+          "left_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+          "left_seed": 42,
+          "pair_id": "MD-MS",
+          "paired_delta": null,
+          "reason": "ambiguous duplicate or missing MD/MS arm",
+          "right_artifact": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+          "right_seed": 42,
+          "status": "DUPLICATE_ARM"
+        }
+      ],
+      "requested_horizon": 2,
+      "run_count": 4,
+      "runs": [
+        {
+          "absolute_decay": 0.0,
+          "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_control/run_result.json",
+          "backbone_identity": {
+            "visual_class": "toy",
+            "width": 8
+          },
+          "calibration_validation": {
+            "mismatches": [],
+            "status": "ABSENT"
+          },
+          "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+          "config_hash": "1a305a96c8e4703830ee8f84ddb18f0bb086b28ad05a6eb4fcf9e7074aee3b2c",
+          "dataset": "toy",
+          "errors": [],
+          "evaluation_protocol": {
+            "alignment_fit_scope": "pseudo_train_only",
+            "inference_contract": {
+              "oracle_class_required": false,
+              "photo_prompt_used_for_gallery": true,
+              "photo_prompt_used_for_query": false,
+              "photo_required": false,
+              "required_inputs": [
+                "raw_sketch_image"
+              ],
+              "text_required": false,
+              "text_used_for_predictor": false
+            },
+            "photo_used_for_predictor": false,
+            "ranking_positive_reduction": "mean_over_4_positive_photos",
+            "selection_metric": "full_pseudo_unseen_mAP",
+            "test_used_for_alignment": false,
+            "text_used_for_predictor": false,
+            "train_class_scope": "pseudo_train",
+            "validation_used_for_alignment": false
+          },
+          "evaluation_protocol_hash": "b35519fa97df6f9ee88f7d0dcfc6567c7db9016bb94a1b55858715234dcca6cf",
+          "experiment_role": "alignment_control",
+          "fixed_step": {
+            "mAP": 0.5,
+            "status": "VALID"
+          },
+          "hash_checks": [
+            {
+              "actual_sha256": "5f247962a4a5df298d2db17ae825d5d8b9cb955ef35882c6080dc54a98bf3890",
+              "metadata_sha256": "5f247962a4a5df298d2db17ae825d5d8b9cb955ef35882c6080dc54a98bf3890",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_control/checkpoints/step0.pt",
+              "status": "VERIFIED",
+              "step": 0
+            },
+            {
+              "actual_sha256": "7879c4d78ea26059235323f788ef2b6c50dce0a2001aa58cc254e321686c2961",
+              "metadata_sha256": "7879c4d78ea26059235323f788ef2b6c50dce0a2001aa58cc254e321686c2961",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_control/checkpoints/step2.pt",
+              "status": "VERIFIED",
+              "step": 2
+            }
+          ],
+          "history_steps": [
+            0,
+            2
+          ],
+          "initialization": {
+            "backbone_identity": {
+              "visual_class": "toy",
+              "width": 8
+            },
+            "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "checkpoint": "/tmp/spica-pairing-1i8x5077/alignment_control/checkpoints/step0.pt",
+            "experiment_role": "alignment_control",
+            "gradient_calibration_identity": null,
+            "initial_model_state_hash": "init-42",
+            "initial_text_bank_state_hash": "text-init-42",
+            "manifest_entry_identity": {
+              "entry_pointer": "/entries/0",
+              "entry_sha256": "79a56c764a770200b3b1c07c561ff4f63b1960500b5bd9d41529adb313559640",
+              "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_control/manifest.json",
+              "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+            },
+            "manifest_identity": {
+              "dataset": "toy",
+              "entry_identity": {
+                "train_photo": {
+                  "count": 1,
+                  "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+                },
+                "train_sketch": {
+                  "count": 1,
+                  "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+                },
+                "validation_photo": {
+                  "count": 1,
+                  "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+                },
+                "validation_sketch": {
+                  "count": 1,
+                  "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+                }
+              },
+              "manifest_sha256": {
+                "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+                "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+                "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+              },
+              "pseudo_validation_seed": 3407,
+              "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+            },
+            "optimizer_identity": [
+              {
+                "lr": 0.001,
+                "name": "visual_prompts",
+                "parameter_count": 10,
+                "parameter_names": [
+                  "sketch_prompt",
+                  "photo_prompt"
+                ],
+                "weight_decay": 0.0001
+              }
+            ],
+            "resolved_config": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": null,
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_control",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.0,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "resolved_treatment": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": null,
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_control",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.0,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "run_kind": "pilot",
+            "scheduler_identity": {
+              "_step_count": 1,
+              "last_epoch": 0
+            },
+            "source_snapshot_hash": "source",
+            "split_identity": {
+              "dataset": "toy",
+              "seed": 3407,
+              "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+              "train_class_ids": [
+                1
+              ],
+              "train_photos": 1,
+              "train_sketches": 1,
+              "validation_class_ids": [
+                0
+              ],
+              "validation_photos": 1,
+              "validation_sketches": 1
+            },
+            "status": "VERIFIED",
+            "training_seed": 42
+          },
+          "initialization_regime": "init-42",
+          "manifest_entry_identity": {
+            "entry_pointer": "/entries/0",
+            "entry_sha256": "79a56c764a770200b3b1c07c561ff4f63b1960500b5bd9d41529adb313559640",
+            "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_control/manifest.json",
+            "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+          },
+          "manifest_identity": {
+            "dataset": "toy",
+            "entry_identity": {
+              "train_photo": {
+                "count": 1,
+                "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+              },
+              "train_sketch": {
+                "count": 1,
+                "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+              },
+              "validation_photo": {
+                "count": 1,
+                "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+              },
+              "validation_sketch": {
+                "count": 1,
+                "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+              }
+            },
+            "manifest_sha256": {
+              "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+              "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+              "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+            },
+            "pseudo_validation_seed": 3407,
+            "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+          },
+          "matching_mode": "corrected_v2",
+          "optimizer_identity": [
+            {
+              "lr": 0.001,
+              "name": "visual_prompts",
+              "parameter_count": 10,
+              "parameter_names": [
+                "sketch_prompt",
+                "photo_prompt"
+              ],
+              "weight_decay": 0.0001
+            }
+          ],
+          "peak": {
+            "mAP": 0.5,
+            "step": 2
+          },
+          "requested_horizon": 2,
+          "resolved_config": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": null,
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_control",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.0,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "resolved_treatment": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": null,
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_control",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.0,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "retention": 1.0,
+          "run_kind": "pilot",
+          "sampler_identity": {
+            "batch_size": 32,
+            "classes_per_batch": 16,
+            "negative_photos_per_sketch": 1,
+            "positive_photos_per_sketch": 4,
+            "sketches_per_class": 2,
+            "type": "MatchedClassBatchSampler"
+          },
+          "scheduler_identity": {
+            "_step_count": 1,
+            "last_epoch": 0
+          },
+          "source_hash": "source",
+          "split_identity": {
+            "dataset": "toy",
+            "seed": 3407,
+            "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+            "train_class_ids": [
+              1
+            ],
+            "train_photos": 1,
+            "train_sketches": 1,
+            "validation_class_ids": [
+              0
+            ],
+            "validation_photos": 1,
+            "validation_sketches": 1
+          },
+          "split_identity_hash": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+          "status": "VALID",
+          "text_bank_initialization_hash": "text-init-42",
+          "training_horizon": 2,
+          "training_seed": 42
+        },
+        {
+          "absolute_decay": 0.0,
+          "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/run_result.json",
+          "backbone_identity": {
+            "visual_class": "toy",
+            "width": 8
+          },
+          "calibration_validation": {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+            "mismatches": [],
+            "status": "VERIFIED"
+          },
+          "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+          "config_hash": "35cc8baae7c0e5048454c1d80e932b044ff6e414ab9c1905d206ebd69866e731",
+          "dataset": "toy",
+          "errors": [],
+          "evaluation_protocol": {
+            "alignment_fit_scope": "pseudo_train_only",
+            "inference_contract": {
+              "oracle_class_required": false,
+              "photo_prompt_used_for_gallery": true,
+              "photo_prompt_used_for_query": false,
+              "photo_required": false,
+              "required_inputs": [
+                "raw_sketch_image"
+              ],
+              "text_required": false,
+              "text_used_for_predictor": false
+            },
+            "photo_used_for_predictor": false,
+            "ranking_positive_reduction": "mean_over_4_positive_photos",
+            "selection_metric": "full_pseudo_unseen_mAP",
+            "test_used_for_alignment": false,
+            "text_used_for_predictor": false,
+            "train_class_scope": "pseudo_train",
+            "validation_used_for_alignment": false
+          },
+          "evaluation_protocol_hash": "b35519fa97df6f9ee88f7d0dcfc6567c7db9016bb94a1b55858715234dcca6cf",
+          "experiment_role": "alignment_mean_text_log",
+          "fixed_step": {
+            "mAP": 0.6,
+            "status": "VALID"
+          },
+          "hash_checks": [
+            {
+              "actual_sha256": "69fb20233eb5a49f5ed04d5d99b74a4b610306511e33535f9af33db458389dc5",
+              "metadata_sha256": "69fb20233eb5a49f5ed04d5d99b74a4b610306511e33535f9af33db458389dc5",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step0.pt",
+              "status": "VERIFIED",
+              "step": 0
+            },
+            {
+              "actual_sha256": "a9088f534ae219d5b5ba6ffd129cf031d794e2e6c60051cdba0de4f8466c5b3b",
+              "metadata_sha256": "a9088f534ae219d5b5ba6ffd129cf031d794e2e6c60051cdba0de4f8466c5b3b",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step2.pt",
+              "status": "VERIFIED",
+              "step": 2
+            }
+          ],
+          "history_steps": [
+            0,
+            2
+          ],
+          "initialization": {
+            "backbone_identity": {
+              "visual_class": "toy",
+              "width": 8
+            },
+            "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "checkpoint": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step0.pt",
+            "experiment_role": "alignment_mean_text_log",
+            "gradient_calibration_identity": {
+              "artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+              "calibration_batch_replay_count": 0,
+              "calibration_batch_replay_expected_count": 2,
+              "calibration_batch_replay_prefix_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "calibration_batch_replay_verified": false,
+              "first_batch_replay_verified": false,
+              "fixed_batch_identity_sha256": "d55682a9cd62bc915f96f67ef4e209f2154054ed1e55601a00403c60c0d59f84",
+              "worker_lifecycle_verified": true
+            },
+            "initial_model_state_hash": "init-42",
+            "initial_text_bank_state_hash": "text-init-42",
+            "manifest_entry_identity": {
+              "entry_pointer": "/entries/0",
+              "entry_sha256": "48b3ff9b06c69cb08f849c4c67d283d3fda5398a8182c0aa2702f9bde6523bb5",
+              "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/manifest.json",
+              "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+            },
+            "manifest_identity": {
+              "dataset": "toy",
+              "entry_identity": {
+                "train_photo": {
+                  "count": 1,
+                  "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+                },
+                "train_sketch": {
+                  "count": 1,
+                  "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+                },
+                "validation_photo": {
+                  "count": 1,
+                  "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+                },
+                "validation_sketch": {
+                  "count": 1,
+                  "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+                }
+              },
+              "manifest_sha256": {
+                "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+                "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+                "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+              },
+              "pseudo_validation_seed": 3407,
+              "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+            },
+            "optimizer_identity": [
+              {
+                "lr": 0.001,
+                "name": "visual_prompts",
+                "parameter_count": 10,
+                "parameter_names": [
+                  "sketch_prompt",
+                  "photo_prompt"
+                ],
+                "weight_decay": 0.0001
+              }
+            ],
+            "resolved_config": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "resolved_treatment": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "run_kind": "pilot",
+            "scheduler_identity": {
+              "_step_count": 1,
+              "last_epoch": 0
+            },
+            "source_snapshot_hash": "source",
+            "split_identity": {
+              "dataset": "toy",
+              "seed": 3407,
+              "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+              "train_class_ids": [
+                1
+              ],
+              "train_photos": 1,
+              "train_sketches": 1,
+              "validation_class_ids": [
+                0
+              ],
+              "validation_photos": 1,
+              "validation_sketches": 1
+            },
+            "status": "VERIFIED",
+            "training_seed": 42
+          },
+          "initialization_regime": "init-42",
+          "manifest_entry_identity": {
+            "entry_pointer": "/entries/0",
+            "entry_sha256": "48b3ff9b06c69cb08f849c4c67d283d3fda5398a8182c0aa2702f9bde6523bb5",
+            "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/manifest.json",
+            "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+          },
+          "manifest_identity": {
+            "dataset": "toy",
+            "entry_identity": {
+              "train_photo": {
+                "count": 1,
+                "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+              },
+              "train_sketch": {
+                "count": 1,
+                "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+              },
+              "validation_photo": {
+                "count": 1,
+                "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+              },
+              "validation_sketch": {
+                "count": 1,
+                "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+              }
+            },
+            "manifest_sha256": {
+              "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+              "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+              "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+            },
+            "pseudo_validation_seed": 3407,
+            "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+          },
+          "matching_mode": "corrected_v2",
+          "optimizer_identity": [
+            {
+              "lr": 0.001,
+              "name": "visual_prompts",
+              "parameter_count": 10,
+              "parameter_names": [
+                "sketch_prompt",
+                "photo_prompt"
+              ],
+              "weight_decay": 0.0001
+            }
+          ],
+          "peak": {
+            "mAP": 0.6,
+            "step": 2
+          },
+          "requested_horizon": 2,
+          "resolved_config": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "resolved_treatment": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "retention": 1.0,
+          "run_kind": "pilot",
+          "sampler_identity": {
+            "batch_size": 32,
+            "classes_per_batch": 16,
+            "negative_photos_per_sketch": 1,
+            "positive_photos_per_sketch": 4,
+            "sketches_per_class": 2,
+            "type": "MatchedClassBatchSampler"
+          },
+          "scheduler_identity": {
+            "_step_count": 1,
+            "last_epoch": 0
+          },
+          "source_hash": "source",
+          "split_identity": {
+            "dataset": "toy",
+            "seed": 3407,
+            "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+            "train_class_ids": [
+              1
+            ],
+            "train_photos": 1,
+            "train_sketches": 1,
+            "validation_class_ids": [
+              0
+            ],
+            "validation_photos": 1,
+            "validation_sketches": 1
+          },
+          "split_identity_hash": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+          "status": "VALID",
+          "text_bank_initialization_hash": "text-init-42",
+          "training_horizon": 2,
+          "training_seed": 42
+        },
+        {
+          "absolute_decay": 0.0,
+          "artifact_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/run_result.json",
+          "backbone_identity": {
+            "visual_class": "toy",
+            "width": 8
+          },
+          "calibration_validation": {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+            "mismatches": [],
+            "status": "VERIFIED"
+          },
+          "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+          "config_hash": "36aa7bbf27947ef7b1e034f5b48178ed401f3b87af274d88ebd575362001cb1a",
+          "dataset": "toy",
+          "errors": [],
+          "evaluation_protocol": {
+            "alignment_fit_scope": "pseudo_train_only",
+            "inference_contract": {
+              "oracle_class_required": false,
+              "photo_prompt_used_for_gallery": true,
+              "photo_prompt_used_for_query": false,
+              "photo_required": false,
+              "required_inputs": [
+                "raw_sketch_image"
+              ],
+              "text_required": false,
+              "text_used_for_predictor": false
+            },
+            "photo_used_for_predictor": false,
+            "ranking_positive_reduction": "mean_over_4_positive_photos",
+            "selection_metric": "full_pseudo_unseen_mAP",
+            "test_used_for_alignment": false,
+            "text_used_for_predictor": false,
+            "train_class_scope": "pseudo_train",
+            "validation_used_for_alignment": false
+          },
+          "evaluation_protocol_hash": "b35519fa97df6f9ee88f7d0dcfc6567c7db9016bb94a1b55858715234dcca6cf",
+          "experiment_role": "alignment_mean_text_log_symmetric",
+          "fixed_step": {
+            "mAP": 0.6,
+            "status": "VALID"
+          },
+          "hash_checks": [
+            {
+              "actual_sha256": "8d9ece42db40ce2901a11fc106d65bdc982a3c3f1fcc4d7f4d8aef550c963a01",
+              "metadata_sha256": "8d9ece42db40ce2901a11fc106d65bdc982a3c3f1fcc4d7f4d8aef550c963a01",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/checkpoints/step0.pt",
+              "status": "VERIFIED",
+              "step": 0
+            },
+            {
+              "actual_sha256": "d70d2d435004f35be6243305b742f53db0c10be8de6115c6996d5e2cb9688cd2",
+              "metadata_sha256": "d70d2d435004f35be6243305b742f53db0c10be8de6115c6996d5e2cb9688cd2",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/checkpoints/step2.pt",
+              "status": "VERIFIED",
+              "step": 2
+            }
+          ],
+          "history_steps": [
+            0,
+            2
+          ],
+          "initialization": {
+            "backbone_identity": {
+              "visual_class": "toy",
+              "width": 8
+            },
+            "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "checkpoint": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/checkpoints/step0.pt",
+            "experiment_role": "alignment_mean_text_log_symmetric",
+            "gradient_calibration_identity": {
+              "artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+              "calibration_batch_replay_count": 0,
+              "calibration_batch_replay_expected_count": 2,
+              "calibration_batch_replay_prefix_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "calibration_batch_replay_verified": false,
+              "first_batch_replay_verified": false,
+              "fixed_batch_identity_sha256": "d55682a9cd62bc915f96f67ef4e209f2154054ed1e55601a00403c60c0d59f84",
+              "worker_lifecycle_verified": true
+            },
+            "initial_model_state_hash": "init-42",
+            "initial_text_bank_state_hash": "text-init-42",
+            "manifest_entry_identity": {
+              "entry_pointer": "/entries/0",
+              "entry_sha256": "bda795190d122a2ecd219460fadd4ac648bc8c02cfd96074e557c3749ecd3244",
+              "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/manifest.json",
+              "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+            },
+            "manifest_identity": {
+              "dataset": "toy",
+              "entry_identity": {
+                "train_photo": {
+                  "count": 1,
+                  "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+                },
+                "train_sketch": {
+                  "count": 1,
+                  "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+                },
+                "validation_photo": {
+                  "count": 1,
+                  "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+                },
+                "validation_sketch": {
+                  "count": 1,
+                  "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+                }
+              },
+              "manifest_sha256": {
+                "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+                "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+                "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+              },
+              "pseudo_validation_seed": 3407,
+              "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+            },
+            "optimizer_identity": [
+              {
+                "lr": 0.001,
+                "name": "visual_prompts",
+                "parameter_count": 10,
+                "parameter_names": [
+                  "sketch_prompt",
+                  "photo_prompt"
+                ],
+                "weight_decay": 0.0001
+              }
+            ],
+            "resolved_config": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "symmetric",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log_symmetric",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "resolved_treatment": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "symmetric",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log_symmetric",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "run_kind": "pilot",
+            "scheduler_identity": {
+              "_step_count": 1,
+              "last_epoch": 0
+            },
+            "source_snapshot_hash": "source",
+            "split_identity": {
+              "dataset": "toy",
+              "seed": 3407,
+              "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+              "train_class_ids": [
+                1
+              ],
+              "train_photos": 1,
+              "train_sketches": 1,
+              "validation_class_ids": [
+                0
+              ],
+              "validation_photos": 1,
+              "validation_sketches": 1
+            },
+            "status": "VERIFIED",
+            "training_seed": 42
+          },
+          "initialization_regime": "init-42",
+          "manifest_entry_identity": {
+            "entry_pointer": "/entries/0",
+            "entry_sha256": "bda795190d122a2ecd219460fadd4ac648bc8c02cfd96074e557c3749ecd3244",
+            "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log_symmetric/manifest.json",
+            "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+          },
+          "manifest_identity": {
+            "dataset": "toy",
+            "entry_identity": {
+              "train_photo": {
+                "count": 1,
+                "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+              },
+              "train_sketch": {
+                "count": 1,
+                "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+              },
+              "validation_photo": {
+                "count": 1,
+                "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+              },
+              "validation_sketch": {
+                "count": 1,
+                "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+              }
+            },
+            "manifest_sha256": {
+              "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+              "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+              "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+            },
+            "pseudo_validation_seed": 3407,
+            "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+          },
+          "matching_mode": "corrected_v2",
+          "optimizer_identity": [
+            {
+              "lr": 0.001,
+              "name": "visual_prompts",
+              "parameter_count": 10,
+              "parameter_names": [
+                "sketch_prompt",
+                "photo_prompt"
+              ],
+              "weight_decay": 0.0001
+            }
+          ],
+          "peak": {
+            "mAP": 0.6,
+            "step": 2
+          },
+          "requested_horizon": 2,
+          "resolved_config": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "symmetric",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log_symmetric",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "resolved_treatment": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "symmetric",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log_symmetric",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "retention": 1.0,
+          "run_kind": "pilot",
+          "sampler_identity": {
+            "batch_size": 32,
+            "classes_per_batch": 16,
+            "negative_photos_per_sketch": 1,
+            "positive_photos_per_sketch": 4,
+            "sketches_per_class": 2,
+            "type": "MatchedClassBatchSampler"
+          },
+          "scheduler_identity": {
+            "_step_count": 1,
+            "last_epoch": 0
+          },
+          "source_hash": "source",
+          "split_identity": {
+            "dataset": "toy",
+            "seed": 3407,
+            "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+            "train_class_ids": [
+              1
+            ],
+            "train_photos": 1,
+            "train_sketches": 1,
+            "validation_class_ids": [
+              0
+            ],
+            "validation_photos": 1,
+            "validation_sketches": 1
+          },
+          "split_identity_hash": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+          "status": "VALID",
+          "text_bank_initialization_hash": "text-init-42",
+          "training_horizon": 2,
+          "training_seed": 42
+        },
+        {
+          "absolute_decay": null,
+          "artifact_path": "/tmp/spica-pairing-1i8x5077/higher_map_duplicate/run_result.json",
+          "backbone_identity": {
+            "visual_class": "toy",
+            "width": 8
+          },
+          "calibration_validation": {
+            "artifact_path": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+            "mismatches": [],
+            "status": "VERIFIED"
+          },
+          "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+          "config_hash": "35cc8baae7c0e5048454c1d80e932b044ff6e414ab9c1905d206ebd69866e731",
+          "dataset": "toy",
+          "errors": [
+            "checkpoint mAP mismatch at step 2",
+            "requested horizon checkpoint is incomplete or duplicated",
+            "manifest entry path differs from configured manifest path"
+          ],
+          "evaluation_protocol": {
+            "alignment_fit_scope": "pseudo_train_only",
+            "inference_contract": {
+              "oracle_class_required": false,
+              "photo_prompt_used_for_gallery": true,
+              "photo_prompt_used_for_query": false,
+              "photo_required": false,
+              "required_inputs": [
+                "raw_sketch_image"
+              ],
+              "text_required": false,
+              "text_used_for_predictor": false
+            },
+            "photo_used_for_predictor": false,
+            "ranking_positive_reduction": "mean_over_4_positive_photos",
+            "selection_metric": "full_pseudo_unseen_mAP",
+            "test_used_for_alignment": false,
+            "text_used_for_predictor": false,
+            "train_class_scope": "pseudo_train",
+            "validation_used_for_alignment": false
+          },
+          "evaluation_protocol_hash": "b35519fa97df6f9ee88f7d0dcfc6567c7db9016bb94a1b55858715234dcca6cf",
+          "experiment_role": "alignment_mean_text_log",
+          "fixed_step": {
+            "mAP": null,
+            "status": "INCOMPLETE"
+          },
+          "hash_checks": [
+            {
+              "actual_sha256": "69fb20233eb5a49f5ed04d5d99b74a4b610306511e33535f9af33db458389dc5",
+              "metadata_sha256": "69fb20233eb5a49f5ed04d5d99b74a4b610306511e33535f9af33db458389dc5",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step0.pt",
+              "status": "VERIFIED",
+              "step": 0
+            },
+            {
+              "actual_sha256": "a9088f534ae219d5b5ba6ffd129cf031d794e2e6c60051cdba0de4f8466c5b3b",
+              "metadata_sha256": "a9088f534ae219d5b5ba6ffd129cf031d794e2e6c60051cdba0de4f8466c5b3b",
+              "path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step2.pt",
+              "status": "VERIFIED",
+              "step": 2
+            }
+          ],
+          "history_steps": [
+            0,
+            2
+          ],
+          "initialization": {
+            "backbone_identity": {
+              "visual_class": "toy",
+              "width": 8
+            },
+            "campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "checkpoint": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/checkpoints/step0.pt",
+            "experiment_role": "alignment_mean_text_log",
+            "gradient_calibration_identity": {
+              "artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "artifact_sha256": "9ebff1c89083aa7546889174621dcd93d166889faa4ef9a84a44220a118163ef",
+              "calibration_batch_replay_count": 0,
+              "calibration_batch_replay_expected_count": 2,
+              "calibration_batch_replay_prefix_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "calibration_batch_replay_verified": false,
+              "first_batch_replay_verified": false,
+              "fixed_batch_identity_sha256": "d55682a9cd62bc915f96f67ef4e209f2154054ed1e55601a00403c60c0d59f84",
+              "worker_lifecycle_verified": true
+            },
+            "initial_model_state_hash": "init-42",
+            "initial_text_bank_state_hash": "text-init-42",
+            "manifest_entry_identity": {
+              "entry_pointer": "/entries/0",
+              "entry_sha256": "48b3ff9b06c69cb08f849c4c67d283d3fda5398a8182c0aa2702f9bde6523bb5",
+              "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/manifest.json",
+              "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+            },
+            "manifest_identity": {
+              "dataset": "toy",
+              "entry_identity": {
+                "train_photo": {
+                  "count": 1,
+                  "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+                },
+                "train_sketch": {
+                  "count": 1,
+                  "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+                },
+                "validation_photo": {
+                  "count": 1,
+                  "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+                },
+                "validation_sketch": {
+                  "count": 1,
+                  "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+                }
+              },
+              "manifest_sha256": {
+                "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+                "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+                "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+              },
+              "pseudo_validation_seed": 3407,
+              "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+            },
+            "optimizer_identity": [
+              {
+                "lr": 0.001,
+                "name": "visual_prompts",
+                "parameter_count": 10,
+                "parameter_names": [
+                  "sketch_prompt",
+                  "photo_prompt"
+                ],
+                "weight_decay": 0.0001
+              }
+            ],
+            "resolved_config": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "resolved_treatment": {
+              "alignment_anchor": "text",
+              "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+              "alignment_geometry": "log_map",
+              "alignment_target_gradient": "detached",
+              "batch_size": 32,
+              "calibration_batches": 2,
+              "calibration_target_ratio": 0.1,
+              "classes_per_batch": 16,
+              "classification_location": "query",
+              "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+              "encoder_learning_rate": 1e-05,
+              "encoder_mode": "frozen",
+              "encoder_train_ln_post": false,
+              "encoder_unfreeze_depth": 0,
+              "encoder_weight_decay": 0.0001,
+              "eval_batch_size": 256,
+              "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+              "experiment_manifest_path": "manifest.json",
+              "experiment_role": "alignment_mean_text_log",
+              "lambda_alignment_covariance": 0.0,
+              "lambda_alignment_mean": 0.2,
+              "lambda_cls": 1.0,
+              "lambda_rank": 1.0,
+              "margin": 0.2,
+              "max_steps": 2,
+              "model_name": "toy-model",
+              "num_positive_photos": 4,
+              "official_unseen_used_for_selection": false,
+              "pretrained": "openai",
+              "probe_steps": [
+                0,
+                2
+              ],
+              "prompt_mode": "prompt_only",
+              "prompt_template": "a photo of a {}",
+              "pseudo_val_num_classes": 1,
+              "pseudo_val_seed": 3407,
+              "query_chunk_size": 256,
+              "run_kind": "pilot",
+              "seed": 42,
+              "sketches_per_class": 2,
+              "soft_prompt_learning_rate": 0.001,
+              "soft_prompt_length": 4,
+              "soft_prompt_weight_decay": 0.0001,
+              "tau_cls": 0.07,
+              "text_mode": "soft",
+              "train_class_scope": "pseudo_train",
+              "train_photo_prompt": true,
+              "train_sketch_prompt": true,
+              "train_visual_layernorm": false,
+              "transport_enabled": false,
+              "transport_mode": "none",
+              "visual_layernorm_learning_rate": 1e-06,
+              "visual_layernorm_weight_decay": 0.0,
+              "visual_prompt_learning_rate": 0.001,
+              "visual_prompt_length": 3,
+              "visual_prompt_weight_decay": 0.0001
+            },
+            "run_kind": "pilot",
+            "scheduler_identity": {
+              "_step_count": 1,
+              "last_epoch": 0
+            },
+            "source_snapshot_hash": "source",
+            "split_identity": {
+              "dataset": "toy",
+              "seed": 3407,
+              "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+              "train_class_ids": [
+                1
+              ],
+              "train_photos": 1,
+              "train_sketches": 1,
+              "validation_class_ids": [
+                0
+              ],
+              "validation_photos": 1,
+              "validation_sketches": 1
+            },
+            "status": "VERIFIED",
+            "training_seed": 42
+          },
+          "initialization_regime": "init-42",
+          "manifest_entry_identity": {
+            "entry_pointer": "/entries/0",
+            "entry_sha256": "48b3ff9b06c69cb08f849c4c67d283d3fda5398a8182c0aa2702f9bde6523bb5",
+            "manifest_path": "/tmp/spica-pairing-1i8x5077/alignment_mean_text_log/manifest.json",
+            "manifest_sha256": "06f6405b90601a469018170cba3f22020580a3db9bedc5d6b415f62462848313"
+          },
+          "manifest_identity": {
+            "dataset": "toy",
+            "entry_identity": {
+              "train_photo": {
+                "count": 1,
+                "sha256": "91a005996c42f8378255d2250d8eb0bf5177df581477f43ffdab1122bfdd7973"
+              },
+              "train_sketch": {
+                "count": 1,
+                "sha256": "9ca2f97dd4f92a5ef5a2e57af202e3c1220634cbfce7edcf9549ae4ba2e2e1e9"
+              },
+              "validation_photo": {
+                "count": 1,
+                "sha256": "4497050fd2dfe90da6a6cbc8e3a40d203e6fbe628a638c997b84d6332d016468"
+              },
+              "validation_sketch": {
+                "count": 1,
+                "sha256": "6c8a1e63ddf35ec4e37696d16f43380c2514d4cab442ff1cce253ff66203e84d"
+              }
+            },
+            "manifest_sha256": {
+              "train_class_map": "e71c99855c11e836efc500e29ce607b759a35d06e4a71b7dfab1890c4ff2fb62",
+              "train_photo": "2053e24d3d225ba69113c471314b7902a4d0568b2979ce3bbadd250caf9f6daa",
+              "train_sketch": "e6a5e51d5ee2284b3c101880e20c2aea5db5a9292ec424f671613dec8b4c457c"
+            },
+            "pseudo_validation_seed": 3407,
+            "sha256": "76fc0fbc850941f855917e7147ee52582abc10997ac6c690cb10e43e561523e9"
+          },
+          "matching_mode": "corrected_v2",
+          "optimizer_identity": [
+            {
+              "lr": 0.001,
+              "name": "visual_prompts",
+              "parameter_count": 10,
+              "parameter_names": [
+                "sketch_prompt",
+                "photo_prompt"
+              ],
+              "weight_decay": 0.0001
+            }
+          ],
+          "peak": {
+            "mAP": null,
+            "step": null
+          },
+          "requested_horizon": 2,
+          "resolved_config": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "resolved_treatment": {
+            "alignment_anchor": "text",
+            "alignment_calibration_artifact": "/tmp/spica-pairing-1i8x5077/calibration.json",
+            "alignment_geometry": "log_map",
+            "alignment_target_gradient": "detached",
+            "batch_size": 32,
+            "calibration_batches": 2,
+            "calibration_target_ratio": 0.1,
+            "classes_per_batch": 16,
+            "classification_location": "query",
+            "data_config": "/tmp/spica-pairing-1i8x5077/data.yaml",
+            "encoder_learning_rate": 1e-05,
+            "encoder_mode": "frozen",
+            "encoder_train_ln_post": false,
+            "encoder_unfreeze_depth": 0,
+            "encoder_weight_decay": 0.0001,
+            "eval_batch_size": 256,
+            "experiment_campaign": "objective_alignment_corrected_pilot_2026-09-05",
+            "experiment_manifest_path": "manifest.json",
+            "experiment_role": "alignment_mean_text_log",
+            "lambda_alignment_covariance": 0.0,
+            "lambda_alignment_mean": 0.2,
+            "lambda_cls": 1.0,
+            "lambda_rank": 1.0,
+            "margin": 0.2,
+            "max_steps": 2,
+            "model_name": "toy-model",
+            "num_positive_photos": 4,
+            "official_unseen_used_for_selection": false,
+            "pretrained": "openai",
+            "probe_steps": [
+              0,
+              2
+            ],
+            "prompt_mode": "prompt_only",
+            "prompt_template": "a photo of a {}",
+            "pseudo_val_num_classes": 1,
+            "pseudo_val_seed": 3407,
+            "query_chunk_size": 256,
+            "run_kind": "pilot",
+            "seed": 42,
+            "sketches_per_class": 2,
+            "soft_prompt_learning_rate": 0.001,
+            "soft_prompt_length": 4,
+            "soft_prompt_weight_decay": 0.0001,
+            "tau_cls": 0.07,
+            "text_mode": "soft",
+            "train_class_scope": "pseudo_train",
+            "train_photo_prompt": true,
+            "train_sketch_prompt": true,
+            "train_visual_layernorm": false,
+            "transport_enabled": false,
+            "transport_mode": "none",
+            "visual_layernorm_learning_rate": 1e-06,
+            "visual_layernorm_weight_decay": 0.0,
+            "visual_prompt_learning_rate": 0.001,
+            "visual_prompt_length": 3,
+            "visual_prompt_weight_decay": 0.0001
+          },
+          "retention": null,
+          "run_kind": "pilot",
+          "sampler_identity": {
+            "batch_size": 32,
+            "classes_per_batch": 16,
+            "negative_photos_per_sketch": 1,
+            "positive_photos_per_sketch": 4,
+            "sketches_per_class": 2,
+            "type": "MatchedClassBatchSampler"
+          },
+          "scheduler_identity": {
+            "_step_count": 1,
+            "last_epoch": 0
+          },
+          "source_hash": "source",
+          "split_identity": {
+            "dataset": "toy",
+            "seed": 3407,
+            "sha256": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+            "train_class_ids": [
+              1
+            ],
+            "train_photos": 1,
+            "train_sketches": 1,
+            "validation_class_ids": [
+              0
+            ],
+            "validation_photos": 1,
+            "validation_sketches": 1
+          },
+          "split_identity_hash": "24950ce8a2f1429d649daab6f4017620b458922cb49816bab56cd4d9b0cd7488",
+          "status": "ARTIFACT_INVALID",
+          "text_bank_initialization_hash": "text-init-42",
+          "training_horizon": 2,
+          "training_seed": 42
+        }
+      ],
+      "summaries": [
+        {
+          "fixed_mAP_mean": {
+            "count": 1,
+            "mean": 0.5,
+            "sample_std": null,
+            "values": [
+              0.5
+            ]
+          },
+          "missing_or_incomplete_runs": [],
+          "paired_fixed_delta": {
+            "count": 0,
+            "mean": null,
+            "sample_std": null,
+            "values": []
+          },
+          "peak_mAP_mean": {
+            "count": 1,
+            "mean": 0.5,
+            "sample_std": null,
+            "values": [
+              0.5
+            ]
+          },
+          "role": "alignment_control",
+          "run_count": 1,
+          "unique_training_seeds": [
+            42
+          ]
+        },
+        {
+          "fixed_mAP_mean": {
+            "count": 1,
+            "mean": 0.6,
+            "sample_std": null,
+            "values": [
+              0.6
+            ]
+          },
+          "missing_or_incomplete_runs": [
+            "/tmp/spica-pairing-1i8x5077/higher_map_duplicate/run_result.json"
+          ],
+          "paired_fixed_delta": {
+            "count": 0,
+            "mean": null,
+            "sample_std": null,
+            "values": []
+          },
+          "peak_mAP_mean": {
+            "count": 1,
+            "mean": 0.6,
+            "sample_std": null,
+            "values": [
+              0.6
+            ]
+          },
+          "role": "alignment_mean_text_log",
+          "run_count": 2,
+          "unique_training_seeds": [
+            42
+          ]
+        },
+        {
+          "fixed_mAP_mean": {
+            "count": 1,
+            "mean": 0.6,
+            "sample_std": null,
+            "values": [
+              0.6
+            ]
+          },
+          "missing_or_incomplete_runs": [],
+          "paired_fixed_delta": {
+            "count": 1,
+            "mean": 0.09999999999999998,
+            "sample_std": null,
+            "values": [
+              0.09999999999999998
+            ]
+          },
+          "peak_mAP_mean": {
+            "count": 1,
+            "mean": 0.6,
+            "sample_std": null,
+            "values": [
+              0.6
+            ]
+          },
+          "role": "alignment_mean_text_log_symmetric",
+          "run_count": 1,
+          "unique_training_seeds": [
+            42
+          ]
+        }
+      ],
+      "unexpected_roles": []
+    }
+  ],
+  "matching_policy": {
+    "calibration_artifact_policy": "corrected pilot references are verified, not ignored",
+    "comparison_specifications": {
+      "corrected_mean_only_pilot": {
+        "MD-MS": {
+          "allowed_config_differences": [
+            "alignment_target_gradient",
+            "experiment_name",
+            "experiment_role"
+          ],
+          "equal_config_keys": [
+            "lambda_alignment_mean"
+          ],
+          "left": "alignment_mean_text_log",
+          "right": "alignment_mean_text_log_symmetric"
+        },
+        "R-MD": {
+          "allowed_config_differences": [
+            "alignment_calibration_artifact",
+            "experiment_name",
+            "experiment_role",
+            "lambda_alignment_mean"
+          ],
+          "equal_config_keys": [],
+          "left": "alignment_control",
+          "right": "alignment_mean_text_log"
+        },
+        "R-MS": {
+          "allowed_config_differences": [
+            "alignment_calibration_artifact",
+            "alignment_target_gradient",
+            "experiment_name",
+            "experiment_role",
+            "lambda_alignment_mean"
+          ],
+          "equal_config_keys": [],
+          "left": "alignment_control",
+          "right": "alignment_mean_text_log_symmetric"
+        }
+      },
+      "historical_alignment": {
+        "allowed_config_differences": [
+          "alignment_anchor",
+          "alignment_geometry",
+          "alignment_target_gradient",
+          "batch_size",
+          "classes_per_batch",
+          "classification_location",
+          "encoder_mode",
+          "encoder_train_ln_post",
+          "encoder_unfreeze_depth",
+          "experiment_name",
+          "experiment_role",
+          "lambda_alignment_covariance",
+          "lambda_alignment_mean",
+          "lambda_cls",
+          "lambda_rank",
+          "num_positive_photos",
+          "official_unseen_used_for_selection",
+          "prompt_mode",
+          "pseudo_val_seed",
+          "seed",
+          "sketches_per_class",
+          "text_mode",
+          "train_photo_prompt",
+          "train_sketch_prompt",
+          "train_visual_layernorm",
+          "transport_enabled",
+          "transport_mode",
+          "visual_prompt_length"
+        ],
+        "calibration_artifact": "not part of historical matching"
+      }
+    },
+    "duplicate_rule": "ambiguous duplicate R/MD/MS arms are reported and paired deltas are suppressed",
+    "fallback_control_mean": false,
+    "horizon_rule": "explicit --horizon; missing final step is INCOMPLETE",
+    "primary_excludes_smoke_pilot": "campaigns are reported separately; no cross-campaign matching",
+    "same_seed_only": true
+  },
+  "requested_horizon": 2,
+  "schema_version": 2
+}
+13 pairing mutation checks passed
+EXIT_CODE=0

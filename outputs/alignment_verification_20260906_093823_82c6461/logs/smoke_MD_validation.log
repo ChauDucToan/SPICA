@@ -1,0 +1,4 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python - (validate completed fixed smoke MD)
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+VALID [] MATCHED
+EXIT_CODE=0

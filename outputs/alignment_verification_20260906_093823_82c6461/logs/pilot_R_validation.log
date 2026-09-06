@@ -1,0 +1,6 @@
+COMMAND: CUDA_VISIBLE_DEVICES="" PYTHONPATH=. direnv exec . uv run --frozen --no-sync python - (validate completed pilot R at 1800)
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+VALID []
+fixed_step {'status': 'VALID', 'mAP': 0.6715752530134864}
+runtime {'peak_gpu_memory_bytes': 8425837568, 'seconds_per_update': 0.5917160803338952, 'training_seconds': 1065.0889446010115, 'updates_this_run': 1800}
+EXIT_CODE=0

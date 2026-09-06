@@ -1,0 +1,29 @@
+COMMAND: direnv exec . uv run --frozen --no-sync python - (CUDA preflight; script saved in logs/cuda_preflight.py)
+Sun Sep  6 09:38:52 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.91.07              Driver Version: 595.91.07      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 5070 Ti     On  |   00000000:02:00.0  On |                  N/A |
+|  0%   41C    P8             19W /  255W |      10MiB /  16303MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+/nix/store/5pfbkh57zv5znqhd1n0zc2qwliawvgq8-nvidia-x11-595.91.07/lib/libcuda.so.595.91.07
+[0mdirenv: loading ~/Desktop/Projects/spica/.envrc
+python /home/oslamelon/Desktop/Projects/spica/.venv/bin/python3 torch 2.13.0+cu130 build_cuda 13.0
+LD_LIBRARY_PATH /run/opengl-driver/lib:/nix/store/p5c2hfgw9pipp2vd0xvxjmly99nbsdki-pipewire-1.6.8-jack/lib
+cuda_available True
+gpu NVIDIA GeForce RTX 5070 Ti memory_free_total (16351625216, 16602497024)
+FORWARD_BACKWARD_SYNCHRONIZE_PASS 260.47552490234375 9.130953788757324
+EXIT_CODE=0

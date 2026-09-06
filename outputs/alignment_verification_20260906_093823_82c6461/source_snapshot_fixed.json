@@ -1,0 +1,1086 @@
+{
+  "sha256": "a30cb43ecc0dfebafc47d3a214c6c61803d03148f1ebc901b4d9bab1546ff3b9",
+  "file_count": 216,
+  "manifest": [
+    {
+      "path": "README.md",
+      "sha256": "aaccbb29c139e8b23a308ec9f6050398d286224be28ddb24abaa57d420bc7563",
+      "bytes": 1964
+    },
+    {
+      "path": "configs/data/quickdraw_80_30.yaml",
+      "sha256": "75613a99dacd71a0e41ea8b64b1f73ecabe6d1598aa6fc13950ead04ef7977bb",
+      "bytes": 333
+    },
+    {
+      "path": "configs/data/sketchy_100_25.yaml",
+      "sha256": "722cac0ae72812a5fd009f5013a9c76f646d257055691d8886fd010bb63c4a9a",
+      "bytes": 416
+    },
+    {
+      "path": "configs/data/sketchy_104_21.yaml",
+      "sha256": "5b7a9f4eaf9f7a76974267e7d7547a68f9125fac4dce6a05ee448d966da51042",
+      "bytes": 416
+    },
+    {
+      "path": "configs/data/tuberlin_220_30.yaml",
+      "sha256": "f384563c7fb4387f397a22415f844e4bcfbfb5a5610cf9d4d2e5fe28a234cfe2",
+      "bytes": 392
+    },
+    {
+      "path": "configs/evaluate_deterministic.yaml",
+      "sha256": "f3468c2a1be8a7ea4b828f0b08bd9f752faf426a1d64dd97aa20a25dfa36d9a1",
+      "bytes": 848
+    },
+    {
+      "path": "configs/evaluate_deterministic_k3.yaml",
+      "sha256": "0f94216c0ca039550f6fd56f512350b7d97fce2b2f8b7e608de7261a57d6f0c5",
+      "bytes": 750
+    },
+    {
+      "path": "configs/evaluate_frozen_prompt.yaml",
+      "sha256": "9434121aee6c40a75cd06e7adb60fa0f320794cf0394da581cde03d774486f08",
+      "bytes": 430
+    },
+    {
+      "path": "configs/evaluate_jepa.yaml",
+      "sha256": "dbf784ea51dbea2912833cdfe9f6e76caf9c23de87bc86d3c1fa62becf229870",
+      "bytes": 726
+    },
+    {
+      "path": "configs/evaluate_movmf.yaml",
+      "sha256": "e2f7c0d0427c4fe06288dab82fc6d5e7230d705f26ccaa1658e4083562a5830c",
+      "bytes": 1140
+    },
+    {
+      "path": "configs/evaluate_text_fusion.yaml",
+      "sha256": "ccdce7c008bb6b686b74dabf25aabe9e67c06819fb0d67675b4ee640ec5ca7dc",
+      "bytes": 999
+    },
+    {
+      "path": "configs/evaluate_transport.yaml",
+      "sha256": "a1b322d732234365c4187343cd4919377149c23ba8c81a70a68ef45d6ea7a8e4",
+      "bytes": 645
+    },
+    {
+      "path": "configs/evaluate_vmf.yaml",
+      "sha256": "205e54ba3798b8a10cb57adb508be6e3b926a7eccee4bc52e8fbd88849a64f11",
+      "bytes": 730
+    },
+    {
+      "path": "configs/experiments/alignment_control.yaml",
+      "sha256": "5ead036b0d691605c36ac713bb267d105ee8e233344c61bdb8e95f3c0e7ea670",
+      "bytes": 166
+    },
+    {
+      "path": "configs/experiments/alignment_cov_text_log.yaml",
+      "sha256": "205cd415a957b9a6e98fa1a5203c8331241c83424cb3cf733e3b2613f63b3d7a",
+      "bytes": 171
+    },
+    {
+      "path": "configs/experiments/alignment_full_chordal.yaml",
+      "sha256": "d3b18e0b8a57e5bf8d84e4f0ac4ece6a801072c28ae1c9a593ec4ae9a1fbfe18",
+      "bytes": 171
+    },
+    {
+      "path": "configs/experiments/alignment_full_photo_anchor.yaml",
+      "sha256": "3a376cbb81ebc0e71954e3ccd081480f2502fb6f0dc6c0482c90f1f2d65b20a2",
+      "bytes": 182
+    },
+    {
+      "path": "configs/experiments/alignment_full_text_log.yaml",
+      "sha256": "a212c55a9423da528517d0260c641a787e67db9fc0141fb27075ee9a7217478d",
+      "bytes": 172
+    },
+    {
+      "path": "configs/experiments/alignment_mean_text_log.yaml",
+      "sha256": "a069260a6956477869e438e5368bb79ef777f6826452de7445f9804127e1ddeb",
+      "bytes": 172
+    },
+    {
+      "path": "configs/experiments/alignment_mean_text_log_symmetric.yaml",
+      "sha256": "157a5b284883ab9f205eac3286ae453ce6c6b836e68f2fa68fe930c8712a7b40",
+      "bytes": 219
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP0.yaml",
+      "sha256": "fff6dbeda63f9ead5d301dadfc713eafd1fbc57f350ba7816dd4d85b042094d8",
+      "bytes": 334
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP1.yaml",
+      "sha256": "abc1a21b2f68ff0582700207aea41c679c3c4f91c5d066eaa1c5be7275332a8a",
+      "bytes": 139
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP1S.yaml",
+      "sha256": "5613de33e8c04e055bc24e3422c50de389a37f2ee785dc4ca93f6980eedc83ba",
+      "bytes": 323
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP2.yaml",
+      "sha256": "328b31f024d7cc5b475d9eb59b5593d5f32d89816eec441f26cfbe873bcd0b66",
+      "bytes": 170
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP3.yaml",
+      "sha256": "f24d2637043208d1e009762167809ddb7bf7fae111b4eb9dc302f93d9a617ba7",
+      "bytes": 170
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP4.yaml",
+      "sha256": "c80ebd767f0dc2b64a2c09c9641130fc51cffcef0a77ad935540af7db3f5b08b",
+      "bytes": 236
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP5.yaml",
+      "sha256": "b85e721f2c12c671b3561142a41d3ca1b103f0be6e8d5e3de41f5f7d98cb4645",
+      "bytes": 340
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_FP_LN.yaml",
+      "sha256": "b06f4b65716f30b3ca0c0f337255fc674c8980d10d4406fb4d8a401560a1d5a5",
+      "bytes": 275
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_final_FP2.yaml",
+      "sha256": "302082ef919bb4b503e6c089092798ee2a6d88ba4318d3e77d7099eaeb89a6e0",
+      "bytes": 318
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_final_FP3.yaml",
+      "sha256": "9a01a7f0723c7f5d71b5dc5883dd974f42f37b193122b94ced719eb4098e93ae",
+      "bytes": 318
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_final_FP3S.yaml",
+      "sha256": "96110d036ba4384cf025f75af6fdaa7c916589bad940bbe62e091b9f50cdcf4d",
+      "bytes": 596
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_final_FP5.yaml",
+      "sha256": "ffdea4c2497737862fe9eff2466496ca42decc91ac42c7a2e9dcddcc6d713348",
+      "bytes": 403
+    },
+    {
+      "path": "configs/experiments/frozen_prompt_final_FP_LN.yaml",
+      "sha256": "90d32577f82676007b55a7d007580319391a2594535973f79bbf0decc46264cd",
+      "bytes": 403
+    },
+    {
+      "path": "configs/experiments/jepa_j0_frozen_m1.yaml",
+      "sha256": "ea7058f2609ca9ce9f191565cbe928fa95c46c0ceec3d8c8dbe5bce312b4890e",
+      "bytes": 215
+    },
+    {
+      "path": "configs/experiments/jepa_j1_partial_m1.yaml",
+      "sha256": "de3bfb255d69280b76b9033136ebe18e6265985be7386340c93e4a61ae694daa",
+      "bytes": 217
+    },
+    {
+      "path": "configs/experiments/jepa_j2_full_m1.yaml",
+      "sha256": "2d6c2e36dd1874c0496efbd32908e351ff43898071b1eae352da7d2fa431fd2c",
+      "bytes": 211
+    },
+    {
+      "path": "configs/experiments/jepa_j3_partial_m3.yaml",
+      "sha256": "559fff213a079ed69865abb1e09108c5cc5ef585b81d3eb94412f753911f5acd",
+      "bytes": 217
+    },
+    {
+      "path": "configs/experiments/jepa_j4_partial_m3_text.yaml",
+      "sha256": "baba5a05c8bdf5a94a9db3e3059af1d1a571ab111e8907d207f233362f9613a1",
+      "bytes": 222
+    },
+    {
+      "path": "configs/experiments/jepa_j5_partial_m3_vicreg.yaml",
+      "sha256": "236dc153f9e3c652584e085e4d194e58e0c1f6b0f5087c0c5768b5eea9c889b6",
+      "bytes": 226
+    },
+    {
+      "path": "configs/experiments/jepa_j6_partial_m3_sigreg.yaml",
+      "sha256": "34a2dd4e98d7bd2bfde8d2d6c103305e05ab35b2d71bb5615592a593f8f91716",
+      "bytes": 226
+    },
+    {
+      "path": "configs/experiments/jepa_soft_prompt_j4.yaml",
+      "sha256": "8fd77fcded4a86080f0e19eff4543d8dd87be4721c00e1c09a217cb096fd1f74",
+      "bytes": 291
+    },
+    {
+      "path": "configs/experiments/movmf_k3_dominant_satellite.yaml",
+      "sha256": "782e9d3319d40f0ba3fae75d23f80603d45685f0c273f3384934e416a58693b9",
+      "bytes": 793
+    },
+    {
+      "path": "configs/experiments/sketchy_b32_margin.yaml",
+      "sha256": "65388a25d7b8a879e17f985ed8e4e5b516f7b5fabe7b630ea2af59142c538df1",
+      "bytes": 329
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p1_A_trainable_restored.yaml",
+      "sha256": "7fc7e531f460bbcd8ad46857d48941401b8e93870a770feb65734c1344473a7b",
+      "bytes": 813
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p1_B_frozen_restored.yaml",
+      "sha256": "4a75141efaa338384222ced518e48a17f581ae47146580160ee36478ecb9d315",
+      "bytes": 808
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p1_C_trainable_reset.yaml",
+      "sha256": "cf541dbb996fbe624a4ad04dbd8fc0322a2e6ee8cc3361ec4dcb8ce4083dc423",
+      "bytes": 808
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p1_D_frozen_reset.yaml",
+      "sha256": "6dd38c802b1d15cb060db480a62195bd22b4948ab87c79d82def72e12f765135",
+      "bytes": 803
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p1_source73.yaml",
+      "sha256": "10e3402a1d9aa508bd9d81a44c054aad8e0281ef5fd05ad514ce665139488778",
+      "bytes": 687
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p2_S1_no_direction.yaml",
+      "sha256": "e45ad4192c794d8476c0993bbd7c6c029841c49e3b7b9e1bc925b48a9f722ab5",
+      "bytes": 1026
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p2_S2_class_centroid.yaml",
+      "sha256": "a6668b70bfe244357e7782b49c230ccb0d07a4dbcd167f3a3497bf433ec88062",
+      "bytes": 1061
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p2_S3_moving.yaml",
+      "sha256": "34d39bb8891e3aef980d07a0e2038c9d78464f789c7269690323acf44925a408",
+      "bytes": 1022
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p2_S4_fixed_reference.yaml",
+      "sha256": "1da918174d9486695cd2ab908f86101552126ba47d23535013f8d99a7a1c6f31",
+      "bytes": 1040
+    },
+    {
+      "path": "configs/experiments/transport_corrected_p2_stage1.yaml",
+      "sha256": "82141f3305079872ff4b49708e1d78aebb371af8180c4f3195c555986e944792",
+      "bytes": 700
+    },
+    {
+      "path": "configs/experiments/transport_deterministic_k1_endpoint0.yaml",
+      "sha256": "2d924f64b9201fe1c645827a5f15c494a8d05a80294e70d2fb0be4f0494e6aaf",
+      "bytes": 531
+    },
+    {
+      "path": "configs/experiments/transport_deterministic_k2.yaml",
+      "sha256": "40d41041fdfc1153b75cfc6a574baff7aeaff2896d5077106a29b8ddc64c58c2",
+      "bytes": 401
+    },
+    {
+      "path": "configs/experiments/transport_deterministic_k2_endpoint0.yaml",
+      "sha256": "d6939327a5ad6354ecb9f87377e48a875a569560dfbdfd9f9c9bc7b4d263c1a6",
+      "bytes": 531
+    },
+    {
+      "path": "configs/experiments/transport_deterministic_k4_endpoint0.yaml",
+      "sha256": "b7c6608633f3e09e6e23d7886c97aa01635dedbb57727622f106e71a7c9c2f4b",
+      "bytes": 531
+    },
+    {
+      "path": "configs/experiments/transport_deterministic_k8_endpoint0.yaml",
+      "sha256": "c9e4092caec71f15b057c5a429747d6f528e45361654a75cc1ee1b07da77d787",
+      "bytes": 531
+    },
+    {
+      "path": "configs/experiments/transport_direction_class_centroid.yaml",
+      "sha256": "67d2da449cc60daaf3ebb30cc3c04cb0e26d41e3aaac10f763c3a8732261eaf6",
+      "bytes": 569
+    },
+    {
+      "path": "configs/experiments/transport_direction_fixed.yaml",
+      "sha256": "deff3ff4979bd12733a24c9c97659fbfb6e00d8fa5e5ef5a774ac594d0b66827",
+      "bytes": 538
+    },
+    {
+      "path": "configs/experiments/transport_direction_moving.yaml",
+      "sha256": "d04a08d6224994b64bcff83d3bc4639740a159f743a4b51a7e0016e7e5b6d74c",
+      "bytes": 512
+    },
+    {
+      "path": "configs/experiments/transport_direction_none.yaml",
+      "sha256": "2a19aa71f1bd4bad7b231083e645468ec858981559859ead310ac3da9c55a81c",
+      "bytes": 522
+    },
+    {
+      "path": "configs/experiments/transport_endpoint_0.1.yaml",
+      "sha256": "f87c207b4d5f2af9bc4da4a0a45e3b73eff8e30a50f240da2634f48008ea7bb8",
+      "bytes": 612
+    },
+    {
+      "path": "configs/experiments/transport_endpoint_0.5.yaml",
+      "sha256": "f0b11be2c8de463f72b63447a5d971388a0aa0487371f501914bff4a12bddf6a",
+      "bytes": 612
+    },
+    {
+      "path": "configs/experiments/transport_endpoint_0.yaml",
+      "sha256": "ccdff76c5dcfeb773f409c581232009db0c3e50fa17be69b6fe55e57b4f8e6bf",
+      "bytes": 608
+    },
+    {
+      "path": "configs/experiments/transport_factorial_base_no_text.yaml",
+      "sha256": "4afb286e5477aa78811f2e46eb0d5c5ac0d8da80ad87dbf27104644ac1425710",
+      "bytes": 651
+    },
+    {
+      "path": "configs/experiments/transport_factorial_base_text.yaml",
+      "sha256": "a1da6670c52d7ecd0ae2872dfdecf0483a1942c479b9e5783459919f3c923f37",
+      "bytes": 646
+    },
+    {
+      "path": "configs/experiments/transport_factorial_transport_no_text.yaml",
+      "sha256": "2443cb97ab5d5abfb974b117e1458e4e382c3c6d12f18763426fdcf6f436749f",
+      "bytes": 785
+    },
+    {
+      "path": "configs/experiments/transport_factorial_transport_text.yaml",
+      "sha256": "b9793859bd68ba43b9c099bf3585698f47b6ea8fc11dc4c1dbc4a745b8720bcc",
+      "bytes": 798
+    },
+    {
+      "path": "configs/experiments/transport_freeze_100.yaml",
+      "sha256": "85ee1af63809ba04466d9b837ff4bf33d4c56f09306100e22bf4401a191d6a6b",
+      "bytes": 843
+    },
+    {
+      "path": "configs/experiments/transport_freeze_44.yaml",
+      "sha256": "62bfdf368e57f82f26f429f1426ab7c00834abdba6204cd45d60b148e45ce947",
+      "bytes": 840
+    },
+    {
+      "path": "configs/experiments/transport_freeze_73.yaml",
+      "sha256": "82176fa7887c159ccaef21a5458559051fe02eb2177fda479d1d63f451751768",
+      "bytes": 840
+    },
+    {
+      "path": "configs/experiments/transport_freeze_after_warmup.yaml",
+      "sha256": "41cace4fa7616f4f8aad6b5f0d913579b33e6fe50c0f01c98deb4762c6a4e16c",
+      "bytes": 765
+    },
+    {
+      "path": "configs/experiments/transport_freeze_optimizer_continue.yaml",
+      "sha256": "8181567d7a0fb1a2ceb02ddda94871d10f3d0bfbd40e155d4a607be0fa6801aa",
+      "bytes": 613
+    },
+    {
+      "path": "configs/experiments/transport_movmf_k2.yaml",
+      "sha256": "d94452b9202c89a4514f9ac89649cb64f82572b195de323bfce19b6b617d508a",
+      "bytes": 412
+    },
+    {
+      "path": "configs/experiments/transport_movmf_k4.yaml",
+      "sha256": "d916070827d982869da04fc88c19f6618260de7a3663968743748bb7b8588478",
+      "bytes": 370
+    },
+    {
+      "path": "configs/experiments/transport_movmf_k8.yaml",
+      "sha256": "7bbde7b32e7925db91fc1d37355fd44c5c706f5a65a454ebb422822f90c07c75",
+      "bytes": 370
+    },
+    {
+      "path": "configs/experiments/transport_multi_photo2.yaml",
+      "sha256": "20eb4aa253312a3053171a228dc8f3df12fc62a182a33f236a48ec4e289235ba",
+      "bytes": 571
+    },
+    {
+      "path": "configs/experiments/transport_multi_photo4.yaml",
+      "sha256": "6439e4dfcd13fa3d99af082cbf756b06eb8a5d89462d9c07a99527cbbbc2631c",
+      "bytes": 571
+    },
+    {
+      "path": "configs/experiments/transport_multi_photo8.yaml",
+      "sha256": "e21624a3bef54e2706b3b7910134bdd7a2687483c04cda5cfda3e97eaff4530d",
+      "bytes": 571
+    },
+    {
+      "path": "configs/experiments/transport_rho_cosine75.yaml",
+      "sha256": "43ef500e0cdd314977918e6182087bca7da8c53f875fffd23e1142994cdcd808",
+      "bytes": 500
+    },
+    {
+      "path": "configs/experiments/transport_rho_fixed15.yaml",
+      "sha256": "4de64b54184883e63327344607a25c2dd54fa3d446d24881ec73d72336d770b0",
+      "bytes": 489
+    },
+    {
+      "path": "configs/experiments/transport_rho_learned.yaml",
+      "sha256": "497c076993f8e17ee9291e63044968435671d1852a92c468ffafbcb69acc57fb",
+      "bytes": 499
+    },
+    {
+      "path": "configs/experiments/transport_rho_linear75.yaml",
+      "sha256": "bf20e0639d8cf1cbe6ab9a5ae77ba126cfc4810d9115af9e8e4674531ef96e17",
+      "bytes": 500
+    },
+    {
+      "path": "configs/experiments/transport_rho_zero.yaml",
+      "sha256": "a43fab2b42cab9038ab0fa9ac3cc4564c408c953e2c47002c6fd977c24a7dfd8",
+      "bytes": 471
+    },
+    {
+      "path": "configs/experiments/transport_t1_residual.yaml",
+      "sha256": "0ed1c1328154a6bc28d2125e43d5f006ac131d09b8ed1ec872e23a73eb89b2f1",
+      "bytes": 313
+    },
+    {
+      "path": "configs/experiments/transport_t2_bounded_residual.yaml",
+      "sha256": "70ce80b10cb5f5f0c347239dcc85a801dcda0d16205704411b0515a4ea02ce68",
+      "bytes": 363
+    },
+    {
+      "path": "configs/experiments/transport_t3_tangent_k1.yaml",
+      "sha256": "a3a6c902154bee326554eff0baedd789bc820cc6bcb066bbaec98bee6f9973bf",
+      "bytes": 410
+    },
+    {
+      "path": "configs/experiments/transport_tangent_k1_endpoint_rank.yaml",
+      "sha256": "f61912c399bd5ca31dad5080a71a8fab211f8c24e28da8dbabfb97ab4eb6086f",
+      "bytes": 425
+    },
+    {
+      "path": "configs/experiments/transport_tangent_k1_geometry.yaml",
+      "sha256": "c9de03a27a2f913fed6e77da62bb86114c6b1d489a7eff959f4b51c9b4a57a8d",
+      "bytes": 353
+    },
+    {
+      "path": "configs/experiments/transport_tangent_k1_text.yaml",
+      "sha256": "55afb0bfeb6c17962e84c91641df5dbd440c51251d7f4bee9d57edfcb74e0198",
+      "bytes": 437
+    },
+    {
+      "path": "configs/experiments/transport_text_both.yaml",
+      "sha256": "e9b15164747de1508fc9fd19d41b4d80bfe93ce529ee3c0aef9a0e312998b997",
+      "bytes": 455
+    },
+    {
+      "path": "configs/experiments/transport_text_none.yaml",
+      "sha256": "9db3d9a2ad08acb57c38e3b6bc570dbcdf81dffe0cb7f43b41b6c588afeffa55",
+      "bytes": 467
+    },
+    {
+      "path": "configs/experiments/transport_text_q.yaml",
+      "sha256": "976644df0531c6edd08434d1e62946a89b7e102645d425dfa4af75fde23277fa",
+      "bytes": 438
+    },
+    {
+      "path": "configs/experiments/transport_text_z0.yaml",
+      "sha256": "8dcb8125dec9929434f85e1fc839bbc397efa6e226202e92e33c9ff03ba1c236",
+      "bytes": 445
+    },
+    {
+      "path": "configs/experiments/vmf_k1_multi_positive.yaml",
+      "sha256": "51b4424484b4179a8c0c22b9cd53a292fdcfe0235d658ab12f0ca8200d09cb24",
+      "bytes": 464
+    },
+    {
+      "path": "configs/train_alignment.yaml",
+      "sha256": "f94feb05b5ef94846fb637f61756ddfb30e94a71610ad20ac776419251aea598",
+      "bytes": 2122
+    },
+    {
+      "path": "configs/train_deterministic.yaml",
+      "sha256": "aef17e42e0aae4f3ec05781e3d46f3eef072d969aab1a4342b7b2e90b810b16e",
+      "bytes": 656
+    },
+    {
+      "path": "configs/train_deterministic_k3.yaml",
+      "sha256": "ccbd70f62af1728f828f95dd02e5bb346e33df7126545a25ee3cf7ae6cec299a",
+      "bytes": 615
+    },
+    {
+      "path": "configs/train_frozen_prompt.yaml",
+      "sha256": "a2b57b900b1955c85830b90ef187768c272b39300fc1153c1fa0a4fb1dd9119f",
+      "bytes": 1701
+    },
+    {
+      "path": "configs/train_frozen_prompt_final.yaml",
+      "sha256": "455a4a037853448bd8b253bedabf964836bd9ee3f82641a092dbbed7ef1528e2",
+      "bytes": 1764
+    },
+    {
+      "path": "configs/train_jepa.yaml",
+      "sha256": "8b68636bfbb09a7bab265131ccddd1de934cb1b95ce243e10676d6d370750b60",
+      "bytes": 2367
+    },
+    {
+      "path": "configs/train_movmf.yaml",
+      "sha256": "2901b1fb363ef0a9a3cc1a102f3ad77dab992b473836081ea58340c276443ceb",
+      "bytes": 859
+    },
+    {
+      "path": "configs/train_movmf_ablation.yaml",
+      "sha256": "60c2b7b6fe37daec016a4d15a2c3e4f446c8fa361d309968e03e99b65bb2869c",
+      "bytes": 1572
+    },
+    {
+      "path": "configs/train_stageE_angular.yaml",
+      "sha256": "db9aa6ef2e2ccd21c4de072e1793b68e3d93fa9c1fda6f3a75d9168a05c42ae7",
+      "bytes": 305
+    },
+    {
+      "path": "configs/train_stageE_k1.yaml",
+      "sha256": "0a630f201c01ab1398dd426b47c3a79231786a12cd7ce34b5699745a59ab442a",
+      "bytes": 780
+    },
+    {
+      "path": "configs/train_stageE_no_vmf.yaml",
+      "sha256": "807363461f9bf3f0f5d684c9f46c2182c11d5f26a91a9197ba238052a0b2c9de",
+      "bytes": 930
+    },
+    {
+      "path": "configs/train_transport.yaml",
+      "sha256": "4c998242411755f063246934b5f2b7b1709cb354e0437bc238aeda8925f4d9e2",
+      "bytes": 4045
+    },
+    {
+      "path": "configs/train_vmf.yaml",
+      "sha256": "d23e44d99d83de3b250ab238e44a56e8503235f59deed82edc0b0e172ef1a317",
+      "bytes": 799
+    },
+    {
+      "path": "docs/objective_alignment_protocol.md",
+      "sha256": "cef729bcf659448ab909fc0c95c0775d8980d797c12f6e5d4bc336bde7ec0b0d",
+      "bytes": 5888
+    },
+    {
+      "path": "docs/objective_alignment_results_2026-09-05.md",
+      "sha256": "b9fa36f6188642e0d890ed1086f193034892264b17345ed26743ff012f637c54",
+      "bytes": 5723
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "0abf69bdbbad78def470789523c84a95562f9d6261a458ee59f7a459db4f2b48",
+      "bytes": 2756
+    },
+    {
+      "path": "scripts/analyze_frozen_prompt_final.py",
+      "sha256": "e115ed4ece01ce544e8b70ff1ad66105d4a8afc3785eb77fe29c3ac8c65a4131",
+      "bytes": 58345
+    },
+    {
+      "path": "scripts/analyze_stageE_mechanism.py",
+      "sha256": "fd6f278ab7f6b24ddb4b24f8542ab44296f41e0763c0739913b409ef59ce33ba",
+      "bytes": 28319
+    },
+    {
+      "path": "scripts/audit_alignment_protocol.py",
+      "sha256": "fbf7958dfce3d1bf950bc3abf312c7ab1aca9c6ed8a3ad2bab4af062d426bffb",
+      "bytes": 6661
+    },
+    {
+      "path": "scripts/bootstrap_alignment.py",
+      "sha256": "09561745fbf9fb669caf069c00550f5c4251e18bc83d48020a9df2f91bd2717f",
+      "bytes": 4749
+    },
+    {
+      "path": "scripts/build_corrected_manifest.py",
+      "sha256": "2c3e0f809c08d94f07898f26f25ea7f46f048a76d898387e22e472849e27d4e0",
+      "bytes": 8965
+    },
+    {
+      "path": "scripts/diagnose_alignment_geometry.py",
+      "sha256": "a2e1475d2fc35ba0f49bc8b4551bf8b081eca08f7ca6316f3dd72b69845ee08d",
+      "bytes": 19187
+    },
+    {
+      "path": "scripts/evaluate_alignment.py",
+      "sha256": "255f6f56a8cbfb668a8ddcc910622baebd0c76dd19fb54c5ecda98e2eb07f373",
+      "bytes": 4932
+    },
+    {
+      "path": "scripts/evaluate_jepa_validation.py",
+      "sha256": "3ac10804c89feefec58588d2c1027210dd69742163f003cd94557ee040f07ef6",
+      "bytes": 4896
+    },
+    {
+      "path": "scripts/gradient_routing_diagnostic.py",
+      "sha256": "2136d598deaf2427cab2511248e56b4a5de7e85d93a3618c2b4b233aa06b00ab",
+      "bytes": 11524
+    },
+    {
+      "path": "scripts/probe_projection_refit.py",
+      "sha256": "b53bb7b1d1cf43be37624e67a3c94aba314d348bb85ec3fd7ec7b5c593d75bfe",
+      "bytes": 22499
+    },
+    {
+      "path": "scripts/probe_transport_multi_photo.py",
+      "sha256": "10ecce030a97d541ad9fe00d6983b8b7deab930affa5f1208b92501b316b77b4",
+      "bytes": 5219
+    },
+    {
+      "path": "scripts/select_frozen_prompt.py",
+      "sha256": "d14c475f99166f887043789839e40324cf5aae81e2e90c943c6990fb6d42680c",
+      "bytes": 3041
+    },
+    {
+      "path": "scripts/select_transport_stage1.py",
+      "sha256": "ac51c5302579481db21d81f2e9dd9b2f8df7132b427f1540ad884f5791592c71",
+      "bytes": 6509
+    },
+    {
+      "path": "scripts/statistical_frozen_prompt.py",
+      "sha256": "96d235ac8ea738158dde86d3d02f05bbac29c3f684782c60e35984b73b5b7019",
+      "bytes": 5266
+    },
+    {
+      "path": "scripts/summarize_alignment.py",
+      "sha256": "7f0dc87b477b52c64cc428efd29567f47a35cadc3a131562d7f49555b4b03ffc",
+      "bytes": 139580
+    },
+    {
+      "path": "scripts/summarize_frozen_prompt.py",
+      "sha256": "511fc26f948aa4b1324cc22767d7e33faa9d0f6c74025d1d0e64973070c52384",
+      "bytes": 47749
+    },
+    {
+      "path": "scripts/summarize_jepa.py",
+      "sha256": "125473eafb70955342a427b8d09de70b3f15817684f8cb8fa8c398a62018358a",
+      "bytes": 24341
+    },
+    {
+      "path": "scripts/summarize_transport.py",
+      "sha256": "1273546eb9f6f58851d5375d9f6742862120c73f5d3ecc3fabf15ddca42a9084",
+      "bytes": 46101
+    },
+    {
+      "path": "scripts/summarize_transport_causal.py",
+      "sha256": "17e8d3fd4a803f92e8438589c6d3acb63be6a0cea783f0622db375624fb3824c",
+      "bytes": 39214
+    },
+    {
+      "path": "scripts/summarize_transport_corrected.py",
+      "sha256": "d792a2e3999e54096624b345651a498754ab3755c8a3eecd12c10ca36e7aacfe",
+      "bytes": 47260
+    },
+    {
+      "path": "scripts/summarize_transport_deep_probe.py",
+      "sha256": "4332b156b6a3bd1d53483ad0696d17604fa20d3aa868442f5d46ac50e7102964",
+      "bytes": 88946
+    },
+    {
+      "path": "scripts/transport_artifact_utils.py",
+      "sha256": "aa03018b783472dbae06130c72d5476c7c251aacb64b59d87a3e9f6e96f6ffea",
+      "bytes": 19912
+    },
+    {
+      "path": "scripts/upload_jepa_to_wandb.py",
+      "sha256": "7a23f815e56ff56b65fb66664bdf1c5cd53de48852705662a57da8e0cea4791e",
+      "bytes": 10729
+    },
+    {
+      "path": "scripts/upload_research_to_wandb.py",
+      "sha256": "83f5ca70cc52a3f1e2a81b6b914c81e8501b44322ee4fb9b33061749ec0cb50f",
+      "bytes": 10956
+    },
+    {
+      "path": "scripts/validate_transport_corrected_configs.py",
+      "sha256": "ed100521351c398cb658f3cc07dbcd6bed9ddee05a7f00199e6d6228eedc93db",
+      "bytes": 1687
+    },
+    {
+      "path": "src/spica/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "src/spica/alignment_artifacts.py",
+      "sha256": "3810f623c43c96f1a05028d51387b529524d86c5c65b9ee00c779f2447ef64fb",
+      "bytes": 20117
+    },
+    {
+      "path": "src/spica/arg_parser.py",
+      "sha256": "adeaaf90c27efa201506ffc90da20cfba5e5b9ba492746637488764ffc212c5d",
+      "bytes": 3221
+    },
+    {
+      "path": "src/spica/config/__init__.py",
+      "sha256": "2a5b0d2bdc420a65131883c0d0ffba6555d746ffbfdfd72fd32a0f46449ae138",
+      "bytes": 188
+    },
+    {
+      "path": "src/spica/config/data.py",
+      "sha256": "2e42d0216d884433a647fb7a49264138ca50a0d8246e16308118da8794b93863",
+      "bytes": 2143
+    },
+    {
+      "path": "src/spica/config/yaml_reader.py",
+      "sha256": "088855b3a9f7de1e37bd7c5a41ea9bdb31f804b251b81c23fcf58d9d40b960cf",
+      "bytes": 311
+    },
+    {
+      "path": "src/spica/data/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "src/spica/data/datasets.py",
+      "sha256": "73d18f66c7b7686b43c33c86bdf387255d12753591bc195ae76b2a506318dd9a",
+      "bytes": 7349
+    },
+    {
+      "path": "src/spica/data/loaders.py",
+      "sha256": "291b732e92c465b704f6a36c9fbdf5aef74d6efcfc143abed5570d3f330f9ea6",
+      "bytes": 5815
+    },
+    {
+      "path": "src/spica/data/manifest.py",
+      "sha256": "287c15ec9a65f5928438568062072913e3b1557a3d686497e09607e5a3829783",
+      "bytes": 3011
+    },
+    {
+      "path": "src/spica/data/samplers.py",
+      "sha256": "9afee9340a42ab9a716d8553ce8833b418cb8929de036d3453a590673e7fc0dd",
+      "bytes": 3774
+    },
+    {
+      "path": "src/spica/data/splits.py",
+      "sha256": "d3d034cfc4c0db2b2965d78de5939a5208374d0eac31cc501e60257c1765589e",
+      "bytes": 4963
+    },
+    {
+      "path": "src/spica/data/transforms.py",
+      "sha256": "c184ea70445164ade0c265cb1b62dd4605e6cd6942478564de604e8c2b5c1d84",
+      "bytes": 834
+    },
+    {
+      "path": "src/spica/evaluate_clip.py",
+      "sha256": "fdb49284477c0b92310c6966c04c89ee58c9fd4adc44300f49f7ad635945275d",
+      "bytes": 6051
+    },
+    {
+      "path": "src/spica/evaluate_deterministic.py",
+      "sha256": "7f60672e18d671c025b1a5392551e781116c1b20551681eb919f42e9cb3b80d4",
+      "bytes": 15248
+    },
+    {
+      "path": "src/spica/evaluate_deterministic_k3.py",
+      "sha256": "ae5565d6b7e4b34972d264bea345083d88d8674275bf067dff07be1f7c82c590",
+      "bytes": 14018
+    },
+    {
+      "path": "src/spica/evaluate_frozen_prompt.py",
+      "sha256": "f6ac62fd5705a46a7d05fe4d030c82fce2845542e704a5df7728e6fc6dea0745",
+      "bytes": 5363
+    },
+    {
+      "path": "src/spica/evaluate_jepa.py",
+      "sha256": "075af020a74c210f65fc51608dc4bdce0d4d9572b83350d6c466a33440ceecdd",
+      "bytes": 8586
+    },
+    {
+      "path": "src/spica/evaluate_movmf.py",
+      "sha256": "33b8a998509e422762140106beee6c0970d297a92ee86652c7f514f9620697d5",
+      "bytes": 33388
+    },
+    {
+      "path": "src/spica/evaluate_text_fusion.py",
+      "sha256": "7f0b4668abcb1c898e3b23738daef9bb5092bbdbc12549d8a2b510cb9b3b6ae3",
+      "bytes": 26641
+    },
+    {
+      "path": "src/spica/evaluate_transport.py",
+      "sha256": "76606a10c287df8b689623f28d6f1f5653a2908344cc443cde32db7dbf48a3fd",
+      "bytes": 11831
+    },
+    {
+      "path": "src/spica/evaluate_vmf.py",
+      "sha256": "1717d266b4119e720ebad305447dbb5dcb52a0addb3ebe17879037708477b0ba",
+      "bytes": 16020
+    },
+    {
+      "path": "src/spica/evaluation/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "src/spica/evaluation/embeddings.py",
+      "sha256": "8157946a65777730b7bd0280154e1497d1c86ca08af5332b174179560fa221d2",
+      "bytes": 4057
+    },
+    {
+      "path": "src/spica/evaluation/frozen_prompt.py",
+      "sha256": "863d159b9d68db5926c9f8e481b58b1e620c76f1411016ebeb1d4f9d609779ca",
+      "bytes": 11047
+    },
+    {
+      "path": "src/spica/evaluation/fusion.py",
+      "sha256": "45a1b9ebeac98c029847d95ae4eb5bea72dd2a26678049c9300257ef9d5c1a5d",
+      "bytes": 4872
+    },
+    {
+      "path": "src/spica/evaluation/jepa.py",
+      "sha256": "11fb3dfcc9e80d7cb01a02fc59bff3945e7c947abd7e5f8b10e3f154da632f9c",
+      "bytes": 12490
+    },
+    {
+      "path": "src/spica/evaluation/metrics.py",
+      "sha256": "f802cb3efb4140dda7916e94394606022b80fd4ef8ee9777088c5b38ee91aefa",
+      "bytes": 9236
+    },
+    {
+      "path": "src/spica/evaluation/reporting.py",
+      "sha256": "c08efb63017ce5e2865b31f2b42c89edd928d26eb9aa29685aa8a53d659c5c34",
+      "bytes": 5201
+    },
+    {
+      "path": "src/spica/evaluation/text_bank.py",
+      "sha256": "4b1e4f2dd7570aa578877bf5efe3f6b28ba16286d22174eca8141b902d1e0652",
+      "bytes": 9684
+    },
+    {
+      "path": "src/spica/evaluation/transport.py",
+      "sha256": "ec1c2e24be4da5d9002f71001dd0d98838b304cc44f64fc85c162911b680ef55",
+      "bytes": 36119
+    },
+    {
+      "path": "src/spica/frozen_prompt_artifacts.py",
+      "sha256": "f171b614822ecb0af3ad304850e0c8c5e0b04b049abb41003143fd23b610905e",
+      "bytes": 10705
+    },
+    {
+      "path": "src/spica/models/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "src/spica/models/alignment.py",
+      "sha256": "f0b7fe37c7c629399f8b96471353d627b2f50e06590ed71d78d63f9f865171f4",
+      "bytes": 19956
+    },
+    {
+      "path": "src/spica/models/checkpoint.py",
+      "sha256": "ecb12d1a2412fa49170b3f6b63194a6b0c0aca3807d437bf90bdb2bcfeba9fb2",
+      "bytes": 6973
+    },
+    {
+      "path": "src/spica/models/clip.py",
+      "sha256": "83ef6eedc65d99dedf493d26685122ec74684035f63c387a7846b8f6e9bc75b4",
+      "bytes": 22322
+    },
+    {
+      "path": "src/spica/models/frozen_prompt.py",
+      "sha256": "1c85498a59b206cdcb99bca275bf65ba45c5024b9d42880cfc02973b81dc2124",
+      "bytes": 12277
+    },
+    {
+      "path": "src/spica/models/jepa.py",
+      "sha256": "966aadda1370f9b48c080977f26c8d1b5186ee554b239691d5f0826ba7e5cdc8",
+      "bytes": 16111
+    },
+    {
+      "path": "src/spica/models/retrieval.py",
+      "sha256": "4d4a6da041be4adbd3ba8b2b3acb8e6ab6043a3d32447b70b08a5a50e7c187dc",
+      "bytes": 30679
+    },
+    {
+      "path": "src/spica/models/transport.py",
+      "sha256": "cbfe76bd480bab81c8100d31edf2dfc8899366a390d18187598c67185615690e",
+      "bytes": 43548
+    },
+    {
+      "path": "src/spica/models/vmf.py",
+      "sha256": "2b4a3e4e4372ba0cf7f8731b51f233cd432cded1535d809bb6819df86ea461f8",
+      "bytes": 30053
+    },
+    {
+      "path": "src/spica/provenance.py",
+      "sha256": "d49884205f80a49d63aa4f0ee317d7bee5b6a2dfe6feb2f3a13c9c2b036a5862",
+      "bytes": 4862
+    },
+    {
+      "path": "src/spica/tracking/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "src/spica/tracking/wandb.py",
+      "sha256": "4c95ef159e61d03cc190e91a729bb379d1bd7636a5297cda227b294a9cd590eb",
+      "bytes": 3567
+    },
+    {
+      "path": "src/spica/train_alignment.py",
+      "sha256": "c79dd4a67d622922d25d2119132d33b62ee159a872c9ee24622943bb071b788b",
+      "bytes": 89557
+    },
+    {
+      "path": "src/spica/train_deterministic.py",
+      "sha256": "725ed4f6dbcc43eee6c85fdbc59626c7a5b459253eac47d78dbd31a85638bdcd",
+      "bytes": 10878
+    },
+    {
+      "path": "src/spica/train_deterministic_k3.py",
+      "sha256": "e054152db9e65e46ac011550fc37b7758f86253ea74bbc19b0655a535dd5a293",
+      "bytes": 7070
+    },
+    {
+      "path": "src/spica/train_frozen_prompt.py",
+      "sha256": "00017f5ad44f1d45ab322fcf8d1116f7258a02f6a984f360b0e6e3ed6e5f4c7f",
+      "bytes": 70316
+    },
+    {
+      "path": "src/spica/train_jepa.py",
+      "sha256": "00f9f17f95d4011cc5e4feaa012e0e8ebaa5c090a343e287b15eab24fd717822",
+      "bytes": 44926
+    },
+    {
+      "path": "src/spica/train_movmf.py",
+      "sha256": "f2bdfae9fa28468ffe4220ebaa268f1c36c311f010b5d0e4eb29130d475fcac7",
+      "bytes": 15425
+    },
+    {
+      "path": "src/spica/train_movmf_ablation.py",
+      "sha256": "a667ffe91f5d86313de09d7e9378ed6dd7885cc3bb7b146d7319eeae3f15354f",
+      "bytes": 27392
+    },
+    {
+      "path": "src/spica/train_stageE_angular.py",
+      "sha256": "79b8d91d0d3b1429b8ebd5a91d87adfc3a401064a19340aa9ee4e46748ccf712",
+      "bytes": 415
+    },
+    {
+      "path": "src/spica/train_stageE_k1.py",
+      "sha256": "4e0774efa6c9bedf2ba4db824cb23575bfb6987a7be735004aef8431855ebb29",
+      "bytes": 9018
+    },
+    {
+      "path": "src/spica/train_stageE_no_vmf.py",
+      "sha256": "0b18622182dcfb6375fd166fb32497ed79814ff2fab32d826d7934bb7ada41f7",
+      "bytes": 16354
+    },
+    {
+      "path": "src/spica/train_transport.py",
+      "sha256": "cb2ba63129be5f4f2f74c265385b66b2266a830c9734ffcbf9e5424f3506b8d2",
+      "bytes": 115977
+    },
+    {
+      "path": "src/spica/train_vmf.py",
+      "sha256": "d8513bff2cf24a441f3fa0176a319890b04024450cfc89b09c8d18e6022b5ab4",
+      "bytes": 11826
+    },
+    {
+      "path": "src/spica/training_utils.py",
+      "sha256": "ee7b63d811eb157a39130c164a5b5d2d418eb6c35d2e3ef15224667b00ec21a9",
+      "bytes": 1957
+    },
+    {
+      "path": "tests/test_alignment.py",
+      "sha256": "e2d6fee797eea7b06f84b0b5aa274a72bb7953cc669e803dc2ee37d96ad392c4",
+      "bytes": 4468
+    },
+    {
+      "path": "tests/test_alignment_calibration.py",
+      "sha256": "b51ec7b302991e36d6770c2852a0f0d033f71dea9ede7b7d2c57821f50ac5979",
+      "bytes": 7687
+    },
+    {
+      "path": "tests/test_alignment_corrected_reporting.py",
+      "sha256": "58746e318855439fffb66d76c7aef5a88e01a2551a59cc3898594a862af49cd7",
+      "bytes": 46341
+    },
+    {
+      "path": "tests/test_alignment_reporting.py",
+      "sha256": "d32f2fc7e92759a9f6cb9c7b298f00fc3b409e3a2032a83ec4564906cdb6fde2",
+      "bytes": 5647
+    },
+    {
+      "path": "tests/test_alignment_sampler.py",
+      "sha256": "195495d5d91de3f29d9d870f1ddd6c19b655bad07b2614fff1af35fe390461f3",
+      "bytes": 1202
+    },
+    {
+      "path": "tests/test_checkpoint_loading.py",
+      "sha256": "42cee8c45a8cf86e0e6774e12a68f94a9c6033ead777d5f25af904c353d29412",
+      "bytes": 4029
+    },
+    {
+      "path": "tests/test_deterministic_k3.py",
+      "sha256": "90472b7667c7fd80ca4a25d3fad4e2a7a63537820d01b1c4bd9d3a5bd6e98b62",
+      "bytes": 5777
+    },
+    {
+      "path": "tests/test_diagnose_photo_routing.py",
+      "sha256": "994cd292c24367ccf4615d3f4eede1d5f37213c1813f5a305a06aa15b078c126",
+      "bytes": 3765
+    },
+    {
+      "path": "tests/test_frozen_prompt_final.py",
+      "sha256": "cbeb1a9234dfb9082212167382f9e9601fd50da51aa88ff5b5993fa642c6cfb5",
+      "bytes": 2273
+    },
+    {
+      "path": "tests/test_frozen_prompt_integrity.py",
+      "sha256": "e5a5c5ef498bda079b11bd84c51aa265313316c480dd0e5822baadc6f25830b7",
+      "bytes": 2136
+    },
+    {
+      "path": "tests/test_frozen_prompt_model.py",
+      "sha256": "a7293a830ea616c3e251121777c79ed948c1e573f34bec97ab1c6bc54d8c4eba",
+      "bytes": 6481
+    },
+    {
+      "path": "tests/test_frozen_prompt_v2.py",
+      "sha256": "d5dc216e1340bdfc473d10fe1df92cc5014e206434c97ff2c59489dd266d1be0",
+      "bytes": 7642
+    },
+    {
+      "path": "tests/test_jepa.py",
+      "sha256": "d1b8fff710c8d2749b07ec0b078ae6111b7e3e5736e8e03be34c4ecb901e7ccb",
+      "bytes": 6770
+    },
+    {
+      "path": "tests/test_metrics.py",
+      "sha256": "6a8b31f9f9084fbb3fdca18eb54f7a3e81db65f93abb514ca7f66d56c1e7e770",
+      "bytes": 2776
+    },
+    {
+      "path": "tests/test_movmf.py",
+      "sha256": "6788126f8674ca27d55937dfe037039d8bbe955194bb69f58ee2239d4de83579",
+      "bytes": 5733
+    },
+    {
+      "path": "tests/test_movmf_multi_positive.py",
+      "sha256": "c9b9205ae8a810f29db0b012fc19f6b41338b9c06228af086bf79cbd4604a202",
+      "bytes": 7694
+    },
+    {
+      "path": "tests/test_spherical_log_map.py",
+      "sha256": "6e81e223428088052a27120ce15c9163ac9960457ea8d7e0a29bd2640dd388a9",
+      "bytes": 8618
+    },
+    {
+      "path": "tests/test_transport.py",
+      "sha256": "1fa73c0a79395cc02d1a6a3a04b7e0d01564efe3272468f7458222c799e64129",
+      "bytes": 10815
+    },
+    {
+      "path": "tests/test_transport_research_integrity.py",
+      "sha256": "07f9b205d1fad24237bcdc2a9a3e92703ea783e27e7f449885e46746c16f053a",
+      "bytes": 17693
+    },
+    {
+      "path": "tests/test_transport_summary_selection.py",
+      "sha256": "1c6de61bfebfac8432c81b33f3e3dac646fea8c812515d604655fc34141ca328",
+      "bytes": 1946
+    },
+    {
+      "path": "tests/test_vmf.py",
+      "sha256": "59294a6821280749614265119dc09cf25add130e04ba0866dec674c177ecdccb",
+      "bytes": 5541
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "353a5076eaeb76c536a0d1d76a7d58415ffc265c831a2276add0777658bd9051",
+      "bytes": 241177
+    }
+  ]
+}

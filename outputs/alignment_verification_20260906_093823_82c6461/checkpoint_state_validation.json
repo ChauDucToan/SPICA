@@ -1,0 +1,62 @@
+[
+  {
+    "arm_vs_R": "MD",
+    "step": 0,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": true
+  },
+  {
+    "arm_vs_R": "MS",
+    "step": 0,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": true
+  },
+  {
+    "arm_vs_R": "MD",
+    "step": 100,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MS",
+    "step": 100,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MD",
+    "step": 500,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MS",
+    "step": 500,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MD",
+    "step": 1000,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MS",
+    "step": 1000,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MD",
+    "step": 1800,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  },
+  {
+    "arm_vs_R": "MS",
+    "step": 1800,
+    "rng_equal": true,
+    "initial_prompts_and_soft_text_equal": null
+  }
+]
