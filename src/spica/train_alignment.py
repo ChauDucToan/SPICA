@@ -24,6 +24,7 @@ from .alignment_artifacts import (
     ALIGNMENT_PILOT_CAMPAIGN,
     ALIGNMENT_REPLICATION_CAMPAIGN,
     ALL_ALIGNMENT_ROLES,
+    CORRECTED_PILOT_INFERENCE_CONTRACT,
     CORRECTED_PILOT_ROLES,
     canonical_sha256,
     ensure_corrected_run_manifest,
@@ -102,7 +103,7 @@ def _validate(args: DictConfig) -> None:
         if observed.get(key) != value
         and not (
             campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
-            and role in CORRECTED_PILOT_ROLES
+            and role in CORRECTED_PILOT_ROLES[1:]
             and key == "lambda_alignment_mean"
         )
     }
@@ -110,9 +111,21 @@ def _validate(args: DictConfig) -> None:
         raise ValueError(f"{role} has an ambiguous treatment: {mismatches}")
     if (
         campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
-        and role in {"alignment_mean_text_log", "alignment_mean_text_log_symmetric"}
+        and role == "alignment_control"
+        and args.alignment_calibration_artifact not in (None, "")
+    ):
+        raise ValueError("corrected control runs must not reference a calibration artifact")
+    if (
+        campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        and bool(args.calibration_only)
+        and role not in CORRECTED_PILOT_ROLES[1:]
+    ):
+        raise ValueError("corrected calibration runs must use a mean-only pilot role")
+    if (
+        campaign == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        and role in CORRECTED_PILOT_ROLES[1:]
         and not bool(args.calibration_only)
-        and args.alignment_calibration_artifact is None
+        and args.alignment_calibration_artifact in (None, "")
     ):
         raise ValueError("corrected mean-only pilot requires a calibration artifact")
     if str(args.train_class_scope) != "pseudo_train":
@@ -194,7 +207,10 @@ def _alignment_checkpoint(
     provenance: dict[str, Any],
     optimizer_groups: list[dict[str, Any]],
     initial_hash: str,
+    initial_text_bank_hash: str,
     clip_freeze_policy: dict[str, Any],
+    full_pseudo_unseen_mAP: float | None = None,
+    calibration_identity: dict[str, Any] | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     model_names = {
@@ -212,8 +228,10 @@ def _alignment_checkpoint(
             "model_type": "frozen_prompt_alignment",
             "experiment_role": str(args.experiment_role),
             "campaign": str(args.experiment_campaign),
+            "run_kind": str(args.run_kind),
             "step": step,
             "training_global_step": step,
+            "full_pseudo_unseen_mAP": full_pseudo_unseen_mAP,
             "model_state_dict": model_state,
             "soft_prompt_state_dict": {
                 name: value.detach().cpu() for name, value in text_bank.state_dict().items()
@@ -233,8 +251,10 @@ def _alignment_checkpoint(
             "manifest_entry_identity": entry_identity,
             "model_state_hash": _state_hash(model),
             "initial_model_state_hash": initial_hash,
+            "initial_text_bank_state_hash": initial_text_bank_hash,
             "resolved_config": OmegaConf.to_container(args, resolve=True),
             "resolved_treatment": treatment,
+            "gradient_calibration_identity": calibration_identity,
             "backbone_identity": visual_backbone_identity(model),
             "clip_freeze_policy": clip_freeze_policy,
             "provenance": provenance,
@@ -346,13 +366,263 @@ def _batch_objectives(
     return rank, cls, accuracy, alignment
 
 
+_CALIBRATION_SCHEMA_VERSION = 2
+_CALIBRATION_EPS = 1e-12
+_CALIBRATION_SKETCH_TOLERANCE = 1e-6
+_CALIBRATION_RULE = (
+    "lambda_alignment_mean = target_ratio * median("
+    "base.sketch_gradient_norms / detached.sketch_gradient_norms)"
+)
+
+
+def _gradients_for(
+    loss: torch.Tensor, parameters: tuple[torch.Tensor, ...]
+) -> tuple[torch.Tensor | None, ...]:
+    gradients: list[torch.Tensor | None] = [None] * len(parameters)
+    active = [(index, parameter) for index, parameter in enumerate(parameters) if parameter.requires_grad]
+    if not active or not loss.requires_grad:
+        return tuple(gradients)
+    values = torch.autograd.grad(
+        loss,
+        tuple(parameter for _, parameter in active),
+        allow_unused=True,
+    )
+    for (index, _), gradient in zip(active, values, strict=True):
+        gradients[index] = gradient
+    return tuple(gradients)
+
+
 def _grad_norms_for(
     gradients: tuple[torch.Tensor | None, ...], parameters: tuple[torch.Tensor, ...]
 ) -> list[float]:
     return [
         0.0 if gradient is None else float(gradient.detach().norm().item())
-        for gradient, _ in zip(gradients, parameters)
+        for gradient, _ in zip(gradients, parameters, strict=True)
     ]
+
+
+def _clone_module_state(module: torch.nn.Module) -> dict[str, Any]:
+    return {
+        name: value.detach().cpu().clone()
+        if isinstance(value, torch.Tensor)
+        else value
+        for name, value in module.state_dict().items()
+    }
+
+
+def _restore_module_state(module: torch.nn.Module, state: dict[str, Any]) -> None:
+    module.load_state_dict(state, strict=True)
+
+
+def _module_state_matches(module: torch.nn.Module, expected: dict[str, Any]) -> bool:
+    actual = module.state_dict()
+    if actual.keys() != expected.keys():
+        return False
+    for name, expected_value in expected.items():
+        actual_value = actual[name]
+        if isinstance(expected_value, torch.Tensor):
+            if not isinstance(actual_value, torch.Tensor) or not torch.equal(
+                actual_value.detach().cpu(), expected_value
+            ):
+                return False
+        elif actual_value != expected_value:
+            return False
+    return True
+
+
+def _training_flags(
+    *modules: torch.nn.Module,
+) -> list[tuple[torch.nn.Module, bool]]:
+    result: list[tuple[torch.nn.Module, bool]] = []
+    seen: set[int] = set()
+    for root in modules:
+        for module in root.modules():
+            if id(module) not in seen:
+                result.append((module, bool(module.training)))
+                seen.add(id(module))
+    return result
+
+
+def _restore_training_flags(flags: list[tuple[torch.nn.Module, bool]]) -> None:
+    for module, training in flags:
+        # Assigning the flag directly restores custom train() overrides exactly.
+        module.training = training
+
+
+def _parameter_grads(
+    *modules: torch.nn.Module,
+) -> list[tuple[torch.Tensor, torch.Tensor | None]]:
+    result: list[tuple[torch.Tensor, torch.Tensor | None]] = []
+    seen: set[int] = set()
+    for root in modules:
+        for parameter in root.parameters():
+            if id(parameter) in seen:
+                continue
+            result.append(
+                (
+                    parameter,
+                    None if parameter.grad is None else parameter.grad.detach().clone(),
+                )
+            )
+            seen.add(id(parameter))
+    return result
+
+
+def _restore_parameter_grads(
+    saved: list[tuple[torch.Tensor, torch.Tensor | None]],
+) -> None:
+    for parameter, gradient in saved:
+        parameter.grad = None if gradient is None else gradient.to(parameter.device)
+
+
+def _rng_matches(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left["python"] != right["python"]:
+        return False
+    if not torch.equal(left["torch_cpu"], right["torch_cpu"]):
+        return False
+    left_cuda = left["torch_cuda"]
+    right_cuda = right["torch_cuda"]
+    if len(left_cuda) != len(right_cuda) or any(
+        not torch.equal(a, b) for a, b in zip(left_cuda, right_cuda, strict=True)
+    ):
+        return False
+    left_loader = left["data_loader_generator"]
+    right_loader = right["data_loader_generator"]
+    if left_loader is None or right_loader is None:
+        return left_loader is right_loader
+    return torch.equal(left_loader, right_loader)
+
+
+def _calibration_json_value(value: Any) -> Any:
+    if isinstance(value, torch.Tensor):
+        raw = value.detach().cpu().contiguous()
+        digest = hashlib.sha256(raw.view(torch.uint8).numpy().tobytes()).hexdigest()
+        return {
+            "dtype": str(value.dtype),
+            "shape": list(value.shape),
+            "sha256": digest,
+        }
+    if isinstance(value, dict):
+        return {
+            str(key): _calibration_json_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_calibration_json_value(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return str(value)
+
+
+def _calibration_batch_identity(batches: list[dict[str, Any]], sampler_epoch: Any) -> dict[str, Any]:
+    identities = [_calibration_json_value(batch) for batch in batches]
+    return {
+        "count": len(identities),
+        "sha256": canonical_sha256(identities),
+        "batches": identities,
+        "sampler_epoch_before": sampler_epoch,
+    }
+
+
+def _calibration_loader(
+    train_loader: DataLoader,
+    sampler: MatchedClassBatchSampler,
+    loader_generator: torch.Generator,
+) -> DataLoader:
+    """Clone the loader so worker-seeded sampling matches the training path."""
+    if int(getattr(train_loader, "num_workers", 0)) == 0:
+        return train_loader
+    return DataLoader(
+        train_loader.dataset,
+        batch_sampler=sampler,
+        num_workers=int(train_loader.num_workers),
+        pin_memory=bool(train_loader.pin_memory),
+        pin_memory_device=getattr(train_loader, "pin_memory_device", ""),
+        collate_fn=train_loader.collate_fn,
+        worker_init_fn=train_loader.worker_init_fn,
+        generator=loader_generator,
+        persistent_workers=False,
+        prefetch_factor=getattr(train_loader, "prefetch_factor", 2),
+        timeout=int(getattr(train_loader, "timeout", 0)),
+    )
+
+
+def _cosine_or_reason(
+    base_gradient: torch.Tensor | None,
+    alignment_gradient: torch.Tensor | None,
+    base_norm: float,
+    alignment_norm: float,
+) -> tuple[float | None, str | None]:
+    if base_norm <= _CALIBRATION_EPS or base_gradient is None:
+        return None, "base_gradient_zero"
+    if alignment_norm <= _CALIBRATION_EPS or alignment_gradient is None:
+        return None, "alignment_gradient_zero"
+    return (
+        float(
+            F.cosine_similarity(
+                base_gradient.reshape(1, -1), alignment_gradient.reshape(1, -1)
+            ).item()
+        ),
+        None,
+    )
+
+
+def _weighted_ratio_or_reason(
+    alignment_norm: float,
+    base_norm: float,
+    weight: float | None,
+) -> tuple[float | None, str | None]:
+    if base_norm <= _CALIBRATION_EPS:
+        return None, "base_gradient_zero"
+    if weight is None:
+        return None, "lambda_alignment_mean_unavailable"
+    return weight * alignment_norm / base_norm, None
+
+
+def _policy_gradient_payload(
+    *,
+    alignment_norms: list[float],
+    alignment_gradients: list[torch.Tensor | None],
+    base_norms: list[float],
+    base_gradients: list[torch.Tensor | None],
+    weight: float | None,
+) -> dict[str, Any]:
+    ratios: list[float | None] = []
+    ratio_reasons: list[str | None] = []
+    cosines: list[float | None] = []
+    cosine_reasons: list[str | None] = []
+    for alignment_norm, alignment_gradient, base_norm, base_gradient in zip(
+        alignment_norms,
+        alignment_gradients,
+        base_norms,
+        base_gradients,
+        strict=True,
+    ):
+        ratio, ratio_reason = _weighted_ratio_or_reason(
+            alignment_norm, base_norm, weight
+        )
+        cosine, cosine_reason = _cosine_or_reason(
+            base_gradient,
+            alignment_gradient,
+            base_norm,
+            alignment_norm,
+        )
+        ratios.append(ratio)
+        ratio_reasons.append(ratio_reason)
+        cosines.append(cosine)
+        cosine_reasons.append(cosine_reason)
+    return {
+        "sketch_gradient_norms": alignment_norms,
+        "photo_gradient_norms": [],
+        "weighted_sketch_ratios": ratios,
+        "weighted_sketch_ratio_reasons": ratio_reasons,
+        "weighted_photo_ratios": [],
+        "weighted_photo_ratio_reasons": [],
+        "sketch_cosines_with_base": cosines,
+        "sketch_cosine_reasons": cosine_reasons,
+        "photo_cosines_with_base": [],
+        "photo_cosine_reasons": [],
+    }
 
 
 def _calibrate_mean_alignment(
@@ -366,113 +636,751 @@ def _calibrate_mean_alignment(
     args: DictConfig,
     device: torch.device,
 ) -> dict[str, Any]:
-    """Calibrate one fixed mean-loss weight without updating model/RNG state."""
+    """Measure base/detached/symmetric gradients without changing training state."""
     target_ratio = float(args.calibration_target_ratio)
     count = int(args.calibration_batches)
     saved_rng = capture_rng_state(loader_generator)
     saved_epoch = getattr(sampler, "_epoch", None)
-    batches: list[dict[str, Any]] = []
+    saved_model_state = _clone_module_state(model)
+    saved_text_state = _clone_module_state(text_bank)
+    saved_flags = _training_flags(model, text_bank)
+    saved_grads = _parameter_grads(model, text_bank)
+    initial_model_state = dict(saved_model_state)
+    initial_text_state = dict(saved_text_state)
+    state_restoration_verified = False
+    result: dict[str, Any] | None = None
+    calibration_iterator: Any = None
+    worker_lifecycle_verified = int(getattr(train_loader, "num_workers", 0)) == 0
     try:
-        iterator = iter(train_loader)
+        batches: list[dict[str, Any]] = []
+        calibration_loader = _calibration_loader(
+            train_loader, sampler, loader_generator
+        )
+        iterator = iter(calibration_loader)
+        calibration_iterator = iterator
         for _ in range(count):
             try:
                 batches.append(next(iterator))
             except StopIteration as error:
-                raise ValueError("not enough fixed pseudo-train batches for calibration") from error
+                raise ValueError(
+                    "not enough fixed pseudo-train batches for calibration"
+                ) from error
+        shutdown_workers = getattr(iterator, "_shutdown_workers", None)
+        if callable(shutdown_workers):
+            shutdown_workers()
+        calibration_iterator = None
+        worker_lifecycle_verified = True
+
+        sketch_prompt = model.sketch_prompt
+        photo_prompt = model.photo_prompt
+        prompt_parameters = (sketch_prompt, photo_prompt)
+        base_sketch_norms: list[float] = []
+        base_photo_norms: list[float] = []
+        detached_sketch_norms: list[float] = []
+        detached_photo_norms: list[float] = []
+        symmetric_sketch_norms: list[float] = []
+        symmetric_photo_norms: list[float] = []
+        base_sketch_gradients: list[torch.Tensor | None] = []
+        base_photo_gradients: list[torch.Tensor | None] = []
+        detached_sketch_gradients: list[torch.Tensor | None] = []
+        detached_photo_gradients: list[torch.Tensor | None] = []
+        symmetric_sketch_gradients: list[torch.Tensor | None] = []
+        symmetric_photo_gradients: list[torch.Tensor | None] = []
+
+        def reset_forward_state() -> None:
+            _restore_module_state(model, initial_model_state)
+            _restore_module_state(text_bank, initial_text_state)
+
+        for batch in batches:
+            reset_forward_state()
+            forward_rng = capture_rng_state()
+            model.train()
+            rank, cls, _, _ = _batch_objectives(
+                model,
+                text_bank,
+                hard_text_values,
+                hard_text_labels,
+                batch,
+                args,
+                device,
+                alignment_mean_weight=0.0,
+                alignment_covariance_weight=0.0,
+            )
+            base = float(args.lambda_rank) * rank + float(args.lambda_cls) * cls
+            base_grads = _gradients_for(base, prompt_parameters)
+
+            reset_forward_state()
+            restore_rng_state(forward_rng)
+            model.train()
+            _, _, _, detached_alignment = _batch_objectives(
+                model,
+                text_bank,
+                hard_text_values,
+                hard_text_labels,
+                batch,
+                args,
+                device,
+                alignment_mean_weight=1.0,
+                alignment_covariance_weight=0.0,
+                alignment_target_gradient="detached",
+            )
+            if detached_alignment is None:
+                raise RuntimeError(
+                    "mean calibration did not produce a detached alignment loss"
+                )
+            detached_grads = _gradients_for(
+                detached_alignment.mean, prompt_parameters
+            )
+
+            reset_forward_state()
+            restore_rng_state(forward_rng)
+            model.train()
+            _, _, _, symmetric_alignment = _batch_objectives(
+                model,
+                text_bank,
+                hard_text_values,
+                hard_text_labels,
+                batch,
+                args,
+                device,
+                alignment_mean_weight=1.0,
+                alignment_covariance_weight=0.0,
+                alignment_target_gradient="symmetric",
+            )
+            if symmetric_alignment is None:
+                raise RuntimeError(
+                    "mean calibration did not produce a symmetric alignment loss"
+                )
+            symmetric_grads = _gradients_for(
+                symmetric_alignment.mean, prompt_parameters
+            )
+
+            base_norms = _grad_norms_for(base_grads, prompt_parameters)
+            detached_norms = _grad_norms_for(detached_grads, prompt_parameters)
+            symmetric_norms = _grad_norms_for(symmetric_grads, prompt_parameters)
+            base_sketch_norms.append(base_norms[0])
+            base_photo_norms.append(base_norms[1])
+            detached_sketch_norms.append(detached_norms[0])
+            detached_photo_norms.append(detached_norms[1])
+            symmetric_sketch_norms.append(symmetric_norms[0])
+            symmetric_photo_norms.append(symmetric_norms[1])
+            base_sketch_gradients.append(
+                None
+                if base_grads[0] is None
+                else base_grads[0].detach().cpu().clone()
+            )
+            base_photo_gradients.append(
+                None
+                if base_grads[1] is None
+                else base_grads[1].detach().cpu().clone()
+            )
+            detached_sketch_gradients.append(
+                None
+                if detached_grads[0] is None
+                else detached_grads[0].detach().cpu().clone()
+            )
+            detached_photo_gradients.append(
+                None
+                if detached_grads[1] is None
+                else detached_grads[1].detach().cpu().clone()
+            )
+            symmetric_sketch_gradients.append(
+                None
+                if symmetric_grads[0] is None
+                else symmetric_grads[0].detach().cpu().clone()
+            )
+            symmetric_photo_gradients.append(
+                None
+                if symmetric_grads[1] is None
+                else symmetric_grads[1].detach().cpu().clone()
+            )
+
+        detached_raw_ratios: list[float | None] = []
+        detached_raw_ratio_reasons: list[str | None] = []
+        for base_norm, detached_norm in zip(
+            base_sketch_norms, detached_sketch_norms, strict=True
+        ):
+            if detached_norm <= _CALIBRATION_EPS:
+                detached_raw_ratios.append(None)
+                detached_raw_ratio_reasons.append("detached_sketch_gradient_zero")
+            else:
+                detached_raw_ratios.append(base_norm / detached_norm)
+                detached_raw_ratio_reasons.append(None)
+        valid_raw_ratios = [
+            value
+            for value in detached_raw_ratios
+            if value is not None and math.isfinite(float(value))
+        ]
+        base_sketch_denominators_valid = all(
+            math.isfinite(float(value)) and value > _CALIBRATION_EPS
+            for value in base_sketch_norms
+        )
+        detached_sketch_denominators_valid = all(
+            math.isfinite(float(value)) and value > _CALIBRATION_EPS
+            for value in detached_sketch_norms
+        )
+        calibrated = (
+            target_ratio * statistics.median(valid_raw_ratios)
+            if len(valid_raw_ratios) == count
+            and base_sketch_denominators_valid
+            and detached_sketch_denominators_valid
+            else None
+        )
+
+        def policy_payload(
+            sketch_norms: list[float],
+            photo_norms: list[float],
+            sketch_gradients: list[torch.Tensor | None],
+            photo_gradients: list[torch.Tensor | None],
+        ) -> dict[str, Any]:
+            payload = _policy_gradient_payload(
+                alignment_norms=sketch_norms,
+                alignment_gradients=sketch_gradients,
+                base_norms=base_sketch_norms,
+                base_gradients=base_sketch_gradients,
+                weight=calibrated,
+            )
+            photo_ratios: list[float | None] = []
+            photo_ratio_reasons: list[str | None] = []
+            photo_cosines: list[float | None] = []
+            photo_cosine_reasons: list[str | None] = []
+            for alignment_norm, alignment_gradient, base_norm, base_gradient in zip(
+                photo_norms,
+                photo_gradients,
+                base_photo_norms,
+                base_photo_gradients,
+                strict=True,
+            ):
+                ratio, ratio_reason = _weighted_ratio_or_reason(
+                    alignment_norm, base_norm, calibrated
+                )
+                cosine, cosine_reason = _cosine_or_reason(
+                    base_gradient,
+                    alignment_gradient,
+                    base_norm,
+                    alignment_norm,
+                )
+                photo_ratios.append(ratio)
+                photo_ratio_reasons.append(ratio_reason)
+                photo_cosines.append(cosine)
+                photo_cosine_reasons.append(cosine_reason)
+            payload.update(
+                {
+                    "photo_gradient_norms": photo_norms,
+                    "weighted_photo_ratios": photo_ratios,
+                    "weighted_photo_ratio_reasons": photo_ratio_reasons,
+                    "photo_cosines_with_base": photo_cosines,
+                    "photo_cosine_reasons": photo_cosine_reasons,
+                }
+            )
+            return payload
+
+        detached = policy_payload(
+            detached_sketch_norms,
+            detached_photo_norms,
+            detached_sketch_gradients,
+            detached_photo_gradients,
+        )
+        symmetric = policy_payload(
+            symmetric_sketch_norms,
+            symmetric_photo_norms,
+            symmetric_sketch_gradients,
+            symmetric_photo_gradients,
+        )
+        sketch_differences = [
+            0.0
+            if detached_gradient is None and symmetric_gradient is None
+            else None
+            if detached_gradient is None or symmetric_gradient is None
+            else float(
+                (detached_gradient - symmetric_gradient).abs().max().item()
+            )
+            for detached_gradient, symmetric_gradient in zip(
+                detached_sketch_gradients,
+                symmetric_sketch_gradients,
+                strict=True,
+            )
+        ]
+        finite_differences = [value for value in sketch_differences if value is not None]
+        sketch_gradients_match = all(
+            value <= _CALIBRATION_SKETCH_TOLERANCE for value in finite_differences
+        ) and len(finite_differences) == count
+        fixed_batch_identity = _calibration_batch_identity(batches, saved_epoch)
+        fixed_batch_identity["worker_lifecycle_verified"] = worker_lifecycle_verified
+        reset_forward_state()
+        initialization_identity = {
+            "model_state_hash": _state_hash(model),
+            "text_bank_state_hash": _state_hash(text_bank),
+        }
+        calibration_status = (
+            "VALID"
+            if calibrated is not None
+            and base_sketch_denominators_valid
+            and detached_sketch_denominators_valid
+            and sketch_gradients_match
+            and saved_epoch == 0
+            and worker_lifecycle_verified
+            else "UNVERIFIED"
+        )
+        result = {
+            "schema_version": _CALIBRATION_SCHEMA_VERSION,
+            "schema_name": "corrected_mean_alignment_calibration",
+            "status": calibration_status,
+            "schema_notes": {
+                "legacy_schema_version": 1,
+                "legacy_field": "weighted_photo_gradient_ratios_if_symmetric",
+                "legacy_field_status": "INVALID",
+                "legacy_field_reason": (
+                    "it was computed from detached mean-alignment gradients and "
+                    "did not measure the symmetric policy"
+                ),
+            },
+            "base": {
+                "sketch_gradient_norms": base_sketch_norms,
+                "photo_gradient_norms": base_photo_norms,
+            },
+            "detached": {
+                **detached,
+                "unweighted_sketch_ratios": detached_raw_ratios,
+                "unweighted_sketch_ratio_reasons": detached_raw_ratio_reasons,
+            },
+            "symmetric": symmetric,
+            "calibration": {
+                "status": calibration_status,
+                "lambda_alignment_mean": calibrated,
+                "target_ratio": target_ratio,
+                "rule": _CALIBRATION_RULE,
+                "batches": count,
+                "fixed_batch_identity": fixed_batch_identity,
+                "initialization_identity": initialization_identity,
+                "state_restoration_verified": False,
+                "lambda_selection_status": (
+                    "VALID"
+                    if (
+                        calibrated is not None
+                        and base_sketch_denominators_valid
+                        and detached_sketch_denominators_valid
+                    )
+                    else "UNVERIFIED_ZERO_DENOMINATOR"
+                ),
+                "lambda_selection_reasons": detached_raw_ratio_reasons,
+                "sketch_gradient_comparison": {
+                    "detached_vs_symmetric_max_abs_difference": (
+                        None if not finite_differences else max(finite_differences)
+                    ),
+                    "tolerance": _CALIBRATION_SKETCH_TOLERANCE,
+                    "match": sketch_gradients_match,
+                },
+            },
+        }
     finally:
-        restore_rng_state(saved_rng, loader_generator)
+        if calibration_iterator is not None:
+            try:
+                shutdown_workers = getattr(calibration_iterator, "_shutdown_workers", None)
+                if callable(shutdown_workers):
+                    shutdown_workers()
+                else:
+                    worker_lifecycle_verified = False
+            except Exception:  # noqa: BLE001 - worker teardown is best effort
+                worker_lifecycle_verified = False
+        _restore_module_state(model, saved_model_state)
+        _restore_module_state(text_bank, saved_text_state)
+        _restore_parameter_grads(saved_grads)
+        _restore_training_flags(saved_flags)
         if saved_epoch is not None:
             sampler._epoch = saved_epoch
-
-    sketch_prompt = model.sketch_prompt
-    photo_prompt = model.photo_prompt
-    prompt_parameters = (sketch_prompt, photo_prompt)
-    base_norms: list[float] = []
-    mean_norms: list[float] = []
-    photo_base_norms: list[float] = []
-    photo_mean_norms: list[float] = []
-    cosines: list[float] = []
-    for batch in batches:
-        model.train()
-        rank, cls, _, _ = _batch_objectives(
-            model,
-            text_bank,
-            hard_text_values,
-            hard_text_labels,
-            batch,
-            args,
-            device,
-            alignment_mean_weight=0.0,
-            alignment_covariance_weight=0.0,
-        )
-        base = float(args.lambda_rank) * rank + float(args.lambda_cls) * cls
-        base_grads = torch.autograd.grad(base, prompt_parameters, allow_unused=True)
-        base_norm = _grad_norms_for(base_grads, prompt_parameters)[0]
-        photo_base_norm = _grad_norms_for(base_grads, prompt_parameters)[1]
-        _, _, _, mean_alignment = _batch_objectives(
-            model,
-            text_bank,
-            hard_text_values,
-            hard_text_labels,
-            batch,
-            args,
-            device,
-            alignment_mean_weight=1.0,
-            alignment_covariance_weight=0.0,
-            alignment_target_gradient="detached",
-        )
-        if mean_alignment is None:
-            raise RuntimeError("mean calibration did not produce a mean alignment loss")
-        mean_grads = torch.autograd.grad(
-            mean_alignment.mean, prompt_parameters, allow_unused=True
-        )
-        mean_norm = _grad_norms_for(mean_grads, prompt_parameters)[0]
-        photo_mean_norm = _grad_norms_for(mean_grads, prompt_parameters)[1]
-        if base_norm <= 1e-12 or mean_norm <= 1e-12:
-            raise ValueError(
-                "mean calibration encountered a near-zero sketch-prompt gradient; "
-                "choose a different fixed batch rule"
+        restore_rng_state(saved_rng, loader_generator)
+        state_restoration_verified = (
+            _module_state_matches(model, saved_model_state)
+            and _module_state_matches(text_bank, saved_text_state)
+            and _rng_matches(saved_rng, capture_rng_state(loader_generator))
+            and getattr(sampler, "_epoch", None) == saved_epoch
+            and all(
+                module.training == training for module, training in saved_flags
             )
-        base_vector = base_grads[0]
-        mean_vector = mean_grads[0]
-        assert base_vector is not None and mean_vector is not None
-        cosine = float(
-            torch.nn.functional.cosine_similarity(
-                base_vector.reshape(1, -1), mean_vector.reshape(1, -1)
-            ).item()
+            and all(
+                (parameter.grad is None and gradient is None)
+                or (
+                    parameter.grad is not None
+                    and gradient is not None
+                    and torch.equal(parameter.grad, gradient)
+                )
+                for parameter, gradient in saved_grads
+            )
         )
-        base_norms.append(base_norm)
-        mean_norms.append(mean_norm)
-        photo_base_norms.append(photo_base_norm)
-        photo_mean_norms.append(photo_mean_norm)
-        cosines.append(cosine)
 
-    ratios = [base / mean for base, mean in zip(base_norms, mean_norms)]
-    calibrated = target_ratio * statistics.median(ratios)
-    weighted_ratios = [calibrated * mean / base for base, mean in zip(base_norms, mean_norms)]
-    photo_ratios = [
-        None
-        if base <= 1e-12
-        else calibrated * mean / base
-        for base, mean in zip(photo_base_norms, photo_mean_norms)
-    ]
-    return {
-        "rule": "lambda = target_ratio * median(base_sketch_norm / mean_norm)",
-        "target_ratio": target_ratio,
-        "lambda_alignment_mean": calibrated,
-        "batches": count,
-        "base_sketch_gradient_norms": base_norms,
-        "mean_sketch_gradient_norms": mean_norms,
-        "unweighted_sketch_norm_ratios": ratios,
-        "weighted_sketch_gradient_ratios": weighted_ratios,
-        "gradient_cosines_sketch": cosines,
-        "base_photo_gradient_norms": photo_base_norms,
-        "mean_photo_gradient_norms": photo_mean_norms,
-        "weighted_photo_gradient_ratios_if_symmetric": photo_ratios,
-        "median_actual_sketch_ratio": statistics.median(weighted_ratios),
-        "mean_actual_sketch_ratio": statistics.fmean(weighted_ratios),
-        "rng_and_sampler_state_restored": True,
+    if result is None:
+        raise RuntimeError("calibration did not produce a result")
+    result["calibration"]["state_restoration_verified"] = state_restoration_verified
+    result["status"] = (
+        "VALID"
+        if result["status"] == "VALID"
+        and state_restoration_verified
+        and saved_epoch == 0
+        and result["calibration"]["fixed_batch_identity"].get(
+            "worker_lifecycle_verified"
+        ) is True
+        else "UNVERIFIED"
+    )
+    result["calibration"]["status"] = result["status"]
+    return result
+
+
+def _validate_calibration_payload(
+    payload: dict[str, Any],
+    *,
+    role: str,
+    campaign: str,
+    seed: int,
+    split_identity: dict[str, Any],
+    source_hash: str | None,
+    initial_hash: str,
+    initial_text_bank_hash: str,
+    resolved_config: dict[str, Any],
+) -> float:
+    if payload.get("schema_version") != _CALIBRATION_SCHEMA_VERSION:
+        raise ValueError("alignment calibration artifact has an unsupported schema")
+    if payload.get("schema_name") != "corrected_mean_alignment_calibration":
+        raise ValueError("alignment calibration artifact schema name is invalid")
+    if payload.get("status") != "VALID":
+        raise ValueError("alignment calibration artifact is not valid")
+    if "weighted_photo_gradient_ratios_if_symmetric" in payload:
+        raise ValueError("alignment calibration artifact contains the invalid legacy field")
+    if campaign != ALIGNMENT_CORRECTED_PILOT_CAMPAIGN or role not in {
+        "alignment_mean_text_log",
+        "alignment_mean_text_log_symmetric",
+    }:
+        raise ValueError("alignment calibration artifacts are only valid for corrected mean pilots")
+    calibration = payload.get("calibration")
+    if not isinstance(calibration, dict) or calibration.get("status") != "VALID":
+        raise ValueError("alignment calibration artifact is not valid")
+    if calibration.get("lambda_selection_status") != "VALID":
+        raise ValueError("alignment calibration lambda selection is not verified")
+    for field, expected in (
+        ("experiment_role", payload.get("experiment_role")),
+        ("campaign", campaign),
+        ("training_seed", seed),
+        ("initial_model_state_hash", initial_hash),
+        ("source_snapshot_hash", source_hash),
+        ("split_identity_hash", split_identity.get("sha256")),
+    ):
+        if calibration.get(field) != expected:
+            raise ValueError(f"alignment calibration nested {field} is stale")
+    if calibration.get("state_restoration_verified") is not True:
+        raise ValueError("alignment calibration state restoration is not verified")
+    comparison = calibration.get("sketch_gradient_comparison")
+    if not isinstance(comparison, dict) or comparison.get("match") is not True:
+        raise ValueError("detached and symmetric sketch calibration gradients do not match")
+    comparison_tolerance = comparison.get("tolerance")
+    comparison_difference = comparison.get(
+        "detached_vs_symmetric_max_abs_difference"
+    )
+    if (
+        not isinstance(comparison_tolerance, (int, float))
+        or isinstance(comparison_tolerance, bool)
+        or not math.isfinite(float(comparison_tolerance))
+        or not isinstance(comparison_difference, (int, float))
+        or isinstance(comparison_difference, bool)
+        or not math.isfinite(float(comparison_difference))
+        or float(comparison_difference) < 0.0
+        or not math.isclose(
+            float(comparison_tolerance),
+            _CALIBRATION_SKETCH_TOLERANCE,
+            rel_tol=0.0,
+            abs_tol=0.0,
+        )
+        or float(comparison_difference) > _CALIBRATION_SKETCH_TOLERANCE
+    ):
+        raise ValueError("detached and symmetric sketch calibration gradients do not match")
+    calibrated_value = calibration.get("lambda_alignment_mean")
+    if calibrated_value is None or not math.isfinite(float(calibrated_value)):
+        raise ValueError("alignment calibration artifact has no finite lambda")
+    calibrated_lambda = float(calibrated_value)
+    if not math.isclose(
+        calibrated_lambda,
+        float(resolved_config["lambda_alignment_mean"]),
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError(
+            "configured lambda_alignment_mean does not match calibration artifact"
+        )
+    split_seed = split_identity.get(
+        "pseudo_validation_seed", split_identity.get("seed")
+    )
+    if (
+        not source_hash
+        or not split_identity.get("sha256")
+        or split_identity.get("sha256")
+        != canonical_sha256(
+            {key: value for key, value in split_identity.items() if key != "sha256"}
+        )
+        or split_seed is None
+    ):
+        raise ValueError("alignment calibration run provenance is incomplete")
+    if payload.get("campaign") != campaign or payload.get("training_seed") != seed:
+        raise ValueError("alignment calibration artifact campaign or seed is stale")
+    if payload.get("initial_model_state_hash") != initial_hash:
+        raise ValueError("alignment calibration artifact initialization is stale")
+    if payload.get("initial_text_bank_state_hash") != initial_text_bank_hash:
+        raise ValueError("alignment calibration artifact text-bank initialization is stale")
+    identity = calibration.get("initialization_identity")
+    if (
+        not isinstance(identity, dict)
+        or identity.get("model_state_hash") != initial_hash
+        or identity.get("text_bank_state_hash") != initial_text_bank_hash
+    ):
+        raise ValueError("alignment calibration artifact initialization identity is stale")
+    if payload.get("source_snapshot_hash") != source_hash:
+        raise ValueError("alignment calibration artifact source snapshot is stale")
+    artifact_split_identity = payload.get("split_identity")
+    if (
+        not isinstance(artifact_split_identity, dict)
+        or artifact_split_identity != split_identity
+        or artifact_split_identity.get("sha256")
+        != canonical_sha256(
+            {
+                key: value
+                for key, value in artifact_split_identity.items()
+                if key != "sha256"
+            }
+        )
+    ):
+        raise ValueError("alignment calibration artifact embedded split identity is stale")
+    if payload.get("split_identity_hash") != split_identity.get("sha256"):
+        raise ValueError("alignment calibration artifact split identity is stale")
+    artifact_role = payload.get("experiment_role")
+    if artifact_role not in {"alignment_mean_text_log", "alignment_mean_text_log_symmetric"}:
+        raise ValueError("alignment calibration artifact role is invalid")
+    detached = payload.get("detached")
+    symmetric = payload.get("symmetric")
+    if not isinstance(detached, dict) or not isinstance(symmetric, dict):
+        raise ValueError("alignment calibration policy diagnostics are missing")
+    batches = calibration.get("batches")
+    if isinstance(batches, bool) or not isinstance(batches, int) or batches <= 0:
+        raise ValueError("alignment calibration batch count is invalid")
+
+    def series(
+        policy: dict[str, Any],
+        field: str,
+        *,
+        allow_none: bool = False,
+        nonnegative: bool = False,
+    ) -> list[Any]:
+        values = policy.get(field)
+        if not isinstance(values, list) or len(values) != batches:
+            raise ValueError(f"alignment calibration field {field} is incomplete")
+        for value in values:
+            if value is None and allow_none:
+                continue
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or (nonnegative and float(value) < 0.0)
+            ):
+                raise ValueError(f"alignment calibration field {field} is invalid")
+        return values
+
+    def ratio_series(
+        policy: dict[str, Any],
+        field: str,
+        reason_field: str,
+        *,
+        nonnegative: bool = True,
+    ) -> list[Any]:
+        values = series(policy, field, allow_none=True, nonnegative=nonnegative)
+        reasons = policy.get(reason_field)
+        if not isinstance(reasons, list) or len(reasons) != batches:
+            raise ValueError(f"alignment calibration field {reason_field} is incomplete")
+        for value, reason in zip(values, reasons, strict=True):
+            if value is None and (not isinstance(reason, str) or not reason):
+                raise ValueError(f"alignment calibration field {reason_field} is invalid")
+            if value is not None and reason is not None:
+                raise ValueError(f"alignment calibration field {reason_field} is invalid")
+        return values
+
+    base_sketch = series(
+        payload["base"], "sketch_gradient_norms", nonnegative=True
+    ) if isinstance(payload.get("base"), dict) else None
+    base_photo = series(
+        payload["base"], "photo_gradient_norms", nonnegative=True
+    ) if isinstance(payload.get("base"), dict) else None
+    if base_sketch is None or base_photo is None:
+        raise ValueError("alignment calibration base diagnostics are missing")
+    if any(float(value) <= _CALIBRATION_EPS for value in base_sketch):
+        raise ValueError("alignment calibration has an undefined weighted-ratio denominator")
+    detached_sketch = series(
+        detached, "sketch_gradient_norms", nonnegative=True
+    )
+    detached_photo = series(
+        detached, "photo_gradient_norms", nonnegative=True
+    )
+    symmetric_sketch = series(
+        symmetric, "sketch_gradient_norms", nonnegative=True
+    )
+    symmetric_photo = series(
+        symmetric, "photo_gradient_norms", nonnegative=True
+    )
+    norm_difference_lower_bound = max(
+        abs(float(detached_value) - float(symmetric_value))
+        for detached_value, symmetric_value in zip(
+            detached_sketch, symmetric_sketch, strict=True
+        )
+    )
+    if float(comparison_difference) + 1e-12 < norm_difference_lower_bound:
+        raise ValueError("alignment calibration sketch comparison is stale")
+    if any(float(value) > _CALIBRATION_EPS for value in detached_photo):
+        raise ValueError("detached calibration has a photo alignment gradient")
+    for policy in (detached, symmetric):
+        ratio_series(policy, "weighted_sketch_ratios", "weighted_sketch_ratio_reasons")
+        ratio_series(policy, "weighted_photo_ratios", "weighted_photo_ratio_reasons")
+        ratio_series(
+            policy,
+            "sketch_cosines_with_base",
+            "sketch_cosine_reasons",
+            nonnegative=False,
+        )
+        ratio_series(
+            policy,
+            "photo_cosines_with_base",
+            "photo_cosine_reasons",
+            nonnegative=False,
+        )
+    raw_ratios = ratio_series(
+        detached, "unweighted_sketch_ratios", "unweighted_sketch_ratio_reasons"
+    )
+    target_ratio = calibration.get("target_ratio")
+    if (
+        isinstance(target_ratio, bool)
+        or not isinstance(target_ratio, (int, float))
+        or not math.isfinite(float(target_ratio))
+        or float(target_ratio) < 0.0
+    ):
+        raise ValueError("alignment calibration target ratio is invalid")
+    expected_raw_ratios: list[float | None] = []
+    for base_norm, detached_norm, observed in zip(
+        base_sketch, detached_sketch, raw_ratios, strict=True
+    ):
+        expected = (
+            None
+            if float(detached_norm) <= _CALIBRATION_EPS
+            else float(base_norm) / float(detached_norm)
+        )
+        expected_raw_ratios.append(expected)
+        if expected is None:
+            if observed is not None:
+                raise ValueError("alignment calibration zero-denominator ratio is invalid")
+        elif observed is None or not math.isclose(
+            float(observed), expected, rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise ValueError("alignment calibration raw ratios are stale")
+    if any(value is None for value in expected_raw_ratios):
+        raise ValueError("alignment calibration has an undefined lambda denominator")
+    expected_lambda = float(target_ratio) * statistics.median(
+        [float(value) for value in expected_raw_ratios if value is not None]
+    )
+    if not math.isclose(
+        calibrated_lambda, expected_lambda, rel_tol=0.0, abs_tol=1e-12
+    ):
+        raise ValueError("alignment calibration lambda rule is invalid")
+    for policy, sketch_norms, photo_norms in (
+        (detached, detached_sketch, detached_photo),
+        (symmetric, symmetric_sketch, symmetric_photo),
+    ):
+        for field, norms, base_norms in (
+            ("weighted_sketch_ratios", sketch_norms, base_sketch),
+            ("weighted_photo_ratios", photo_norms, base_photo),
+        ):
+            observed = policy[field]
+            for value, norm, base_norm in zip(observed, norms, base_norms, strict=True):
+                expected = (
+                    None
+                    if float(base_norm) <= _CALIBRATION_EPS
+                    else calibrated_lambda * float(norm) / float(base_norm)
+                )
+                if expected is None:
+                    if value is not None:
+                        raise ValueError("alignment calibration ratio denominator is invalid")
+                elif value is None or not math.isclose(
+                    float(value), expected, rel_tol=0.0, abs_tol=1e-12
+                ):
+                    raise ValueError("alignment calibration weighted ratios are stale")
+    identity = calibration.get("initialization_identity")
+    if (
+        not isinstance(identity, dict)
+        or identity.get("model_state_hash") != initial_hash
+        or identity.get("text_bank_state_hash") != initial_text_bank_hash
+    ):
+        raise ValueError("alignment calibration initialization identity is invalid")
+    fixed_identity = calibration.get("fixed_batch_identity")
+    if (
+        not isinstance(fixed_identity, dict)
+        or fixed_identity.get("count") != batches
+        or not isinstance(fixed_identity.get("batches"), list)
+        or len(fixed_identity["batches"]) != batches
+        or not fixed_identity.get("sha256")
+        or fixed_identity.get("sha256") != canonical_sha256(fixed_identity["batches"])
+        or fixed_identity.get("sampler_epoch_before") != 0
+        or fixed_identity.get("worker_lifecycle_verified") is not True
+    ):
+        raise ValueError("alignment calibration fixed batches are not identified")
+    lambda_reasons = calibration.get("lambda_selection_reasons")
+    if not isinstance(lambda_reasons, list) or len(lambda_reasons) != batches:
+        raise ValueError("alignment calibration lambda reasons are incomplete")
+    if lambda_reasons != detached["unweighted_sketch_ratio_reasons"]:
+        raise ValueError("alignment calibration lambda reasons are stale")
+    calibration_config = payload.get("calibration_config")
+    if not isinstance(calibration_config, dict):
+        raise ValueError("alignment calibration config evidence is missing")
+    if payload.get("config_hash") != canonical_sha256(calibration_config):
+        raise ValueError("alignment calibration config hash is invalid")
+    if calibration_config.get("experiment_campaign") != campaign:
+        raise ValueError("alignment calibration config campaign is stale")
+    if calibration.get("target_ratio") != calibration_config.get("calibration_target_ratio"):
+        raise ValueError("alignment calibration target ratio is stale")
+    if calibration.get("batches") != calibration_config.get("calibration_batches"):
+        raise ValueError("alignment calibration batch count is stale")
+    if calibration_config.get("seed") != seed:
+        raise ValueError("alignment calibration config seed is stale")
+    if calibration_config.get("pseudo_val_seed") != split_seed:
+        raise ValueError("alignment calibration config split seed is stale")
+    if calibration_config.get("alignment_geometry") != "log_map" or calibration_config.get(
+        "alignment_anchor"
+    ) != "text":
+        raise ValueError("alignment calibration geometry or anchor is invalid")
+    expected_gradient = (
+        "symmetric"
+        if artifact_role == "alignment_mean_text_log_symmetric"
+        else "detached"
+    )
+    if calibration_config.get("alignment_target_gradient") != expected_gradient:
+        raise ValueError("alignment calibration target-gradient policy is invalid")
+    if calibration_config.get("lambda_alignment_covariance") != 0.0:
+        raise ValueError("alignment calibration covariance weight must be zero")
+    ignored_calibration_config_keys = {
+        "alignment_calibration_artifact",
+        "alignment_target_gradient",
+        "calibration_only",
+        "experiment_name",
+        "experiment_role",
+        "lambda_alignment_mean",
     }
+    comparable_calibration_config = {
+        key: value
+        for key, value in calibration_config.items()
+        if key not in ignored_calibration_config_keys
+    }
+    comparable_resolved_config = {
+        key: value
+        for key, value in resolved_config.items()
+        if key not in ignored_calibration_config_keys
+    }
+    if canonical_sha256(comparable_calibration_config) != canonical_sha256(
+        comparable_resolved_config
+    ):
+        raise ValueError("alignment calibration config does not match this training run")
+    return calibrated_lambda
 
 
 def run(args: DictConfig) -> None:
@@ -483,6 +1391,13 @@ def run(args: DictConfig) -> None:
     data = load_data_config(_path(args.data_config))
     split, names, split_identity, data_manifest_identity = _load_split(data, args)
     manifest_path = _path(args.experiment_manifest_path)
+    if (
+        str(args.experiment_campaign) == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        and manifest_path.name == "corrected_pilot_manifest.json"
+    ):
+        raise ValueError(
+            "historical corrected_pilot_manifest.json is immutable; use the v2 manifest path"
+        )
     role = str(args.experiment_role)
     train_names = {class_id: names[class_id] for class_id in split.train_class_ids}
     photo_clip = load_frozen_clip(
@@ -552,6 +1467,7 @@ def run(args: DictConfig) -> None:
         raise RuntimeError("alignment campaign requires trainable prompt parameters")
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
     initial_hash = _state_hash(model)
+    initial_text_bank_hash = _state_hash(text_bank)
     clip_before = {
         name: value.detach().cpu().clone()
         for name, value in model.named_parameters()
@@ -612,26 +1528,64 @@ def run(args: DictConfig) -> None:
     last_gradient_norms = {group["name"]: 0.0 for group in optimizer_groups}
     last_parameter_gradient_norms: dict[str, float | None] = {}
     gradient_calibration: dict[str, Any] | None = None
+    calibration_batch_identities: list[Any] | None = None
+    calibration_batch_replay_index = 0
+    calibration_batch_replay_verified: bool | None = None
     calibration_artifact = args.alignment_calibration_artifact
-    if calibration_artifact is not None:
+    if (
+        str(args.experiment_campaign) == ALIGNMENT_CORRECTED_PILOT_CAMPAIGN
+        and role == "alignment_control"
+        and calibration_artifact not in (None, "")
+    ):
+        raise ValueError("corrected control runs must not reference calibration")
+    if calibration_artifact not in (None, ""):
         calibration_path = _path(calibration_artifact)
         if not calibration_path.is_file():
             raise FileNotFoundError(f"alignment calibration artifact not found: {calibration_path}")
-        calibration_payload = json.loads(calibration_path.read_text())
-        calibrated_lambda = float(calibration_payload["lambda_alignment_mean"])
-        if not math.isclose(
-            calibrated_lambda,
-            float(args.lambda_alignment_mean),
-            rel_tol=0.0,
-            abs_tol=1e-12,
-        ):
-            raise ValueError(
-                "configured lambda_alignment_mean does not match calibration artifact"
-            )
+        calibration_bytes = calibration_path.read_bytes()
+        calibration_payload = json.loads(calibration_bytes)
+        calibrated_lambda = _validate_calibration_payload(
+            calibration_payload,
+            role=role,
+            campaign=str(args.experiment_campaign),
+            seed=seed,
+            split_identity=split_identity,
+            source_hash=provenance.get("source_snapshot", {}).get("sha256"),
+            initial_hash=initial_hash,
+            initial_text_bank_hash=initial_text_bank_hash,
+            resolved_config=resolved_config,
+        )
+        fixed_batch_identity = calibration_payload["calibration"][
+            "fixed_batch_identity"
+        ]
+        calibration_batch_identities = fixed_batch_identity["batches"]
+        calibration_batch_replay_verified = False
         gradient_calibration = {
             "artifact": str(calibration_path.resolve()),
-            "artifact_sha256": hashlib.sha256(calibration_path.read_bytes()).hexdigest(),
+            "artifact_sha256": hashlib.sha256(calibration_bytes).hexdigest(),
             "lambda_alignment_mean": calibrated_lambda,
+            "schema_version": calibration_payload["schema_version"],
+            "campaign": str(args.experiment_campaign),
+            "experiment_role": role,
+            "training_seed": seed,
+            "source_snapshot_hash": calibration_payload.get("source_snapshot_hash"),
+            "split_identity_hash": calibration_payload.get("split_identity_hash"),
+            "initial_model_state_hash": calibration_payload.get(
+                "initial_model_state_hash"
+            ),
+            "initial_text_bank_state_hash": calibration_payload.get(
+                "initial_text_bank_state_hash"
+            ),
+            "config_hash": calibration_payload.get("config_hash"),
+            "fixed_batch_identity_sha256": fixed_batch_identity["sha256"],
+            "first_batch_replay_verified": False,
+            "calibration_batch_replay_verified": False,
+            "calibration_batch_replay_count": 0,
+            "calibration_batch_replay_expected_count": len(calibration_batch_identities),
+            "calibration_batch_replay_prefix_sha256": canonical_sha256([]),
+            "worker_lifecycle_verified": fixed_batch_identity[
+                "worker_lifecycle_verified"
+            ],
         }
     if bool(args.calibration_only):
         calibration = _calibrate_mean_alignment(
@@ -651,6 +1605,27 @@ def run(args: DictConfig) -> None:
                 "campaign": str(args.experiment_campaign),
                 "training_seed": seed,
                 "initial_model_state_hash": initial_hash,
+                "initial_text_bank_state_hash": initial_text_bank_hash,
+                "source_snapshot_hash": provenance.get("source_snapshot", {}).get(
+                    "sha256"
+                ),
+                "split_identity": split_identity,
+                "split_identity_hash": split_identity.get("sha256"),
+                "calibration_config": resolved_config,
+                "config_hash": canonical_sha256(resolved_config),
+            }
+        )
+        calibration["calibration"].update(
+            {
+                "experiment_role": role,
+                "campaign": str(args.experiment_campaign),
+                "training_seed": seed,
+                "initial_model_state_hash": initial_hash,
+                "initial_text_bank_state_hash": initial_text_bank_hash,
+                "source_snapshot_hash": provenance.get("source_snapshot", {}).get(
+                    "sha256"
+                ),
+                "split_identity_hash": split_identity.get("sha256"),
                 "config_hash": canonical_sha256(resolved_config),
             }
         )
@@ -670,6 +1645,14 @@ def run(args: DictConfig) -> None:
                 "text_tower_frozen": True,
             }
         )
+        current_sketch = encode_prompted_loader(model, val_sketch_loader)
+        current_photo = encode_prompted_loader(model, val_photo_loader, photo=True)
+        uncached_evaluation = evaluate_prompted(
+            current_sketch,
+            current_photo,
+            query_chunk_size=int(args.query_chunk_size),
+            device=device,
+        )
         _alignment_checkpoint(
             checkpoint,
             model=model,
@@ -685,11 +1668,29 @@ def run(args: DictConfig) -> None:
             provenance=provenance,
             optimizer_groups=optimizer_groups,
             initial_hash=initial_hash,
+            initial_text_bank_hash=initial_text_bank_hash,
             clip_freeze_policy=clip_policy,
+            full_pseudo_unseen_mAP=float(uncached_evaluation["full_mAP"]),
+            calibration_identity=(
+                None
+                if gradient_calibration is None
+                else {
+                    key: gradient_calibration.get(key)
+                    for key in (
+                        "artifact",
+                        "artifact_sha256",
+                        "fixed_batch_identity_sha256",
+                        "first_batch_replay_verified",
+                        "calibration_batch_replay_verified",
+                        "calibration_batch_replay_count",
+                        "calibration_batch_replay_expected_count",
+                        "calibration_batch_replay_prefix_sha256",
+                        "worker_lifecycle_verified",
+                    )
+                }
+            ),
         )
         checkpoint_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
-        current_sketch = encode_prompted_loader(model, val_sketch_loader)
-        current_photo = encode_prompted_loader(model, val_photo_loader, photo=True)
         identity = cache_identity(
             prompt_checkpoint_hash=checkpoint_hash,
             prompt_length=int(args.visual_prompt_length),
@@ -708,6 +1709,13 @@ def run(args: DictConfig) -> None:
             query_chunk_size=int(args.query_chunk_size),
             device=device,
         )
+        if not math.isclose(
+            float(uncached_evaluation["full_mAP"]),
+            float(evaluation["full_mAP"]),
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise RuntimeError("prompt cache changed the evaluated horizon metric")
         geometry = geometry_payload(
             current_sketch,
             loaded_photo,
@@ -857,6 +1865,33 @@ def run(args: DictConfig) -> None:
         for batch in train_loader:
             if step >= int(args.max_steps):
                 break
+            if (
+                calibration_batch_identities is not None
+                and calibration_batch_replay_index < len(calibration_batch_identities)
+            ):
+                if (
+                    _calibration_json_value(batch)
+                    != calibration_batch_identities[calibration_batch_replay_index]
+                ):
+                    raise RuntimeError(
+                        "training batch does not replay the calibration batch sequence"
+                    )
+                calibration_batch_replay_index += 1
+                if calibration_batch_replay_index == len(calibration_batch_identities):
+                    calibration_batch_replay_verified = True
+                if gradient_calibration is not None:
+                    gradient_calibration["first_batch_replay_verified"] = True
+                    gradient_calibration["calibration_batch_replay_verified"] = (
+                        calibration_batch_replay_verified
+                    )
+                    gradient_calibration["calibration_batch_replay_count"] = (
+                        calibration_batch_replay_index
+                    )
+                    gradient_calibration["calibration_batch_replay_prefix_sha256"] = (
+                        canonical_sha256(
+                            calibration_batch_identities[:calibration_batch_replay_index]
+                        )
+                    )
             optimizer.zero_grad(set_to_none=True)
             model.train()
             rank, cls, accuracy, alignment = _batch_objectives(
@@ -914,6 +1949,8 @@ def run(args: DictConfig) -> None:
                 )
     if step != int(args.max_steps):
         raise RuntimeError(f"training stopped at {step}, expected {args.max_steps}")
+    if calibration_batch_identities is not None and not calibration_batch_replay_verified:
+        raise RuntimeError("training did not verify the calibration batch sequence replay")
 
     torch.save(
         {
@@ -969,6 +2006,12 @@ def run(args: DictConfig) -> None:
         "provenance": provenance,
         "seed": seed,
         "training_seed": seed,
+        "initial_model_state_hash": initial_hash,
+        "initial_text_bank_state_hash": initial_text_bank_hash,
+        "initialization_identity": {
+            "model_state_hash": initial_hash,
+            "text_bank_state_hash": initial_text_bank_hash,
+        },
         "pseudo_validation_seed": int(args.pseudo_val_seed),
         "training_class_list": list(split_identity["train_class_ids"]),
         "validation_class_list": list(split_identity["validation_class_ids"]),
@@ -1049,15 +2092,7 @@ def run(args: DictConfig) -> None:
             if device.type == "cuda"
             else None,
         },
-        "inference_contract": {
-            "required_inputs": ["raw_sketch_image"],
-            "text_required": False,
-            "photo_required": False,
-            "oracle_class_required": False,
-            "text_used_for_predictor": False,
-            "photo_prompt_used_for_query": False,
-            "photo_prompt_used_for_gallery": True,
-        },
+        "inference_contract": dict(CORRECTED_PILOT_INFERENCE_CONTRACT),
         "protocol": {
             "selection_metric": "full_pseudo_unseen_mAP",
             "official_unseen_used_for_selection": False,
