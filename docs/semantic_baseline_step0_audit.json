@@ -1,0 +1,284 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-09-07T12:47:07.744699+00:00",
+  "status": "STEP0_PROTOCOL_RECORDED_STEP1_DESIGN_ONLY",
+  "progress_commit": "4cd4a152d016904d330ab098822856a5e0159c53",
+  "authorization": {
+    "local_commits": true,
+    "step0_audit_and_step1_design": true,
+    "step1_implementation": false,
+    "new_training": false,
+    "gpu_diagnostic": false,
+    "official_unseen_evaluation": false,
+    "push": false,
+    "author_contact": false
+  },
+  "user_decisions": {
+    "promotion": "At best_clean: prefix AP200 strictly improves vs S0; P200 and full mAP do not decrease. Masked scores report-only for Step1 architecture choice.",
+    "anchor_loss": "mean over all pseudo-train classes of 1-cosine(T_learned,T_fixed)",
+    "lambda_anchor_S2": 1.0,
+    "anchor_weight_status": "fixed pilot value; no calibration or search; not KgCoOp reproduction"
+  },
+  "seco_public_audit": {
+    "paper": "2608.03120v1",
+    "repository_commit": "e70aead311777a884c350f5bc96a2aa85a708d85",
+    "inspected_paths": [
+      "index.html"
+    ],
+    "index_git_blob": "f666a445244653e868660c31382582a65da4001a",
+    "reproduction_status": "BLOCKED: no runnable source/evaluator/checkpoint in inspected tree; AP convention and LayerNorm policy require clarification",
+    "no_claim_experiments_absent": true
+  },
+  "kgcoop_source_commit": "c43ccc32c8739f64b165cfa205fcc6c0f5bb5b17",
+  "primary_response_receipts": [
+    {
+      "url": "https://api.github.com/repos/huutuan1705/SeCoSBIR/contents?ref=e70aead311777a884c350f5bc96a2aa85a708d85",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_contents_pinned.json",
+      "sha256": "578efecac4f315aef6064bf41f09b6164d10f57dc3b0729a43f26c1a91ec201c",
+      "bytes": 1034
+    },
+    {
+      "url": "https://raw.githubusercontent.com/huutuan1705/SeCoSBIR/e70aead311777a884c350f5bc96a2aa85a708d85/index.html",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_index_pinned.html",
+      "sha256": "fe0bdaceda5c68a7bd7bd2f0a56036535ef57e0e68411baacf91a4ecf0cb5498",
+      "bytes": 283
+    },
+    {
+      "url": "https://arxiv.org/html/2608.03120v1",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco.html",
+      "sha256": "18f9d58a04626bba189bddfa145e564c77cb1939b493ce4f88452b68c2d011d6",
+      "bytes": 305173
+    },
+    {
+      "url": "https://api.github.com/repos/huutuan1705/SeCoSBIR",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_repo.json",
+      "sha256": "b1c2e2c5b41135f4a1e0783a4aa035090e49826c6e769b0227df0f9ecf6cc001",
+      "bytes": 5583
+    },
+    {
+      "url": "https://api.github.com/repos/huutuan1705/SeCoSBIR/commits?per_page=1",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_commits.json",
+      "sha256": "15606226db0cf8c030ac9df4e2e0c3b9b0e4b972b04ae36900eab6b949f2718a",
+      "bytes": 1723
+    },
+    {
+      "url": "https://api.github.com/repos/huutuan1705/SeCoSBIR/contents",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_contents.json",
+      "sha256": "7a065f9eeafe34bd31e3e53ffdd1e455621681c69fca07e365b77e06d36c66e1",
+      "bytes": 854
+    },
+    {
+      "url": "https://raw.githubusercontent.com/huutuan1705/SeCoSBIR/main/index.html",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/seco_index.html",
+      "sha256": "fe0bdaceda5c68a7bd7bd2f0a56036535ef57e0e68411baacf91a4ecf0cb5498",
+      "bytes": 283
+    },
+    {
+      "url": "https://raw.githubusercontent.com/htyao89/KgCoOp/c43ccc32c8739f64b165cfa205fcc6c0f5bb5b17/KgCoOp/trainers/kgcoop.py",
+      "local_response_path": "outputs/semantic_baseline_step0_20260907T124707Z/kgcoop.py",
+      "sha256": "cd1d2dc7bb59375ecab2b25a12ea4e35106647309339be035a23a3b8ba40c616",
+      "bytes": 13400
+    }
+  ],
+  "verified_local_file_hashes": [
+    {
+      "path": "uv.lock",
+      "sha256": "353a5076eaeb76c536a0d1d76a7d58415ffc265c831a2276add0777658bd9051"
+    },
+    {
+      "path": "configs/data/sketchy_104_21.yaml",
+      "sha256": "5b7a9f4eaf9f7a76974267e7d7547a68f9125fac4dce6a05ee448d966da51042"
+    },
+    {
+      "path": "datasets/Sketchy/zeroshot0/cname_cid.txt",
+      "sha256": "57e5b84496d5f994f042cda55c0208bf63208e339b844f2ad34404b1c07efbe1"
+    },
+    {
+      "path": "datasets/Sketchy/zeroshot0/sketch_tx_000000000000_ready_filelist_train.txt",
+      "sha256": "01ebe753128f9cdae649bf39466502e22cc1c9a988293beb1d32676308230f19"
+    },
+    {
+      "path": "datasets/Sketchy/zeroshot0/all_photo_filelist_train.txt",
+      "sha256": "b479991e3808981c2be70fd53ba0408634f61030d3903ef5f45113f3b1a5d2ef"
+    },
+    {
+      "path": "datasets/Sketchy/zeroshot0/cname_cid_zero.txt",
+      "sha256": "3c47e06d8aec04731b75151a1a6c5c1d187a1e1c77fade39939c2a7cc5fc6d25"
+    },
+    {
+      "path": "outputs/pairing_preparation_20260906_145238/sketchy_pseudo_train_pairing.json",
+      "sha256": "545f67663682ed5fb79397c775848b90e206579647e605cba24cb6d4dcf8104c"
+    },
+    {
+      "path": "outputs/masked_view_3600_execution_20260907T073119Z/C/run_result.json",
+      "sha256": "e1aa4e4bd3f567ea810e102d79456c6b22916fffa10c81fc182c7dbfdd1be762"
+    }
+  ],
+  "historical_reference": {
+    "run_result": "outputs/masked_view_3600_execution_20260907T073119Z/C/run_result.json",
+    "source_snapshot_sha256": "e60c74aa84fe09ee2216248408f2e145460a7b421294a991f97a5a00291309af",
+    "pseudo_split_identity": {
+      "dataset": "sketchy_104_21",
+      "seed": 3407,
+      "sha256": "3e02604d2ed315aa254d4264ec440a7e50233c7c9b175be224519feafda88425",
+      "train_class_ids": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        15,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        29,
+        30,
+        32,
+        35,
+        36,
+        37,
+        38,
+        40,
+        41,
+        43,
+        44,
+        46,
+        47,
+        48,
+        49,
+        50,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        61,
+        62,
+        63,
+        64,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        87,
+        88,
+        89,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        100,
+        101,
+        102,
+        103
+      ],
+      "train_photos": 58950,
+      "train_sketches": 46624,
+      "validation_class_ids": [
+        7,
+        13,
+        16,
+        27,
+        28,
+        31,
+        33,
+        34,
+        39,
+        42,
+        45,
+        51,
+        52,
+        53,
+        60,
+        65,
+        75,
+        86,
+        90,
+        99
+      ],
+      "validation_photos": 13999,
+      "validation_sketches": 10963
+    },
+    "class_list_hashes": {
+      "train": "9e290d9334f6e9bb8fadb2f0370d70cfd63c08d676f36486d1776af146b23dec",
+      "validation": "94f9f19ef19183a921f47b369279d8db1c85c71db0855f955aaf42762125b1cb"
+    },
+    "manifest_entry_identity": {
+      "train_photo": {
+        "count": 58950,
+        "sha256": "b0dd18492aa9a634ebb04f83ea9f328b8d926301a48886176f5d450533b23973"
+      },
+      "train_sketch": {
+        "count": 46624,
+        "sha256": "d278e6e276ef4abb14ad792ea2d218d0c886afe9c98ec18583154bd1043eb45d"
+      },
+      "validation_photo": {
+        "count": 13999,
+        "sha256": "2e363495f24793860d385938712e50fd7c69525f7577cbb546069f766ca0151a"
+      },
+      "validation_sketch": {
+        "count": 10963,
+        "sha256": "fcf78bbc0d886190e94a080ac97cd084c8bd7e8c66a276c0684ee82f8a51857d"
+      }
+    },
+    "training_pretrained_sha256": "e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31",
+    "pretrained_hash_note": "historical verified checkpoint identity; no new 605MB tensor hash/model load in this design audit"
+  },
+  "verification": {
+    "existing_cpu_suite": {
+      "passed": 244,
+      "observed_seconds": 8.2,
+      "command": "CUDA_VISIBLE_DEVICES='' HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=src .venv/bin/python -m pytest -q"
+    },
+    "ruff": "PASS: .venv/bin/ruff check src scripts tests",
+    "progress_staged_diff_check": "PASS after removing one trailing space",
+    "step1_runtime_tests": "NOT IMPLEMENTED / NOT RUN",
+    "final_cpu_recheck": {"passed": 244, "observed_seconds": 8.28},
+    "parent_receipt_validation": "PASS: 8 primary responses (SHA256/bytes), 8 local identities, pinned SeCo tree and local document links",
+    "independent_design_review": {"agent": "reviewer", "model": "cx/gpt-5.6-luna", "thinking": "max", "status": "PASS", "resolved_findings": ["clone T0 outside inference_mode", "new clean full_full path without generating training masks", "pin SeCo contents and index response", "separate metric-label bookkeeping from oracle inference", "float32 text-bank parity and predeclared secondary tie-break"]}
+  },
+  "preserved_local_artifacts": [
+    "outputs/masked_view_3600_execution_20260907T073119Z/",
+    "outputsnewgate/"
+  ],
+  "notes": [
+    "Raw fetched public responses remain in new local output directory; receipts/version pins are committed.",
+    "Source and docs changes after training do not invalidate historical archived source identities.",
+    "Protocol completion does not authorize launch or establish SeCo metric equivalence."
+  ]
+}

@@ -1,5 +1,13 @@
 # SPICA — bắt đầu ở đây
 
+## Tiến độ mới nhất — semantic baseline (2026-09-07)
+
+- C/M1800 và3600 đã hoàn tất, online W&B/checkpoint verification đã có: [kết quả3600](docs/masked_view_3600_results_2026-09-07.md). Kết quả có trade-off; không khẳng định baseline tối ưu hoặc masking thắng mọi metric.
+- Progress checkpoint: `4cd4a15`; **không phải source snapshot đã dùng để train**. Raw outputs/tensors và `outputsnewgate/` giữ local, không reset/xóa chúng.
+- Đọc [Bước 0 + thiết kế Bước 1](docs/semantic_baseline_step0_step1_protocol.md) và [audit identities](docs/semantic_baseline_step0_audit.json) trước khi tiếp tục. Protocol nội bộ đã chốt; SeCo exact reproduction còn BLOCKED. S0/S1/S2 chưa implement/train.
+- User đã duyệt: S2 cosine text-anchor classmean, lambda=1 cố định; promotion tại best_clean phải tăng clean prefix AP200, P200/full mAP không giảm so S0. Không tự đổi metric selection hoặc gọi lambda đã calibrated.
+- User yêu cầu local commit sau mỗi phần công việc hoàn tất. Không tự push; commit/design không tự cấp phép training/GPU diagnostic/official unseen/multi-seed. Bước tiếp theo là xin quyền implementation S0/S1/S2 + CPU gates, không launch campaign.
+
 ## Corrected alignment campaign đã được kiểm chứng
 
 Đọc [bản bàn giao ngắn](docs/corrected_alignment_handoff.md) trước. Bản này dẫn tới kết quả, raw evidence và review bundle của lần kiểm chứng **2026-09-06**; không nhầm với báo cáo historical 2026-09-05.
