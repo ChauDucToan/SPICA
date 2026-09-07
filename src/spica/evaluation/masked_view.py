@@ -34,7 +34,11 @@ from ..frozen_prompt_artifacts import (
     MASKED_VIEW_3600_STEPS,
     MASKED_VIEW_CAMPAIGN,
     MASKED_VIEW_ROLES,
+    SEMANTIC_TEXT_CAMPAIGN,
+    SEMANTIC_TEXT_ROLES,
+    SEMANTIC_TEXT_STEPS,
 )
+from ..semantic_text import tensor_sha256
 from .embeddings import EncodedRetrievalSet
 from .frozen_prompt import cache_identity, encode_prompted_loader, load_prompt_cache
 from .metrics import evaluate_category_retrieval_all_denominators
@@ -48,6 +52,116 @@ EVAL_SEEDS = (101, 202, 303)
 CLEAN_REPLAY_TOLERANCE_CPU = 1e-6
 CLEAN_REPLAY_TOLERANCE_CUDA = 1e-5
 _ALLOWED_MASK_STATUSES = {"ok", "zero_fraction", "blank_input", "target_unreachable"}
+
+
+def _class_order_sha256(class_ids: list[int], class_names: list[str]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            [[int(class_id), str(name)] for class_id, name in zip(class_ids, class_names, strict=True)],
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+
+
+def validate_semantic_text_checkpoint(
+    payload: Mapping[str, Any], *, role: str
+) -> dict[str, Any]:
+    """Validate the immutable T0 and soft-context checkpoint contract."""
+    if role not in SEMANTIC_TEXT_ROLES:
+        raise ValueError(f"invalid semantic-text role: {role!r}")
+    if payload.get("campaign") != SEMANTIC_TEXT_CAMPAIGN:
+        raise ValueError("checkpoint is not the semantic-text campaign")
+    if payload.get("experiment_role") != role:
+        raise ValueError("checkpoint semantic-text role does not match requested role")
+
+    identity = payload.get("semantic_text_identity")
+    if not isinstance(identity, Mapping):
+        raise ValueError("semantic_text_identity metadata is missing or invalid")
+    try:
+        class_ids = [int(value) for value in identity["class_ids"]]
+        class_names = [str(value) for value in identity["class_names"]]
+        token_ids = identity["token_ids"]
+        eot_positions = [int(value) for value in identity["eot_positions"]]
+        order_hash = str(identity["class_order_sha256"])
+        identity_hash = str(identity["fixed_bank_sha256"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("semantic-text identity is incomplete") from error
+    if not class_ids or class_ids != sorted(class_ids) or len(set(class_ids)) != len(class_ids):
+        raise ValueError("semantic-text class IDs must be sorted and unique")
+    if len(class_names) != len(class_ids):
+        raise ValueError("semantic-text class IDs and names are misaligned")
+    if order_hash != _class_order_sha256(class_ids, class_names):
+        raise ValueError("semantic-text class-order hash does not match identity")
+    if not isinstance(token_ids, list):
+        raise ValueError("semantic-text token IDs must be serialized as a list")
+    if len(eot_positions) not in (0, len(class_ids)):
+        raise ValueError("semantic-text EOT positions are misaligned")
+
+    fixed = payload.get("semantic_text_fixed_bank")
+    if not isinstance(fixed, Mapping) or not isinstance(fixed.get("embeddings"), Tensor):
+        raise ValueError("semantic-text fixed T0 bank is missing")
+    embeddings = fixed["embeddings"]
+    if embeddings.ndim != 2 or embeddings.shape[0] != len(class_ids):
+        raise ValueError("semantic-text T0 shape does not match class identity")
+    if not torch.isfinite(embeddings).all().item():
+        raise ValueError("semantic-text T0 contains NaN or Inf")
+    actual_hash = tensor_sha256(embeddings)
+    if fixed.get("sha256") != actual_hash or identity_hash != actual_hash:
+        raise ValueError("semantic-text T0 hash does not match identity")
+    if payload.get("semantic_text_fixed_bank_sha256") != actual_hash:
+        raise ValueError("semantic-text top-level T0 hash does not match identity")
+    fixed_ids = fixed.get("class_ids")
+    if fixed_ids is not None and [int(value) for value in fixed_ids] != class_ids:
+        raise ValueError("semantic-text T0 class order does not match identity")
+
+    expected_lambda = 1.0 if role == "semantic_text_S2" else 0.0
+    if float(identity.get("lambda_anchor", -1.0)) != expected_lambda:
+        raise ValueError("semantic-text identity anchor weight does not match role")
+    if float(payload.get("lambda_anchor", -1.0)) != expected_lambda:
+        raise ValueError("semantic-text checkpoint anchor weight does not match role")
+
+    state = payload.get("soft_prompt_state_dict")
+    context = None
+    if role == "semantic_text_S0":
+        if state is not None:
+            raise ValueError("S0 must not contain a soft text prompt state")
+    else:
+        if not isinstance(state, Mapping) or not isinstance(state.get("context"), Tensor):
+            raise ValueError("soft semantic-text checkpoint is missing context tensor")
+        context = state["context"]
+        if context.ndim != 2 or not torch.isfinite(context).all().item():
+            raise ValueError("semantic-text context tensor is invalid")
+        initial_context_hash = identity.get("initial_context_sha256")
+        initial_bank_hash = identity.get("initial_learned_bank_sha256")
+        if (
+            not isinstance(initial_context_hash, str)
+            or len(initial_context_hash) != 64
+            or any(value not in "0123456789abcdef" for value in initial_context_hash)
+            or not isinstance(initial_bank_hash, str)
+            or len(initial_bank_hash) != 64
+            or any(value not in "0123456789abcdef" for value in initial_bank_hash)
+        ):
+            raise ValueError("semantic-text initial tensor hashes are missing or invalid")
+        if int(payload.get("step", payload.get("training_global_step", -1))) == 0 and tensor_sha256(context) != initial_context_hash:
+            raise ValueError("semantic-text step-zero context hash does not match identity")
+        if len(token_ids) != len(class_ids) or len(eot_positions) != len(class_ids):
+            raise ValueError("semantic-text token identity is incomplete")
+
+    config = payload.get("resolved_config")
+    if isinstance(config, Mapping) and (
+        config.get("experiment_campaign") != SEMANTIC_TEXT_CAMPAIGN
+        or config.get("experiment_role") != role
+    ):
+        raise ValueError("semantic-text resolved config identity is wrong")
+    return {
+        "role": role,
+        "class_ids": class_ids,
+        "class_names": class_names,
+        "fixed_bank_shape": list(embeddings.shape),
+        "fixed_bank_sha256": actual_hash,
+        "context_shape": None if context is None else list(context.shape),
+        "class_order_sha256": order_hash,
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -95,16 +209,17 @@ def _mask_plan(config: Mapping[str, Any]) -> dict[str, Any]:
         version = str(policy["version"])
         threshold = _finite("mask_policy.ink_threshold", policy["ink_threshold"])
         train_fractions = tuple(float(value) for value in policy["train_fractions"])
-        train_seed = int(policy["train_seed"])
+        train_seed = None if policy["train_seed"] is None else int(policy["train_seed"])
         fractions = tuple(float(value) for value in policy["eval_fractions"])
         seeds = tuple(int(value) for value in policy["eval_seeds"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("mask_policy does not contain a valid evaluation plan") from error
     if version != MASK_POLICY_VERSION:
         raise ValueError(f"unsupported mask policy version: {version!r}")
+    semantic_text = config.get("experiment_campaign") == SEMANTIC_TEXT_CAMPAIGN
+    expected_train = ((), None) if semantic_text else (EVAL_FRACTIONS, 4242)
     if (
-        train_fractions != EVAL_FRACTIONS
-        or train_seed != 4242
+        (train_fractions, train_seed) != expected_train
         or fractions != EVAL_FRACTIONS
         or seeds != EVAL_SEEDS
         or threshold != 0.9
@@ -523,8 +638,9 @@ def evaluate_run(
         raise ValueError("run-result must contain a JSON object")
     campaign = str(result.get("campaign", ""))
     is_3600 = campaign == MASKED_VIEW_3600_CAMPAIGN
-    if selection is not None and not is_3600:
-        raise ValueError("named checkpoint selection is only supported by the 3600 campaign")
+    is_semantic_text = campaign == SEMANTIC_TEXT_CAMPAIGN
+    if selection is not None and not (is_3600 or is_semantic_text):
+        raise ValueError("named checkpoint selection is only supported by retrieval probe campaigns")
     if selection is not None:
         named = result.get("selections")
         if not isinstance(named, Mapping) or not isinstance(named.get(selection), Mapping):
@@ -532,7 +648,7 @@ def evaluate_run(
         checkpoint_step = int(named[selection]["training_global_step"])
     elif checkpoint_step is None:
         # Preserve the old evaluator's fixed-step default exactly.
-        checkpoint_step = 1800
+        checkpoint_step = 3600 if is_semantic_text else 1800
 
     run_kind = str(result.get("run_kind", ""))
     if run_kind == "smoke":
@@ -583,12 +699,15 @@ def evaluate_run(
     if payload.get("model_type") != "frozen_prompt_v2":
         raise ValueError("masked-view evaluator requires the existing frozen_prompt_v2 checkpoint format")
     selected_role = str(result.get("experiment_role", payload.get("experiment_role", "")))
-    if payload.get("campaign") != campaign or campaign not in {MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}:
-        raise ValueError("run/checkpoint is not an approved masked-view campaign")
-    allowed_roles = MASKED_VIEW_3600_ROLES if is_3600 else MASKED_VIEW_ROLES
+    allowed_campaigns = {MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN}
+    if payload.get("campaign") != campaign or campaign not in allowed_campaigns:
+        raise ValueError("run/checkpoint is not an approved retrieval probe campaign")
+    if is_semantic_text:
+        validate_semantic_text_checkpoint(payload, role=selected_role)
+    allowed_roles = SEMANTIC_TEXT_ROLES if is_semantic_text else MASKED_VIEW_3600_ROLES if is_3600 else MASKED_VIEW_ROLES
     if selected_role not in allowed_roles or payload.get("experiment_role") != selected_role:
         raise ValueError("run/checkpoint role is not an approved masked-view role")
-    expected_mode = "full_full" if selected_role.endswith("_C") else "full_masked"
+    expected_mode = "full_full" if is_semantic_text or selected_role.endswith("_C") else "full_masked"
     if config.get("sketch_view_mode") != expected_mode:
         raise ValueError("resolved_config sketch_view_mode does not match the selected role")
     if config.get("experiment_role") != selected_role or config.get("experiment_campaign") != campaign:
@@ -598,9 +717,9 @@ def evaluate_run(
         raise ValueError("run/checkpoint run_kind is invalid")
     if run_kind == "primary" and not is_3600 and checkpoint_step != 1800:
         raise ValueError("primary evaluation is fixed to step 1800")
-    if run_kind == "primary" and is_3600 and checkpoint_step not in MASKED_VIEW_3600_STEPS:
-        raise ValueError("3600 evaluation requires a recorded probe step")
-    if run_kind == "primary" and is_3600 and selection in {"best_clean", "best_masked"} and checkpoint_step == 0:
+    if run_kind == "primary" and (is_3600 or is_semantic_text) and checkpoint_step not in (SEMANTIC_TEXT_STEPS if is_semantic_text else MASKED_VIEW_3600_STEPS):
+        raise ValueError("retrieval probe evaluation requires a recorded probe step")
+    if run_kind == "primary" and (is_3600 or is_semantic_text) and selection in {"best_clean", "best_masked"} and checkpoint_step == 0:
         raise ValueError("3600 named selections cannot select step 0")
     if run_kind == "smoke" and checkpoint_step > 15:
         raise ValueError("smoke evaluation requires an explicit checkpoint step <= 15")
