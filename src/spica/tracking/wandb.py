@@ -1,4 +1,6 @@
 from collections.abc import Mapping, Sequence
+import math
+from numbers import Real
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Literal, Self
@@ -7,6 +9,11 @@ import wandb
 
 WandbMode = Literal["online", "offline", "disabled"]
 Scalar = int | float
+_RETRIEVAL_METRICS = frozenset({
+    "full_mAP", "P@200", "mAP@200_prefix_positive",
+    "mAP@200_all_relevant", "mAP@200_min_relevant_k",
+})
+_CONDITION_METADATA = frozenset({"fraction", "seed"})
 
 
 class WandbExperiment:
@@ -53,6 +60,70 @@ class WandbExperiment:
     ) -> None:
         self._ensure_active()
         self._run.log(dict(metrics), step=step)
+
+    def define_metric(
+        self,
+        name: str,
+        *,
+        step_metric: str | None = None,
+        summary: object = None,
+    ) -> None:
+        self._ensure_active()
+        self._run.define_metric(name, step_metric=step_metric, summary=summary)
+
+    def set_summary(self, values: Mapping[str, Any]) -> None:
+        self._ensure_active()
+        self._run.summary.update(dict(values))
+
+    def log_retrieval_probe(
+        self,
+        step: int,
+        clean: Mapping[str, Any],
+        masked_macro: Mapping[str, Any],
+        masked_by_fraction: Mapping[object, Mapping[str, Any]],
+        conditions: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
+        self._ensure_active()
+        logged: dict[str, Scalar] = {"step_train": step}
+        logged.update(self._prefixed_metrics("clean", clean))
+        logged.update(self._prefixed_metrics("masked/macro", masked_macro))
+        for fraction, metrics in masked_by_fraction.items():
+            logged.update(self._prefixed_metrics(
+                f"masked/fraction_{self._fraction_label(fraction)}", metrics,
+            ))
+        for index, condition in enumerate(conditions):
+            metadata = {key: condition[key] for key in _CONDITION_METADATA if key in condition}
+            metrics = {key: value for key, value in condition.items() if key not in _CONDITION_METADATA}
+            if "fraction" in metadata:
+                prefix = f"masked/fraction_{self._fraction_label(metadata['fraction'])}"
+                if "seed" in metadata:
+                    prefix += f"/seed_{metadata['seed']}"
+            else:
+                prefix = f"masked/condition_{index}"
+            logged.update(self._prefixed_metrics(prefix, metrics))
+        self._run.log(logged, step=step)
+
+    @staticmethod
+    def _prefixed_metrics(prefix: str, metrics: Mapping[str, Any]) -> dict[str, Scalar]:
+        unknown = set(metrics) - _RETRIEVAL_METRICS
+        if unknown:
+            raise ValueError(f"unknown retrieval metric(s): {sorted(unknown)}")
+        result: dict[str, Scalar] = {}
+        for name, value in metrics.items():
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise TypeError(f"retrieval metric {name!r} must be a finite scalar")
+            if not math.isfinite(float(value)):
+                raise ValueError(f"retrieval metric {name!r} must be finite")
+            result[f"{prefix}/{name}"] = value
+        return result
+
+    @staticmethod
+    def _fraction_label(fraction: object) -> str:
+        if isinstance(fraction, bool) or not isinstance(fraction, Real):
+            raise TypeError("retrieval fraction must be a finite scalar")
+        if not math.isfinite(float(fraction)):
+            raise ValueError("retrieval fraction must be finite")
+        return f"{float(fraction):.2f}".replace(".", "")
 
     def log_table(
         self,

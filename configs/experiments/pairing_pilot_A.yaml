@@ -1,0 +1,26 @@
+# @package _global_
+# Pairing pilot A: canonical-original same-class positive pool.
+# CPU/config preparation only; do not run a GPU campaign here.
+experiment_name: frozen_prompt_pairing_pilot_A
+experiment_role: frozen_prompt_pairing_pilot_A
+experiment_campaign: frozen_prompt_pairing_pilot_2026-09-06
+experiment_manifest_path: outputs/experiments/pairing_pilot_A/experiment_manifest.json
+positive_sampling: same_class
+pairing_manifest_path: outputs/pairing_preparation_20260906_145238/sketchy_pseudo_train_pairing.json
+text_mode: hard
+prompt_mode: prompt_only
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+probe_steps: [0, 15, 44, 73, 100, 250, 500, 1000, 1800]
+max_steps: 1800
+seed: 42
+pseudo_val_seed: 3407
+hydra:
+  run:
+    dir: outputs/experiments/pairing_pilot_A/${now:%Y-%m-%d_%H-%M-%S}

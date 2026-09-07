@@ -1,5 +1,6 @@
 import random
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import TypedDict
 
 from PIL import Image
@@ -173,11 +174,25 @@ class MultiPositiveRetrievalTrainDataset(RetrievalTrainDataset):
         photo_transform: ImageTransform,
         *,
         num_positive_photos: int,
+        positive_pairing: Mapping[str, ManifestEntry] | None = None,
+        positive_sampling: str = "same_class",
     ) -> None:
         if num_positive_photos <= 0:
             raise ValueError(
                 f"num_positive_photos must be positive, got {num_positive_photos}"
             )
+        if positive_sampling not in {"same_class", "paired"}:
+            raise ValueError(
+                "positive_sampling must be 'same_class' or 'paired', got "
+                f"{positive_sampling!r}"
+            )
+        if positive_sampling == "paired" and positive_pairing is None:
+            raise ValueError("positive_sampling='paired' requires positive_pairing")
+        if positive_pairing is not None and num_positive_photos != 1:
+            raise ValueError(
+                "positive_pairing requires num_positive_photos=1"
+            )
+
         super().__init__(
             sketch_entries=sketch_entries,
             photo_entries=photo_entries,
@@ -185,10 +200,24 @@ class MultiPositiveRetrievalTrainDataset(RetrievalTrainDataset):
             photo_transform=photo_transform,
         )
         self.num_positive_photos = num_positive_photos
+        self.positive_sampling = positive_sampling
+        self.positive_pairing = self._validate_positive_pairing(positive_pairing)
+        if self.positive_pairing is None:
+            self._positive_photos_by_label = self._photos_by_label
+        else:
+            unique_photos: dict[int, dict[Path, ManifestEntry]] = {}
+            for entry in self.positive_pairing.values():
+                unique_photos.setdefault(entry.label, {})[entry.path.resolve()] = entry
+            self._positive_photos_by_label = {
+                label: tuple(by_path.values())
+                for label, by_path in unique_photos.items()
+            }
 
     def __getitem__(self, index: int) -> MultiPositiveTrainSample:
         sketch_entry = self.sketch_entries[index]
-        positive_entries = self._sample_positives(sketch_entry.label)
+        positive_entries = self._sample_positives(
+            sketch_entry.label, str(sketch_entry.path.resolve())
+        )
         negative_entry = self._sample_negative(sketch_entry.label)
 
         sketch_tensor = self.sketch_transform(_load_rgb_image(sketch_entry))
@@ -211,8 +240,39 @@ class MultiPositiveRetrievalTrainDataset(RetrievalTrainDataset):
             negative_photo_path=str(negative_entry.path),
         )
 
-    def _sample_positives(self, label: int) -> tuple[ManifestEntry, ...]:
-        positive_photos = self._photos_by_label[label]
+    def _validate_positive_pairing(
+        self,
+        pairing: Mapping[str, ManifestEntry] | None,
+    ) -> dict[str, ManifestEntry] | None:
+        if pairing is None:
+            return None
+        sketches = {str(entry.path.resolve()): entry for entry in self.sketch_entries}
+        photos = {str(entry.path.resolve()): entry for entry in self.photo_entries}
+        if len(sketches) != len(self.sketch_entries):
+            raise ValueError("Sketch entries contain duplicate resolved paths")
+        if len(photos) != len(self.photo_entries):
+            raise ValueError("Photo entries contain duplicate resolved paths")
+        normalized = {str(Path(key).resolve()): value for key, value in pairing.items()}
+        if set(normalized) != set(sketches):
+            raise ValueError("positive_pairing must cover exactly the sketch entries")
+        for sketch_path, photo in normalized.items():
+            sketch = sketches[sketch_path]
+            photo_path = str(photo.path.resolve())
+            if photo_path not in photos:
+                raise ValueError(f"Paired photo is not in photo entries: {photo.path}")
+            if sketch.label != photo.label or photos[photo_path].label != photo.label:
+                raise ValueError(f"Paired labels differ for {sketch_path}")
+        return normalized
+
+    def _sample_positives(self, label: int, sketch_path: str | None = None) -> tuple[ManifestEntry, ...]:
+        positive_photos = self._positive_photos_by_label[label]
+        if self.positive_pairing is not None:
+            # Both modes consume one identical draw before choosing their target.
+            sampled = random.choice(positive_photos)
+            if self.positive_sampling == "paired":
+                assert sketch_path is not None
+                return (self.positive_pairing[sketch_path],)
+            return (sampled,)
         if len(positive_photos) >= self.num_positive_photos:
             return tuple(random.sample(positive_photos, self.num_positive_photos))
         return tuple(

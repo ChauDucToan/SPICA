@@ -11,6 +11,43 @@ CAMPAIGN = "frozen_prompt_probe_v2_2026-09-04"
 SMOKE_CAMPAIGN = "frozen_prompt_smoke_v2_2026-09-04"
 FINAL_CAMPAIGN = "frozen_prompt_final_2026-09-04"
 FINAL_SMOKE_CAMPAIGN = "frozen_prompt_final_smoke_2026-09-04"
+PAIRING_PILOT_CAMPAIGN = "frozen_prompt_pairing_pilot_2026-09-06"
+PAIRING_PILOT_ROLES = (
+    "frozen_prompt_pairing_pilot_A",
+    "frozen_prompt_pairing_pilot_B",
+)
+PAIRING_PILOT_STEPS = (0, 15, 44, 73, 100, 250, 500, 1000, 1800)
+MASKED_VIEW_CAMPAIGN = "frozen_prompt_masked_view_pilot_2026-09-07"
+MASKED_VIEW_ROLES = (
+    "frozen_prompt_masked_view_C",
+    "frozen_prompt_masked_view_M",
+)
+MASKED_VIEW_STEPS = (0, 15, 44, 73, 100, 250, 500, 1000, 1800)
+# The pilot protocol above is historical and intentionally stays unchanged.
+MASKED_VIEW_3600_CAMPAIGN = "frozen_prompt_masked_view_3600_2026-09-07"
+MASKED_VIEW_3600_ROLES = (
+    "frozen_prompt_masked_view_3600_C",
+    "frozen_prompt_masked_view_3600_M",
+)
+MASKED_VIEW_3600_STEPS = (0, 600, 1200, 1800, 2400, 3000, 3600)
+MASKED_VIEW_3600_SELECTION_STEPS = MASKED_VIEW_3600_STEPS[1:]
+MASKED_VIEW_CAMPAIGNS = (MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN)
+
+def is_masked_view_campaign(campaign: str) -> bool:
+    return campaign in MASKED_VIEW_CAMPAIGNS
+
+def is_masked_view_3600_campaign(campaign: str) -> bool:
+    return campaign == MASKED_VIEW_3600_CAMPAIGN
+MASK_POLICY = {
+    "version": "ink_centered_square_v1",
+    "ink_threshold": 0.9,
+    "train_fractions": [0.25, 0.5, 0.75],
+    "eval_fractions": [0.25, 0.5, 0.75],
+    "train_seed": 4242,
+    "eval_seeds": [101, 202, 303],
+}
+PAIRING_MANIFEST_SHA256 = "545f67663682ed5fb79397c775848b90e206579647e605cba24cb6d4dcf8104c"
+PAIRING_MANIFEST_PATH = "outputs/pairing_preparation_20260906_145238/sketchy_pseudo_train_pairing.json"
 FINAL_SPLIT_SEEDS = (101, 202, 303)
 MANIFEST_PATH = Path(
     "outputs/experiment_manifest_frozen_prompt_probe_v2_2026-09-04.json"
@@ -35,7 +72,13 @@ FINAL_ROLES = (
     "frozen_prompt_final_FP_LN",
     "frozen_prompt_final_FP5",
 )
-ALL_ROLES = ROLES + FINAL_ROLES
+ALL_ROLES = (
+    ROLES
+    + FINAL_ROLES
+    + PAIRING_PILOT_ROLES
+    + MASKED_VIEW_ROLES
+    + MASKED_VIEW_3600_ROLES
+)
 
 
 def _treatment(
@@ -212,10 +255,50 @@ FINAL_ROLE_TREATMENTS: dict[str, dict[str, Any]] = {
 }
 
 
+MASKED_VIEW_TREATMENTS: dict[str, dict[str, Any]] = {
+    role: {
+        **FINAL_ROLE_TREATMENTS["frozen_prompt_final_FP2"],
+        "positive_sampling": "same_class",
+        "sketch_view_mode": "full_full" if role.endswith("_C") else "full_masked",
+        "mask_policy": MASK_POLICY,
+    }
+    for role in MASKED_VIEW_ROLES
+}
+MASKED_VIEW_3600_TREATMENTS: dict[str, dict[str, Any]] = {
+    role: {
+        **FINAL_ROLE_TREATMENTS["frozen_prompt_final_FP2"],
+        "positive_sampling": "same_class",
+        "sketch_view_mode": "full_full" if role.endswith("_C") else "full_masked",
+        "mask_policy": MASK_POLICY,
+    }
+    for role in MASKED_VIEW_3600_ROLES
+}
+
+PAIRING_PILOT_TREATMENTS: dict[str, dict[str, Any]] = {
+    "frozen_prompt_pairing_pilot_A": {
+        **FINAL_ROLE_TREATMENTS["frozen_prompt_final_FP2"],
+        "positive_sampling": "same_class",
+    },
+    "frozen_prompt_pairing_pilot_B": {
+        **FINAL_ROLE_TREATMENTS["frozen_prompt_final_FP2"],
+        "positive_sampling": "paired",
+    },
+}
+
+
 def treatment_for_role(
     role: str, *, seed: int | None = None, pseudo_val_seed: int | None = None
 ) -> dict[str, Any]:
-    treatments = FINAL_ROLE_TREATMENTS if role in FINAL_ROLES else ROLE_TREATMENTS
+    if role in MASKED_VIEW_3600_ROLES:
+        treatments = MASKED_VIEW_3600_TREATMENTS
+    elif role in MASKED_VIEW_ROLES:
+        treatments = MASKED_VIEW_TREATMENTS
+    elif role in PAIRING_PILOT_ROLES:
+        treatments = PAIRING_PILOT_TREATMENTS
+    elif role in FINAL_ROLES:
+        treatments = FINAL_ROLE_TREATMENTS
+    else:
+        treatments = ROLE_TREATMENTS
     if role not in treatments:
         raise ValueError(f"unknown frozen-prompt role: {role}")
     result = dict(treatments[role])
@@ -233,10 +316,29 @@ def canonical_sha256(value: Any) -> str:
 
 def treatment_from_config(config: dict[str, Any]) -> dict[str, Any]:
     keys = next(iter(ROLE_TREATMENTS.values())).keys()
-    return {key: config.get(key) for key in keys}
+    result = {key: config.get(key) for key in keys}
+    if config.get("experiment_campaign") in {
+        PAIRING_PILOT_CAMPAIGN,
+        MASKED_VIEW_CAMPAIGN,
+        MASKED_VIEW_3600_CAMPAIGN,
+    }:
+        result["positive_sampling"] = config.get("positive_sampling")
+    if config.get("experiment_campaign") in {
+        MASKED_VIEW_CAMPAIGN,
+        MASKED_VIEW_3600_CAMPAIGN,
+    }:
+        result["sketch_view_mode"] = config.get("sketch_view_mode")
+        result["mask_policy"] = config.get("mask_policy")
+    return result
 
 
 def expected_probe_steps(role: str, *, extended: bool = False) -> tuple[int, ...]:
+    if role in MASKED_VIEW_3600_ROLES:
+        return MASKED_VIEW_3600_STEPS
+    if role in MASKED_VIEW_ROLES:
+        return MASKED_VIEW_STEPS
+    if role in PAIRING_PILOT_ROLES:
+        return PAIRING_PILOT_STEPS
     if role == "frozen_prompt_v2_FP0":
         return (0,)
     if role.endswith("FP5"):
@@ -249,17 +351,60 @@ def expected_probe_steps(role: str, *, extended: bool = False) -> tuple[int, ...
 
 
 def make_manifest(
-    *, dataset: str, data_config: str, campaign: str = CAMPAIGN
+    *,
+    dataset: str,
+    data_config: str,
+    campaign: str = CAMPAIGN,
+    positive_sampling: str | None = None,
+    pairing_manifest_sha256: str | None = None,
+    run_kind: str = "primary",
+    selection_target_step: int | None = None,
 ) -> dict[str, Any]:
     final_roles = campaign in {FINAL_CAMPAIGN, FINAL_SMOKE_CAMPAIGN}
-    roles = FINAL_ROLES if final_roles else ROLES
-    treatments = FINAL_ROLE_TREATMENTS if final_roles else ROLE_TREATMENTS
+    pairing_pilot = campaign == PAIRING_PILOT_CAMPAIGN
+    masked_view = campaign in {MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}
+    masked_view_3600 = campaign == MASKED_VIEW_3600_CAMPAIGN
+    roles = (
+        MASKED_VIEW_3600_ROLES
+        if masked_view_3600
+        else MASKED_VIEW_ROLES
+        if masked_view
+        else PAIRING_PILOT_ROLES if pairing_pilot else FINAL_ROLES if final_roles else ROLES
+    )
+    treatments = (
+        MASKED_VIEW_3600_TREATMENTS
+        if masked_view_3600
+        else MASKED_VIEW_TREATMENTS
+        if masked_view
+        else PAIRING_PILOT_TREATMENTS if pairing_pilot else FINAL_ROLE_TREATMENTS if final_roles else ROLE_TREATMENTS
+    )
     result = {
-        "schema_version": 1 if campaign == FINAL_CAMPAIGN else 2,
+        "schema_version": 5 if masked_view_3600 else 4 if masked_view else 3 if pairing_pilot else 1 if campaign == FINAL_CAMPAIGN else 2,
         "campaign": campaign,
         "dataset": dataset,
         "data_config": data_config,
-        "selection_metric": "full_pseudo_unseen_mAP",
+        **(
+            {
+                "positive_sampling": positive_sampling,
+                "pairing_manifest_sha256": pairing_manifest_sha256,
+                "run_kind": run_kind,
+                "selection_target_step": selection_target_step,
+            }
+            if pairing_pilot
+            else {
+                "positive_sampling": positive_sampling,
+                "pairing_manifest_sha256": pairing_manifest_sha256,
+                "run_kind": run_kind,
+                "mask_policy": MASK_POLICY,
+            }
+            if masked_view
+            else {}
+        ),
+        "selection_metric": (
+            "mAP@200_prefix_positive"
+            if masked_view_3600
+            else "full_pseudo_unseen_mAP"
+        ),
         "official_unseen_used_for_selection": False,
         "entries": {
             role: {
@@ -271,10 +416,38 @@ def make_manifest(
                 "training_seed": 42,
                 "pseudo_validation_seed": 3407,
                 "official_unseen_used_for_selection": False,
+                **(
+                    {
+                        "positive_sampling": positive_sampling,
+                        "pairing_manifest_sha256": pairing_manifest_sha256,
+                        "run_kind": run_kind,
+                        "selection_target_step": selection_target_step,
+                    }
+                    if pairing_pilot
+                    else {
+                        "positive_sampling": positive_sampling,
+                        "pairing_manifest_sha256": pairing_manifest_sha256,
+                        "run_kind": run_kind,
+                        "sketch_view_mode": treatments[role].get("sketch_view_mode", "single"),
+                        "mask_policy": treatments[role].get("mask_policy"),
+                    }
+                    if masked_view
+                    else {}
+                ),
             }
             for role in roles
         },
     }
+    if campaign == MASKED_VIEW_3600_CAMPAIGN:
+        result["selection_policy"] = {
+            "candidate_steps": list(MASKED_VIEW_3600_SELECTION_STEPS),
+            "primary_clean": "clean.mAP@200_prefix_positive",
+            "primary_masked": "masked_macro.mAP@200_prefix_positive",
+            "denominator": "prefix_positive",
+            "tie_break": "strict_greater_earliest_step",
+            "step_zero_selectable": False,
+            "official_unseen_used_for_selection": False,
+        }
     if campaign == FINAL_CAMPAIGN:
         result.update(
             {
@@ -302,9 +475,19 @@ def ensure_manifest(
     dataset: str,
     data_config: str,
     campaign: str = CAMPAIGN,
+    positive_sampling: str | None = None,
+    pairing_manifest_sha256: str | None = None,
+    run_kind: str = "primary",
+    selection_target_step: int | None = None,
 ) -> tuple[dict[str, Any], str]:
     expected = make_manifest(
-        dataset=dataset, data_config=data_config, campaign=campaign
+        dataset=dataset,
+        data_config=data_config,
+        campaign=campaign,
+        positive_sampling=positive_sampling,
+        pairing_manifest_sha256=pairing_manifest_sha256,
+        run_kind=run_kind,
+        selection_target_step=selection_target_step,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():

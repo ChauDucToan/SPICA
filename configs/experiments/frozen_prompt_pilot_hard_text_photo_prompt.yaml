@@ -1,0 +1,34 @@
+# @package _global_
+# CPU/config smoke gate only; not a completed or comparable pilot run.
+# Reuses final_FP2 treatment and legacy smoke identifier; isolates new artifacts.
+experiment_name: frozen_prompt_hard_text_photo_prompt_pilot_cpu_gate
+experiment_role: frozen_prompt_final_FP2
+experiment_campaign: frozen_prompt_final_smoke_2026-09-04
+experiment_manifest_path: outputs/experiments/frozen_prompt_hard_text_photo_prompt_pilot_cpu_gate/experiment_manifest.json
+run_kind: smoke
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+text_mode: hard
+prompt_mode: prompt_only
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+encoder_train_ln_post: false
+seed: 42
+pseudo_val_seed: 3407
+max_steps: 1
+probe_steps: [0, 1]
+allow_short_run: true
+num_positive_photos: 1
+transport_enabled: false
+transport_mode: none
+lambda_alignment_mean: 0.0
+lambda_alignment_covariance: 0.0
+official_unseen_used_for_selection: false
+hydra:
+  run:
+    dir: outputs/experiments/frozen_prompt_hard_text_photo_prompt_pilot_cpu_gate/${now:%Y-%m-%d_%H-%M-%S}
+# Repository rank loss is softplus(margin - positive + negative), not paper hinge.

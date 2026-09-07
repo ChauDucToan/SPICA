@@ -14,7 +14,12 @@ from torch.utils.data import DataLoader
 
 from .embeddings import EncodedRetrievalSet
 from .jepa import feature_geometry
-from .metrics import CategoryRetrievalEvaluation, evaluate_category_retrieval
+from .metrics import (
+    CategoryRetrievalEvaluation,
+    MapAtKDenominator,
+    evaluate_category_retrieval,
+    evaluate_category_retrieval_all_denominators,
+)
 
 
 def hash_state(values: dict[str, Tensor]) -> str:
@@ -123,6 +128,25 @@ def evaluate_prompted(
         precision_at_k=(1, 5, 10, 100, 200),
         map_at_k=(200,),
         map_at_k_denominator="prefix_positive",
+        query_chunk_size=query_chunk_size,
+        top_k=200,
+        device=device,
+    )
+
+
+def evaluate_prompted_all_denominators(
+    queries: EncodedRetrievalSet,
+    gallery: EncodedRetrievalSet,
+    *,
+    query_chunk_size: int,
+    device: torch.device,
+) -> dict[MapAtKDenominator, CategoryRetrievalEvaluation]:
+    """Return the three AP@200 conventions from one stable ranking pass."""
+    return evaluate_category_retrieval_all_denominators(
+        queries,
+        gallery,
+        precision_at_k=(1, 5, 10, 100, 200),
+        map_at_k=(200,),
         query_chunk_size=query_chunk_size,
         top_k=200,
         device=device,

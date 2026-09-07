@@ -7,6 +7,12 @@ experiment_campaign: frozen_prompt_probe_v2_2026-09-04
 run_kind: primary
 split_run_name: null
 experiment_manifest_path: outputs/experiment_manifest_frozen_prompt_probe_v2_2026-09-04.json
+positive_sampling: same_class
+pairing_manifest_path: null
+allow_smoke_fixture: false
+synthetic_fixture: false
+sketch_view_mode: single
+mask_policy: null
 official_unseen_used_for_selection: false
 
 data_config: configs/data/sketchy_104_21.yaml

@@ -1,0 +1,44 @@
+# @package _global_
+# New from-scratch 3600-step masked-view campaign control.
+experiment_name: frozen_prompt_masked_view_3600_C
+experiment_role: frozen_prompt_masked_view_3600_C
+experiment_campaign: frozen_prompt_masked_view_3600_2026-09-07
+experiment_manifest_path: outputs/experiments/frozen_prompt_masked_view_3600_2026-09-07/masked_view_3600_C/experiment_manifest.json
+positive_sampling: same_class
+pairing_manifest_path: outputs/pairing_preparation_20260906_145238/sketchy_pseudo_train_pairing.json
+sketch_view_mode: full_full
+mask_policy:
+  version: ink_centered_square_v1
+  ink_threshold: 0.9
+  train_fractions: [0.25, 0.5, 0.75]
+  eval_fractions: [0.25, 0.5, 0.75]
+  train_seed: 4242
+  eval_seeds: [101, 202, 303]
+text_mode: hard
+prompt_mode: prompt_only
+train_visual_layernorm: false
+train_sketch_prompt: true
+train_photo_prompt: true
+lambda_rank: 1.0
+lambda_cls: 1.0
+classification_location: query
+encoder_mode: frozen
+encoder_unfreeze_depth: 0
+probe_steps: [0, 600, 1200, 1800, 2400, 3000, 3600]
+max_steps: 3600
+batch_size: 32
+seed: 42
+pseudo_val_seed: 3407
+tracking:
+  project: spica
+  entity: null
+  mode: disabled
+  group: frozen_prompt_masked_view_3600_2026-09-07
+  tags: [frozen_prompt_masked_view_3600_C]
+hydra:
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}.log
+  run:
+    dir: outputs/experiments/frozen_prompt_masked_view_3600_2026-09-07/masked_view_3600_C/${now:%Y-%m-%d_%H-%M-%S}
