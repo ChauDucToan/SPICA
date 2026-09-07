@@ -14,6 +14,8 @@ class EncodedTextBank:
     labels: Tensor
     class_names: tuple[str, ...]
     prompts: tuple[str, ...]
+    token_ids: Tensor | None = None
+    eot_positions: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
         if self.embeddings.ndim != 2:
@@ -35,6 +37,11 @@ class EncodedTextBank:
             )
         if torch.unique(self.labels).numel() != num_classes:
             raise ValueError("Text bank labels must be unique")
+        if self.token_ids is not None:
+            if self.token_ids.ndim != 2 or self.token_ids.shape[0] != num_classes:
+                raise ValueError("Text bank token IDs must align with classes")
+            if len(self.eot_positions) != num_classes:
+                raise ValueError("Text bank EOT positions must align with classes")
 
     def embeddings_for_labels(self, labels: Tensor) -> Tensor:
         if labels.ndim != 1:
@@ -71,6 +78,7 @@ class SoftPromptTextBank(nn.Module):
         class_names: Mapping[int, str],
         *,
         prompt_length: int = 4,
+        strict_prefix: bool = False,
     ) -> None:
         super().__init__()
         if not class_names:
@@ -128,6 +136,10 @@ class SoftPromptTextBank(nn.Module):
             token_rows.append(sequence)
         self.register_buffer("token_ids", torch.tensor(token_rows, dtype=torch.long))
         self.register_buffer("class_labels", self.labels.clone())
+        self.eot_positions = tuple(
+            1 + prompt_length + len(row[1:row.index(eot_id)])
+            for row in class_tokens.tolist()
+        )
 
         token_embedding = clip_model.token_embedding
         prefix_tokens = tokenizer(["a photo of a"])
@@ -136,7 +148,15 @@ class SoftPromptTextBank(nn.Module):
         prefix_row = prefix_tokens[0]
         prefix_eot = int(getattr(tokenizer, "eot_token_id", prefix_row.max().item()))
         prefix_position = (prefix_row == prefix_eot).nonzero(as_tuple=False)
+        if prefix_position.numel() == 0:
+            raise ValueError("Tokenizer output does not contain an EOT token for the prefix")
         prefix_content = prefix_row[1 : int(prefix_position[0].item())]
+        self.prefix_token_ids = tuple(int(value) for value in prefix_content.tolist())
+        if strict_prefix and len(self.prefix_token_ids) != prompt_length:
+            raise ValueError(
+                "exact prefix 'a photo of a' must contain "
+                f"{prompt_length} content tokens, got {len(self.prefix_token_ids)}"
+            )
         with torch.no_grad():
             prefix_embedding = token_embedding(
                 prefix_content.to(encoder.device)
@@ -157,6 +177,7 @@ class SoftPromptTextBank(nn.Module):
             )
             initialized[: prefix_embedding.shape[0]].copy_(prefix_embedding)
         self.context = nn.Parameter(initialized)
+        self.initial_context = initialized.detach().clone()
 
         # Do not register the frozen CLIP module as a child: its parameters are
         # owned by the photo encoder and the soft bank should serialize only the
@@ -244,9 +265,18 @@ def encode_class_text_bank(
         raise TypeError("The selected OpenCLIP tokenizer must return a tensor")
 
     embeddings = encoder.encode_text(tokens.to(encoder.device)).float().cpu()
+    eot_token = int(getattr(tokenizer, "eot_token_id", tokens.max().item()))
+    eot_positions: list[int] = []
+    for row in tokens.tolist():
+        try:
+            eot_positions.append(row.index(eot_token))
+        except ValueError as error:
+            raise ValueError("Tokenizer output does not contain an EOT token") from error
     return EncodedTextBank(
         embeddings=embeddings,
         labels=labels,
         class_names=names,
         prompts=prompts,
+        token_ids=tokens.detach().cpu().clone(),
+        eot_positions=tuple(eot_positions),
     )

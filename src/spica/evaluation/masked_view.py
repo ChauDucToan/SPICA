@@ -37,6 +37,7 @@ from ..frozen_prompt_artifacts import (
     SEMANTIC_TEXT_CAMPAIGN,
     SEMANTIC_TEXT_ROLES,
     SEMANTIC_TEXT_STEPS,
+    is_retrieval_probe_campaign,
 )
 from ..semantic_text import tensor_sha256
 from .embeddings import EncodedRetrievalSet
@@ -63,39 +64,109 @@ def _class_order_sha256(class_ids: list[int], class_names: list[str]) -> str:
     ).hexdigest()
 
 
+_SEMANTIC_TEXT_ANCHOR_FORMULA = "mean_c(1-cosine(T_learned[c], stopgrad(T0[c])))"
+_SEMANTIC_TEXT_ANCHOR_REDUCTION = "mean_over_all_train_classes_once_per_update"
+
+
+def _is_sha256(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def validate_semantic_text_checkpoint(
     payload: Mapping[str, Any], *, role: str
 ) -> dict[str, Any]:
-    """Validate the immutable T0 and soft-context checkpoint contract."""
+    """Validate semantic-text state without loading the CLIP/text tower.
+
+    Primary checkpoints carry the real 512-D OpenCLIP bank and 4x512 context.
+    Smoke checkpoints are deliberately allowed to use a smaller fixture model;
+    their serialized tensors remain the source of truth for those dimensions.
+    """
     if role not in SEMANTIC_TEXT_ROLES:
         raise ValueError(f"invalid semantic-text role: {role!r}")
     if payload.get("campaign") != SEMANTIC_TEXT_CAMPAIGN:
         raise ValueError("checkpoint is not the semantic-text campaign")
     if payload.get("experiment_role") != role:
         raise ValueError("checkpoint semantic-text role does not match requested role")
+    run_kind = str(payload.get("run_kind", "primary"))
+    if run_kind not in {"primary", "smoke"}:
+        raise ValueError("semantic-text checkpoint run_kind is invalid")
+    primary = run_kind == "primary"
 
     identity = payload.get("semantic_text_identity")
     if not isinstance(identity, Mapping):
         raise ValueError("semantic_text_identity metadata is missing or invalid")
     try:
-        class_ids = [int(value) for value in identity["class_ids"]]
-        class_names = [str(value) for value in identity["class_names"]]
+        raw_class_ids = identity["class_ids"]
+        raw_class_names = identity["class_names"]
         token_ids = identity["token_ids"]
-        eot_positions = [int(value) for value in identity["eot_positions"]]
+        raw_eot_positions = identity["eot_positions"]
+        class_ids = [int(value) for value in raw_class_ids]
+        class_names = [str(value) for value in raw_class_names]
+        eot_positions = [int(value) for value in raw_eot_positions]
         order_hash = str(identity["class_order_sha256"])
         identity_hash = str(identity["fixed_bank_sha256"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError("semantic-text identity is incomplete") from error
+    if not isinstance(raw_class_ids, (list, tuple)) or any(
+        isinstance(value, bool) or not isinstance(value, int) for value in raw_class_ids
+    ):
+        raise ValueError("semantic-text class IDs must be serialized integers")
     if not class_ids or class_ids != sorted(class_ids) or len(set(class_ids)) != len(class_ids):
         raise ValueError("semantic-text class IDs must be sorted and unique")
+    if primary and len(class_ids) != 84:
+        raise ValueError("primary semantic-text bank must contain the 84 train classes")
     if len(class_names) != len(class_ids):
         raise ValueError("semantic-text class IDs and names are misaligned")
     if order_hash != _class_order_sha256(class_ids, class_names):
         raise ValueError("semantic-text class-order hash does not match identity")
-    if not isinstance(token_ids, list):
-        raise ValueError("semantic-text token IDs must be serialized as a list")
-    if len(eot_positions) not in (0, len(class_ids)):
-        raise ValueError("semantic-text EOT positions are misaligned")
+
+    # The bank is ordered by the train split, not by an independently serialized
+    # label list.  Checking both copies catches a valid tensor with wrong labels.
+    training_classes = payload.get("training_class_list")
+    split_identity = payload.get("data_split_identity")
+    split_classes = split_identity.get("train_class_ids") if isinstance(split_identity, Mapping) else None
+    if list(training_classes or []) != class_ids or list(split_classes or []) != class_ids:
+        raise ValueError("semantic-text class IDs do not match the training split identity")
+
+    if not isinstance(token_ids, list) or any(not isinstance(row, list) for row in token_ids):
+        raise ValueError("semantic-text token IDs must be serialized as a list of rows")
+    if len(token_ids) != len(class_ids) or not token_ids or any(
+        any(isinstance(value, bool) or not isinstance(value, int) for value in row)
+        for row in token_ids
+    ):
+        raise ValueError("semantic-text token IDs are not integer rows aligned to classes")
+    token_tensor = torch.tensor(token_ids, dtype=torch.long)
+    if token_tensor.ndim != 2 or token_tensor.shape[0] != len(class_ids):
+        raise ValueError("semantic-text token IDs must have one row per train class")
+    expected_token_length = 77 if primary else int(identity.get("token_context_length", token_tensor.shape[1]))
+    if token_tensor.shape[1] != expected_token_length:
+        raise ValueError("semantic-text token IDs have the wrong context length")
+    token_hash = identity.get("token_ids_sha256")
+    if not _is_sha256(token_hash) or token_hash != tensor_sha256(token_tensor):
+        raise ValueError("semantic-text token ID hash or dtype is invalid")
+    if not isinstance(raw_eot_positions, list) or len(eot_positions) != len(class_ids):
+        raise ValueError("semantic-text EOT positions are incomplete")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int)
+        or value < 0 or value >= token_tensor.shape[1]
+        for value in raw_eot_positions
+    ):
+        raise ValueError("semantic-text EOT positions are out of range")
+    configured_eot = identity.get("eot_token_id")
+    if configured_eot is not None and (
+        isinstance(configured_eot, bool) or not isinstance(configured_eot, int)
+    ):
+        raise ValueError("semantic-text EOT token ID is invalid")
+    # Do not bake in OpenCLIP's current EOT constant: fixture tokenizers may use
+    # another ID, and placeholder-padded rows naturally fall back to max(row).
+    for row, position in zip(token_tensor.tolist(), eot_positions, strict=True):
+        eot_id = int(configured_eot) if configured_eot is not None else max(row)
+        if row[position] != eot_id or row.index(eot_id) != position:
+            raise ValueError("semantic-text EOT positions do not match token IDs")
 
     fixed = payload.get("semantic_text_fixed_bank")
     if not isinstance(fixed, Mapping) or not isinstance(fixed.get("embeddings"), Tensor):
@@ -103,6 +174,8 @@ def validate_semantic_text_checkpoint(
     embeddings = fixed["embeddings"]
     if embeddings.ndim != 2 or embeddings.shape[0] != len(class_ids):
         raise ValueError("semantic-text T0 shape does not match class identity")
+    if primary and embeddings.shape[1] != 512:
+        raise ValueError("primary semantic-text T0 must have width 512")
     if not torch.isfinite(embeddings).all().item():
         raise ValueError("semantic-text T0 contains NaN or Inf")
     actual_hash = tensor_sha256(embeddings)
@@ -111,7 +184,7 @@ def validate_semantic_text_checkpoint(
     if payload.get("semantic_text_fixed_bank_sha256") != actual_hash:
         raise ValueError("semantic-text top-level T0 hash does not match identity")
     fixed_ids = fixed.get("class_ids")
-    if fixed_ids is not None and [int(value) for value in fixed_ids] != class_ids:
+    if fixed_ids is None or [int(value) for value in fixed_ids] != class_ids:
         raise ValueError("semantic-text T0 class order does not match identity")
 
     expected_lambda = 1.0 if role == "semantic_text_S2" else 0.0
@@ -119,48 +192,79 @@ def validate_semantic_text_checkpoint(
         raise ValueError("semantic-text identity anchor weight does not match role")
     if float(payload.get("lambda_anchor", -1.0)) != expected_lambda:
         raise ValueError("semantic-text checkpoint anchor weight does not match role")
-
-    state = payload.get("soft_prompt_state_dict")
-    context = None
-    if role == "semantic_text_S0":
-        if state is not None:
-            raise ValueError("S0 must not contain a soft text prompt state")
-    else:
-        if not isinstance(state, Mapping) or not isinstance(state.get("context"), Tensor):
-            raise ValueError("soft semantic-text checkpoint is missing context tensor")
-        context = state["context"]
-        if context.ndim != 2 or not torch.isfinite(context).all().item():
-            raise ValueError("semantic-text context tensor is invalid")
-        initial_context_hash = identity.get("initial_context_sha256")
-        initial_bank_hash = identity.get("initial_learned_bank_sha256")
-        if (
-            not isinstance(initial_context_hash, str)
-            or len(initial_context_hash) != 64
-            or any(value not in "0123456789abcdef" for value in initial_context_hash)
-            or not isinstance(initial_bank_hash, str)
-            or len(initial_bank_hash) != 64
-            or any(value not in "0123456789abcdef" for value in initial_bank_hash)
-        ):
-            raise ValueError("semantic-text initial tensor hashes are missing or invalid")
-        if int(payload.get("step", payload.get("training_global_step", -1))) == 0 and tensor_sha256(context) != initial_context_hash:
-            raise ValueError("semantic-text step-zero context hash does not match identity")
-        if len(token_ids) != len(class_ids) or len(eot_positions) != len(class_ids):
-            raise ValueError("semantic-text token identity is incomplete")
+    if identity.get("anchor_formula") != _SEMANTIC_TEXT_ANCHOR_FORMULA:
+        raise ValueError("semantic-text anchor formula is not the approved class mean")
+    if identity.get("anchor_reduction") != _SEMANTIC_TEXT_ANCHOR_REDUCTION:
+        raise ValueError("semantic-text anchor reduction is not the approved class mean")
 
     config = payload.get("resolved_config")
-    if isinstance(config, Mapping) and (
+    if not isinstance(config, Mapping):
+        raise ValueError("semantic-text resolved config is missing")
+    if (
         config.get("experiment_campaign") != SEMANTIC_TEXT_CAMPAIGN
         or config.get("experiment_role") != role
     ):
         raise ValueError("semantic-text resolved config identity is wrong")
+    if config.get("model_name") != identity.get("model_name") or config.get("pretrained") != identity.get("pretrained"):
+        raise ValueError("semantic-text model/pretrained identity does not match resolved config")
+
+    state = payload.get("soft_prompt_state_dict")
+    context = None
+    initial_hash_status = "not_applicable"
+    if role == "semantic_text_S0":
+        if state is not None or payload.get("current_context_sha256") is not None:
+            raise ValueError("S0 must not contain soft text context state")
+    else:
+        if not isinstance(state, Mapping) or not isinstance(state.get("context"), Tensor):
+            raise ValueError("soft semantic-text checkpoint is missing context tensor")
+        context = state["context"]
+        if context.ndim != 2 or context.shape[0] != 4 or not torch.isfinite(context).all().item():
+            raise ValueError("semantic-text context tensor must have finite shape [4, width]")
+        context_width = identity.get("context_width", payload.get("context_width"))
+        if context_width is not None and int(context_width) != context.shape[1]:
+            raise ValueError("semantic-text context width disagrees with serialized metadata")
+        if primary and tuple(context.shape) != (4, 512):
+            raise ValueError("primary semantic-text context must have shape [4, 512]")
+        initial_context_hash = identity.get("initial_context_sha256")
+        initial_bank_hash = identity.get("initial_learned_bank_sha256")
+        if not _is_sha256(initial_context_hash) or not _is_sha256(initial_bank_hash):
+            raise ValueError("semantic-text initial tensor hashes are missing or invalid")
+        current_hash = payload.get("current_context_sha256")
+        if not _is_sha256(current_hash) or current_hash != tensor_sha256(context):
+            raise ValueError("semantic-text current context hash does not match state")
+        step = int(payload.get("step", payload.get("training_global_step", -1)))
+        if step == 0 and tensor_sha256(context) != initial_context_hash:
+            raise ValueError("semantic-text step-zero context hash does not match identity")
+        parity_error = identity.get("initial_bank_parity_max_abs_error")
+        if parity_error is not None:
+            try:
+                parity_error = float(parity_error)
+            except (TypeError, ValueError) as error:
+                raise ValueError("semantic-text initial parity metadata is invalid") from error
+            if not math.isfinite(parity_error) or parity_error > 1e-6:
+                raise ValueError("semantic-text initial hard-bank parity exceeds 1e-6")
+        initial_tensor = payload.get("initial_learned_bank")
+        if isinstance(initial_tensor, Tensor):
+            if initial_tensor.shape != embeddings.shape or tensor_sha256(initial_tensor) != initial_bank_hash:
+                raise ValueError("semantic-text initial learned-bank hash does not match state")
+            initial_hash_status = "verifiable"
+        else:
+            # The existing checkpoint format stores the hash, not a second bank.
+            # Keep replay fail-closed for immutable metadata while reporting that
+            # the hash cannot be independently recomputed from this payload.
+            initial_hash_status = "recorded_not_recomputable"
+
     return {
         "role": role,
+        "run_kind": run_kind,
         "class_ids": class_ids,
         "class_names": class_names,
         "fixed_bank_shape": list(embeddings.shape),
         "fixed_bank_sha256": actual_hash,
         "context_shape": None if context is None else list(context.shape),
         "class_order_sha256": order_hash,
+        "token_ids_sha256": token_hash,
+        "initial_learned_bank_hash_status": initial_hash_status,
     }
 
 
@@ -639,7 +743,7 @@ def evaluate_run(
     campaign = str(result.get("campaign", ""))
     is_3600 = campaign == MASKED_VIEW_3600_CAMPAIGN
     is_semantic_text = campaign == SEMANTIC_TEXT_CAMPAIGN
-    if selection is not None and not (is_3600 or is_semantic_text):
+    if selection is not None and not is_retrieval_probe_campaign(campaign):
         raise ValueError("named checkpoint selection is only supported by retrieval probe campaigns")
     if selection is not None:
         named = result.get("selections")
@@ -672,7 +776,7 @@ def evaluate_run(
         if selection is not None and isinstance(result.get("selections"), Mapping)
         else result.get("selection")
     )
-    if not is_3600 and not isinstance(selected, Mapping):
+    if not is_retrieval_probe_campaign(campaign) and not isinstance(selected, Mapping):
         raise ValueError("run-result selection is not the requested fixed evaluation step")
     if isinstance(selected, Mapping):
         if int(selected.get("training_global_step", -1)) != checkpoint_step:
@@ -715,12 +819,12 @@ def evaluate_run(
     run_kind = str(result.get("run_kind", payload.get("run_kind", "")))
     if payload.get("run_kind") != run_kind or run_kind not in {"primary", "smoke"}:
         raise ValueError("run/checkpoint run_kind is invalid")
-    if run_kind == "primary" and not is_3600 and checkpoint_step != 1800:
+    if run_kind == "primary" and not is_retrieval_probe_campaign(campaign) and checkpoint_step != 1800:
         raise ValueError("primary evaluation is fixed to step 1800")
-    if run_kind == "primary" and (is_3600 or is_semantic_text) and checkpoint_step not in (SEMANTIC_TEXT_STEPS if is_semantic_text else MASKED_VIEW_3600_STEPS):
+    if run_kind == "primary" and is_retrieval_probe_campaign(campaign) and checkpoint_step not in (SEMANTIC_TEXT_STEPS if is_semantic_text else MASKED_VIEW_3600_STEPS):
         raise ValueError("retrieval probe evaluation requires a recorded probe step")
-    if run_kind == "primary" and (is_3600 or is_semantic_text) and selection in {"best_clean", "best_masked"} and checkpoint_step == 0:
-        raise ValueError("3600 named selections cannot select step 0")
+    if run_kind == "primary" and is_retrieval_probe_campaign(campaign) and selection in {"best_clean", "best_masked"} and checkpoint_step == 0:
+        raise ValueError("retrieval probe named selections cannot select step 0")
     if run_kind == "smoke" and checkpoint_step > 15:
         raise ValueError("smoke evaluation requires an explicit checkpoint step <= 15")
     plan = _mask_plan(config)

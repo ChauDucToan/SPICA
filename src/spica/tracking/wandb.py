@@ -82,6 +82,8 @@ class WandbExperiment:
         masked_macro: Mapping[str, Any],
         masked_by_fraction: Mapping[object, Mapping[str, Any]],
         conditions: Sequence[Mapping[str, Any]] = (),
+        *,
+        diagnostics: Mapping[str, Scalar] | None = None,
     ) -> None:
         self._ensure_active()
         logged: dict[str, Scalar] = {"step_train": step}
@@ -101,6 +103,12 @@ class WandbExperiment:
             else:
                 prefix = f"masked/condition_{index}"
             logged.update(self._prefixed_metrics(prefix, metrics))
+        for name, value in (diagnostics or {}).items():
+            if not name.startswith(("text/", "train/")):
+                raise ValueError("probe diagnostics must use text/ or train/ namespaces")
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
+                raise ValueError("probe diagnostics must be finite scalars")
+            logged[name] = value
         self._run.log(logged, step=step)
 
     @staticmethod

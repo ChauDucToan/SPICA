@@ -74,6 +74,7 @@ def test_retrieval_probe_uses_one_explicit_training_step(monkeypatch: pytest.Mon
         _METRICS,
         {0.25: _METRICS, 0.50: _METRICS, 0.75: _METRICS},
         conditions=[{**_METRICS, "fraction": 0.25, "seed": 101}],
+        diagnostics={"text/anchor_loss": 0.01, "train/text_gradient_norm": 0.5},
     )
     experiment.finish(exit_code=0)
 
@@ -84,7 +85,10 @@ def test_retrieval_probe_uses_one_explicit_training_step(monkeypatch: pytest.Mon
     }
     assert run.defined == [("clean/*", "step_train", "max")]
     assert run.summary == {"probe_status": "complete"}
+    assert len(run.logs) == 1
     logged, step = run.logs[-1]
+    assert logged["text/anchor_loss"] == 0.01
+    assert logged["train/text_gradient_norm"] == 0.5
     assert step == 1800
     assert logged["step_train"] == 1800
     assert logged["clean/mAP@200_prefix_positive"] == 0.5

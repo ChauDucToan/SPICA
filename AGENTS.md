@@ -4,9 +4,9 @@
 
 - C/M1800 và3600 đã hoàn tất, online W&B/checkpoint verification đã có: [kết quả3600](docs/masked_view_3600_results_2026-09-07.md). Kết quả có trade-off; không khẳng định baseline tối ưu hoặc masking thắng mọi metric.
 - Progress checkpoint: `4cd4a15`; **không phải source snapshot đã dùng để train**. Raw outputs/tensors và `outputsnewgate/` giữ local, không reset/xóa chúng.
-- Đọc [Bước 0 + thiết kế Bước 1](docs/semantic_baseline_step0_step1_protocol.md) và [audit identities](docs/semantic_baseline_step0_audit.json) trước khi tiếp tục. Protocol nội bộ đã chốt; SeCo exact reproduction còn BLOCKED. S0/S1/S2 chưa implement/train.
+- Đọc [Bước 0 + thiết kế Bước 1](docs/semantic_baseline_step0_step1_protocol.md) và [audit identities](docs/semantic_baseline_step0_audit.json) trước khi tiếp tục. Protocol nội bộ đã chốt; SeCo exact reproduction còn BLOCKED. S0/S1/S2 đã implement và qua CPU/real-CLIP no-update gates; xem [readiness](docs/semantic_text_step1_readiness_2026-09-07.md).
 - User đã duyệt: S2 cosine text-anchor classmean, lambda=1 cố định; promotion tại best_clean phải tăng clean prefix AP200, P200/full mAP không giảm so S0. Không tự đổi metric selection hoặc gọi lambda đã calibrated.
-- User yêu cầu local commit sau mỗi phần công việc hoàn tất. Không tự push; commit/design không tự cấp phép training/GPU diagnostic/official unseen/multi-seed. Bước tiếp theo là xin quyền implementation S0/S1/S2 + CPU gates, không launch campaign.
+- User yêu cầu local commit sau mỗi phần công việc hoàn tất và **đã cho phép train S0→S1→S2,3600 updates/arm, online W&B**. Execution root: `outputs/semantic_text_execution_20260907T160000Z/`; kiểm tra runtime trước khi tiếp tục, không launch trùng. Không tự push/official unseen/multi-seed/lambda search; giữ nguyên source/config/docs trong ba arm.
 
 ## Corrected alignment campaign đã được kiểm chứng
 

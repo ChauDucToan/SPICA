@@ -59,6 +59,11 @@ from .frozen_prompt_artifacts import (
     MASKED_VIEW_3600_ROLES,
     MASKED_VIEW_3600_STEPS,
     MASKED_VIEW_3600_SELECTION_STEPS,
+    SEMANTIC_TEXT_CAMPAIGN,
+    SEMANTIC_TEXT_ROLES,
+    SEMANTIC_TEXT_STEPS,
+    SEMANTIC_TEXT_SELECTION_STEPS,
+    is_retrieval_probe_campaign,
     is_masked_view_campaign,
     is_masked_view_3600_campaign,
     MASK_POLICY,
@@ -82,11 +87,26 @@ from .models.clip import (
 from .models.checkpoint import load_trainable_state
 from .models.frozen_prompt import FrozenPromptModel
 from .models.jepa import classification_accuracy, jepa_text_classification_loss
+from .semantic_text import (
+    clone_fixed_text_bank,
+    semantic_text_identity,
+    tensor_sha256,
+    text_anchor_loss,
+    text_drift,
+)
 from .provenance import capture_provenance, capture_rng_state, restore_rng_state
 from .tracking.wandb import WandbExperiment
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 HYDRA_CONFIG_DIR = str(PROJECT_ROOT / "configs")
+SEMANTIC_TEXT_DATA_CONFIG = "configs/data/sketchy_104_21.yaml"
+SEMANTIC_TEXT_SPLIT_SHA256 = "3e02604d2ed315aa254d4264ec440a7e50233c7c9b175be224519feafda88425"
+SEMANTIC_TEXT_SPLIT_COUNTS = {
+    "train_sketches": 46624,
+    "train_photos": 58950,
+    "validation_sketches": 10963,
+    "validation_photos": 13999,
+}
 PRIMARY_PROBE_STEPS = (0, 15, 44, 73, 100, 250, 500, 1000, 1800, 5400)
 PROMPT_ROLES = {
     "frozen_prompt_v2_FP1",
@@ -219,7 +239,71 @@ def _validate(args: DictConfig) -> None:
     run_kind = str(args.run_kind)
     pairing_pilot = campaign == PAIRING_PILOT_CAMPAIGN
     masked_view = is_masked_view_campaign(campaign)
+    semantic_text = campaign == SEMANTIC_TEXT_CAMPAIGN
     masked_view_3600 = is_masked_view_3600_campaign(campaign)
+    if semantic_text:
+        if role not in SEMANTIC_TEXT_ROLES or run_kind not in {"primary", "smoke"}:
+            raise ValueError("semantic text campaign requires S0, S1, or S2 and primary/smoke")
+        if str(args.positive_sampling) != "same_class" or args.pairing_manifest_path is None:
+            raise ValueError("semantic text requires same-class approved pairing manifest")
+        if args.resume_checkpoint_path is not None:
+            raise ValueError("semantic text runs train from scratch; resume is forbidden")
+        if int(args.seed) != 42 or int(args.pseudo_val_seed) != 3407:
+            raise ValueError("semantic text requires seed 42 and pseudo_val_seed 3407")
+        if str(args.sketch_view_mode) != "full_full" or str(args.model_name) != "ViT-B-32-quickgelu":
+            raise ValueError("semantic text requires full_full and approved CLIP")
+        if str(args.prompt_template) != "a photo of a {}":
+            raise ValueError("semantic text requires the approved prompt template")
+        if int(args.pseudo_val_num_classes) != 20:
+            raise ValueError("semantic text requires pseudo_val_num_classes=20")
+        if int(args.batch_size) != (32 if run_kind == "primary" else 2):
+            raise ValueError("semantic text batch size does not match the run kind")
+        if float(args.margin) != 0.2 or float(args.tau_cls) != 0.07:
+            raise ValueError("semantic text loss settings do not match the approved protocol")
+        if run_kind == "primary" and (
+            int(args.num_workers) != 4
+            or int(args.eval_batch_size) != 256
+            or int(args.query_chunk_size) != 256
+        ):
+            raise ValueError("semantic text loader settings do not match the primary protocol")
+        for name, expected in (
+            ("visual_prompt_learning_rate", 1.0e-3),
+            ("soft_prompt_learning_rate", 1.0e-3),
+            ("visual_prompt_weight_decay", 1.0e-4),
+            ("soft_prompt_weight_decay", 1.0e-4),
+            ("margin", 0.2),
+            ("tau_cls", 0.07),
+        ):
+            if float(args[name]) != expected:
+                raise ValueError(f"semantic text requires {name}={expected}")
+        if args.pretrained not in ({"openai"} if run_kind == "primary" else {None, "openai"}):
+            raise ValueError("semantic text pretrained must be openai, or null for the CPU fixture")
+        if run_kind == "primary":
+            if str(args.data_config) != SEMANTIC_TEXT_DATA_CONFIG:
+                raise ValueError("semantic text primary requires the approved data config")
+            if str(args.pretrained) != "openai":
+                raise ValueError("semantic text primary requires pretrained=openai")
+            if str(args.pairing_manifest_path) != PAIRING_MANIFEST_PATH:
+                raise ValueError("semantic text primary requires the approved pairing manifest path")
+            pairing_path = _path(args.pairing_manifest_path)
+            if (
+                not pairing_path.is_file()
+                or hashlib.sha256(pairing_path.read_bytes()).hexdigest() != PAIRING_MANIFEST_SHA256
+            ):
+                raise ValueError("semantic text primary pairing manifest hash does not match the approved identity")
+            if bool(args.allow_short_run) or bool(args.synthetic_fixture) or bool(args.allow_smoke_fixture):
+                raise ValueError("semantic text primary does not allow smoke/short-run overrides")
+        if bool(args.official_unseen_used_for_selection):
+            raise ValueError("official unseen evaluation is forbidden for semantic text selection")
+        if run_kind == "primary":
+            if int(args.max_steps) != 3600 or tuple(int(v) for v in args.probe_steps) != SEMANTIC_TEXT_STEPS:
+                raise ValueError("semantic text primary requires fixed probes through step 3600")
+        elif str(args.device) != "cpu" or not 1 <= int(args.max_steps) <= 15:
+            raise ValueError("semantic text smoke requires CPU and 1..15 steps")
+        if str(args.text_mode) != treatment_for_role(role)["text_mode"]:
+            raise ValueError("semantic role and text_mode do not match")
+        if float(args.get("lambda_anchor", 0.0)) != float(treatment_for_role(role)["lambda_anchor"]):
+            raise ValueError("semantic role and lambda_anchor do not match")
     final_role = _is_final_role(role)
     if masked_view:
         if role not in (
@@ -271,7 +355,7 @@ def _validate(args: DictConfig) -> None:
             raise ValueError("pairing pilot runs must train from scratch")
         if int(args.seed) != 42 or int(args.pseudo_val_seed) != 3407:
             raise ValueError("pairing pilot requires seed 42 and pseudo_val_seed 3407")
-    elif run_kind in {"primary", "split_robustness"} and not masked_view and campaign != (
+    elif run_kind in {"primary", "split_robustness"} and not masked_view and not semantic_text and campaign != (
         FINAL_CAMPAIGN if final_role else CAMPAIGN
     ):
         raise ValueError("frozen-prompt campaign does not match the role")
@@ -280,6 +364,7 @@ def _validate(args: DictConfig) -> None:
     if run_kind == "smoke" and campaign not in {
         SMOKE_CAMPAIGN,
         FINAL_SMOKE_CAMPAIGN,
+        SEMANTIC_TEXT_CAMPAIGN,
         PAIRING_PILOT_CAMPAIGN,
         MASKED_VIEW_CAMPAIGN,
         MASKED_VIEW_3600_CAMPAIGN,
@@ -287,9 +372,9 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("smoke frozen-prompt runs must use a smoke campaign")
     if run_kind not in {"primary", "split_robustness", "smoke"}:
         raise ValueError("run_kind must be primary, split_robustness, or smoke")
-    if not pairing_pilot and not masked_view and str(args.positive_sampling) != "same_class":
+    if not pairing_pilot and not masked_view and not semantic_text and str(args.positive_sampling) != "same_class":
         raise ValueError("historical frozen-prompt runs require positive_sampling=same_class")
-    if not pairing_pilot and not masked_view and args.pairing_manifest_path is not None:
+    if not pairing_pilot and not masked_view and not semantic_text and args.pairing_manifest_path is not None:
         raise ValueError("historical frozen-prompt runs require pairing_manifest_path=null")
     if masked_view:
         steps = tuple(int(value) for value in args.probe_steps)
@@ -317,7 +402,7 @@ def _validate(args: DictConfig) -> None:
     expected = treatment_for_role(
         role, seed=seed if final_role else 42, pseudo_val_seed=pseudo_seed
     )
-    smoke_overrides = {"batch_size"} if (pairing_pilot or masked_view) and run_kind == "smoke" else set()
+    smoke_overrides = {"batch_size"} if (pairing_pilot or masked_view or semantic_text) and run_kind == "smoke" else set()
     mismatches = {
         key: (observed[key], expected[key])
         for key in expected
@@ -351,6 +436,10 @@ def _validate(args: DictConfig) -> None:
     ):
         if float(args[name]) <= 0:
             raise ValueError(f"{name} must be positive")
+    if float(args.get("lambda_anchor", 0.0)) < 0 or not math.isfinite(float(args.get("lambda_anchor", 0.0))):
+        raise ValueError("lambda_anchor must be finite and non-negative")
+    if not semantic_text and float(args.get("lambda_anchor", 0.0)) != 0.0:
+        raise ValueError("lambda_anchor is reserved for semantic text campaign")
     if float(args.encoder_learning_rate) != 1.0e-5:
         raise ValueError("FP5 matching requires encoder_learning_rate=1e-5")
     if float(args.visual_layernorm_learning_rate) != 1.0e-6:
@@ -393,7 +482,7 @@ def _validate(args: DictConfig) -> None:
         raise ValueError("selection requires pseudo-train classes")
     if str(args.classification_location) not in {"none", "query", "z0"}:
         raise ValueError("classification_location must be none, query, or z0")
-    if not pairing_pilot and not masked_view and run_kind in {"primary", "split_robustness"} and not bool(args.allow_short_run):
+    if not pairing_pilot and not masked_view and not semantic_text and run_kind in {"primary", "split_robustness"} and not bool(args.allow_short_run):
         steps = tuple(int(value) for value in args.probe_steps)
         resume = args.resume_checkpoint_path is not None
         if run_kind == "split_robustness" and resume:
@@ -435,6 +524,14 @@ def _validate(args: DictConfig) -> None:
     elif run_kind == "smoke":
         if int(args.max_steps) < 1 or int(args.max_steps) > 15:
             raise ValueError("smoke runs must use between 1 and 15 updates")
+
+
+def _validate_semantic_split_identity(split_identity: dict[str, Any]) -> None:
+    if split_identity.get("sha256") != SEMANTIC_TEXT_SPLIT_SHA256:
+        raise ValueError("semantic text primary pseudo split identity does not match the approved split")
+    for key, expected in SEMANTIC_TEXT_SPLIT_COUNTS.items():
+        if int(split_identity.get(key, -1)) != expected:
+            raise ValueError(f"semantic text primary split count {key} does not match {expected}")
 
 
 def _load_split(
@@ -869,6 +966,8 @@ def _save_checkpoint(
     optimizer_groups: list[dict[str, Any]],
     initial_hash: str,
     clip_freeze_policy: dict[str, Any],
+    semantic_identity: dict[str, Any] | None = None,
+    fixed_text_bank: Tensor | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -908,7 +1007,7 @@ def _save_checkpoint(
             "run_kind": str(args.run_kind),
             "selection_target_step": (
                 int(args.max_steps)
-                if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}
+                if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN}
                 else None
             ),
             "actual_step": step,
@@ -925,17 +1024,29 @@ def _save_checkpoint(
         },
         "mask_policy": (
             OmegaConf.to_container(args.mask_policy, resolve=True)
-            if is_masked_view_campaign(str(args.experiment_campaign))
+            if (
+                is_masked_view_campaign(str(args.experiment_campaign))
+                or str(args.experiment_campaign) == SEMANTIC_TEXT_CAMPAIGN
+            )
             else None
         ),
         "mask_policy_sha256": (
             canonical_sha256(OmegaConf.to_container(args.mask_policy, resolve=True))
-            if is_masked_view_campaign(str(args.experiment_campaign))
+            if (
+                is_masked_view_campaign(str(args.experiment_campaign))
+                or str(args.experiment_campaign) == SEMANTIC_TEXT_CAMPAIGN
+            )
             else None
         ),
         "sketch_view_mode": str(args.sketch_view_mode),
-        "two_view_budget": is_masked_view_campaign(str(args.experiment_campaign)),
+        "two_view_budget": is_masked_view_campaign(str(args.experiment_campaign)) or str(args.experiment_campaign) == SEMANTIC_TEXT_CAMPAIGN,
         "soft_prompt_state_dict": text_state,
+        "semantic_text_identity": semantic_identity,
+        "semantic_text_fixed_bank": None if fixed_text_bank is None else {
+            "embeddings": fixed_text_bank.detach().cpu(),
+            "sha256": tensor_sha256(fixed_text_bank),
+            "class_ids": semantic_identity.get("class_ids") if semantic_identity else None,
+        },
         "optimizer_state_dict": None
         if optimizer is None or not bool(args.save_optimizer)
         else optimizer.state_dict(),
@@ -945,6 +1056,13 @@ def _save_checkpoint(
         "experiment_code_commit": provenance.get("head_commit"),
         "source_snapshot_hash": provenance.get("source_snapshot", {}).get("sha256"),
         "training_seed": int(args.seed),
+        "lambda_anchor": float(args.get("lambda_anchor", 0.0)),
+        "semantic_text_fixed_bank_sha256": None if fixed_text_bank is None else tensor_sha256(fixed_text_bank),
+        "current_context_sha256": (
+            None
+            if not isinstance(text_bank, SoftPromptTextBank)
+            else tensor_sha256(text_bank.context)
+        ),
         "split_seed": int(args.pseudo_val_seed),
         "training_class_list": list(split_identity["train_class_ids"]),
         "validation_class_list": list(split_identity["validation_class_ids"]),
@@ -1248,7 +1366,7 @@ def _safe_wandb_config(config: dict[str, Any]) -> dict[str, Any]:
         "experiment_name", "experiment_role", "experiment_campaign", "run_kind",
         "model_name", "pretrained", "batch_size", "max_steps", "probe_steps",
         "seed", "pseudo_val_seed", "text_mode", "lambda_rank", "lambda_cls",
-        "mask_policy", "sketch_view_mode",
+        "mask_policy", "sketch_view_mode", "lambda_anchor", "semantic_text_identity",
     )
     return {key: config[key] for key in allowed if key in config}
 
@@ -1307,7 +1425,7 @@ def _atomic_copy(source: Path, destination: Path) -> None:
 
 
 def _new_wandb_experiment(args: DictConfig, output_dir: Path) -> WandbExperiment | None:
-    if not is_masked_view_3600_campaign(str(args.experiment_campaign)):
+    if not is_retrieval_probe_campaign(str(args.experiment_campaign)):
         return None
     resolved = OmegaConf.to_container(args, resolve=True)
     if not isinstance(resolved, dict):
@@ -1330,14 +1448,15 @@ def _new_wandb_experiment(args: DictConfig, output_dir: Path) -> WandbExperiment
 def run(args: DictConfig) -> None:
     _validate(args)
     is_masked_campaign = is_masked_view_campaign(str(args.experiment_campaign))
+    is_semantic_campaign = str(args.experiment_campaign) == SEMANTIC_TEXT_CAMPAIGN
     if (
         str(args.run_kind) == "smoke"
-        and is_masked_campaign
+        and (is_masked_campaign or is_semantic_campaign)
         and (not bool(args.allow_smoke_fixture) or not bool(args.synthetic_fixture))
     ):
         raise ValueError("masked-view smoke requires an explicit synthetic CPU fixture")
     output_dir = Path(HydraConfig.get().runtime.output_dir)
-    if is_masked_campaign:
+    if is_masked_campaign or is_semantic_campaign:
         _assert_fresh_masked_view_output(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     wandb_experiment = _new_wandb_experiment(args, output_dir)
@@ -1355,9 +1474,10 @@ def _run_impl(
 ) -> None:
     _validate(args)
     is_masked_campaign = is_masked_view_campaign(str(args.experiment_campaign))
+    is_semantic_campaign = str(args.experiment_campaign) == SEMANTIC_TEXT_CAMPAIGN
     if (
         str(args.run_kind) == "smoke"
-        and is_masked_campaign
+        and (is_masked_campaign or is_semantic_campaign)
         and (not bool(args.allow_smoke_fixture) or not bool(args.synthetic_fixture))
     ):
         raise ValueError("masked-view smoke requires an explicit synthetic CPU fixture")
@@ -1366,14 +1486,21 @@ def _run_impl(
     device = _device(str(args.device))
     data = load_data_config(_path(args.data_config))
     split, names, split_identity, data_manifest_identity = _load_split(data, args)
+    if is_semantic_campaign and str(args.run_kind) == "primary":
+        _validate_semantic_split_identity(split_identity)
     pairing_manifest = None
     pairing_manifest_sha256 = None
     pairing_photo_sha256: dict[str, str] = {}
-    if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}:
+    if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN}:
         pairing_path = _path(args.pairing_manifest_path)
         if not pairing_path.is_file():
             raise FileNotFoundError(f"pairing manifest not found: {pairing_path}")
         pairing_manifest_sha256 = hashlib.sha256(pairing_path.read_bytes()).hexdigest()
+        if is_semantic_campaign and str(args.run_kind) == "primary":
+            if str(args.pairing_manifest_path) != PAIRING_MANIFEST_PATH:
+                raise ValueError("semantic text primary requires the approved pairing manifest path")
+            if pairing_manifest_sha256 != PAIRING_MANIFEST_SHA256:
+                raise ValueError("semantic text primary pairing manifest hash does not match the approved identity")
         if (
             is_masked_view_campaign(str(args.experiment_campaign))
             and str(args.run_kind) == "primary"
@@ -1405,7 +1532,10 @@ def _run_impl(
                     "mask_policy_sha256": canonical_sha256(OmegaConf.to_container(args.mask_policy, resolve=True)),
                     "two_view_budget": True,
                 }
-                if is_masked_view_campaign(str(args.experiment_campaign))
+                if (
+                    is_masked_view_campaign(str(args.experiment_campaign))
+                    or is_semantic_campaign
+                )
                 else {}
             ),
         }
@@ -1420,7 +1550,7 @@ def _run_impl(
         run_kind=str(args.run_kind),
         selection_target_step=(
             int(args.max_steps)
-            if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}
+            if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN}
             else None
         ),
     )
@@ -1486,12 +1616,15 @@ def _run_impl(
     )
 
     text_bank: EncodedTextBank | SoftPromptTextBank | None = None
+    fixed_text_bank: Tensor | None = None
+    semantic_identity: dict[str, Any] | None = None
     if str(args.text_mode) == "soft":
         text_bank = SoftPromptTextBank(
             photo_clip.encoder,
             photo_clip.tokenizer,
             train_names,
             prompt_length=int(args.soft_prompt_length),
+            strict_prefix=is_semantic_campaign,
         ).to(device)
     elif str(args.text_mode) == "hard":
         text_bank = encode_class_text_bank(
@@ -1499,6 +1632,71 @@ def _run_impl(
             photo_clip.tokenizer,
             train_names,
             prompt_template=str(args.prompt_template),
+        )
+    if is_semantic_campaign:
+        if not isinstance(text_bank, (EncodedTextBank, SoftPromptTextBank)):
+            raise RuntimeError("semantic text campaign requires a text bank")
+        hard_bank = text_bank if isinstance(text_bank, EncodedTextBank) else encode_class_text_bank(
+            photo_clip.encoder, photo_clip.tokenizer, train_names,
+            prompt_template=str(args.prompt_template),
+        )
+        fixed_text_bank = clone_fixed_text_bank(hard_bank.embeddings, device=device)
+        if isinstance(text_bank, EncodedTextBank):
+            text_bank = EncodedTextBank(
+                embeddings=fixed_text_bank,
+                labels=hard_bank.labels,
+                class_names=hard_bank.class_names,
+                prompts=hard_bank.prompts,
+                token_ids=hard_bank.token_ids,
+                eot_positions=hard_bank.eot_positions,
+            )
+        learned_initial = text_bank().detach().clone() if isinstance(text_bank, SoftPromptTextBank) else None
+        initial_parity_max_error = None
+        if learned_initial is not None:
+            initial_parity_max_error = float(
+                (learned_initial.float() - fixed_text_bank.float()).abs().max().item()
+            )
+            torch.testing.assert_close(learned_initial.float(), fixed_text_bank.float(), atol=1e-6, rtol=1e-6)
+            semantic_identity = semantic_text_identity(
+                class_ids=tuple(int(value) for value in text_bank.class_labels.tolist()),
+                class_names=text_bank.class_names,
+                token_ids=text_bank.token_ids,
+                eot_positions=text_bank.eot_positions,
+                model_name=str(args.model_name), pretrained=None if args.pretrained is None else str(args.pretrained),
+                fixed_bank=fixed_text_bank, initial_context=text_bank.initial_context,
+                initial_learned_bank=learned_initial, lambda_anchor=float(args.get("lambda_anchor", 0.0)),
+            )
+        else:
+            semantic_identity = semantic_text_identity(
+                class_ids=tuple(int(value) for value in hard_bank.labels.tolist()),
+                class_names=hard_bank.class_names,
+                token_ids=hard_bank.token_ids if hard_bank.token_ids is not None else torch.empty(0, dtype=torch.long),
+                eot_positions=hard_bank.eot_positions,
+                model_name=str(args.model_name),
+                pretrained=None if args.pretrained is None else str(args.pretrained),
+                fixed_bank=fixed_text_bank, lambda_anchor=float(args.get("lambda_anchor", 0.0)),
+            )
+        semantic_identity["initial_bank_parity_max_abs_error"] = initial_parity_max_error
+        semantic_identity["context_dim"] = (
+            None if not isinstance(text_bank, SoftPromptTextBank)
+            else int(text_bank.initial_context.shape[-1])
+        )
+        semantic_identity["context_width"] = semantic_identity["context_dim"]
+        semantic_identity["context_shape"] = (
+            None if not isinstance(text_bank, SoftPromptTextBank)
+            else list(text_bank.initial_context.shape)
+        )
+        semantic_identity["prefix_token_ids"] = (
+            None if not isinstance(text_bank, SoftPromptTextBank)
+            else list(text_bank.prefix_token_ids)
+        )
+        semantic_identity["tokenizer_eot_id"] = int(getattr(photo_clip.tokenizer, "eot_token_id"))
+        semantic_identity["tokenizer_sot_id"] = int(getattr(photo_clip.tokenizer, "sot_token_id"))
+        semantic_identity["eot_token_id"] = semantic_identity["tokenizer_eot_id"]
+        semantic_identity["token_context_length"] = int(
+            text_bank.token_ids.shape[1]
+            if isinstance(text_bank, SoftPromptTextBank)
+            else hard_bank.token_ids.shape[1]
         )
 
     optimizer, optimizer_groups = build_optimizer(
@@ -1516,25 +1714,29 @@ def _run_impl(
     photo_before = _clip_snapshot(
         photo_clip.encoder.model,
         all_parameters=str(args.experiment_campaign) in {
-            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN,
+            SEMANTIC_TEXT_CAMPAIGN,
         },
     )
     output_dir = Path(HydraConfig.get().runtime.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     observations_path = output_dir / "train_observations.jsonl"
-    if is_masked_campaign and observations_path.exists():
-        raise ValueError("masked-view observation trace already exists; refusing overwrite")
+    if (is_masked_campaign or is_semantic_campaign) and observations_path.exists():
+        raise ValueError("retrieval-probe observation trace already exists; refusing overwrite")
     provenance = capture_provenance(
         PROJECT_ROOT,
         resolved_config=OmegaConf.to_container(args, resolve=True),
         command=[sys.executable, *sys.argv],
     )
-    if is_masked_view_3600_campaign(str(args.experiment_campaign)):
+    if is_retrieval_probe_campaign(str(args.experiment_campaign)):
         _write_provenance_artifacts(output_dir, args, provenance)
     if wandb_experiment is not None:
         wandb_experiment.define_metric("step_train")
         for name in ("clean/*", "masked/*"):
             wandb_experiment.define_metric(name, step_metric="step_train", summary="max")
+        if is_semantic_campaign:
+            for name in ("text/*", "train/*"):
+                wandb_experiment.define_metric(name, step_metric="step_train")
     loader_generator = train_loader.generator
     if loader_generator is None:
         raise RuntimeError("training loader has no reproducible generator")
@@ -1649,7 +1851,8 @@ def _run_impl(
             return
         checkpoint = output_dir / "checkpoints" / f"frozen_prompt_step{probe_step}.pt"
         pairing_pilot = str(args.experiment_campaign) in {
-            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN,
+            SEMANTIC_TEXT_CAMPAIGN,
         }
         clip_policy_current = (
             _assert_clip_policy(photo_clip.encoder.model, photo_before, role)
@@ -1690,9 +1893,11 @@ def _run_impl(
             optimizer_groups=_optimizer_mapping(optimizer, optimizer_groups),
             initial_hash=initial_hash,
             clip_freeze_policy=clip_policy_current,
+            semantic_identity=semantic_identity,
+            fixed_text_bank=fixed_text_bank,
         )
         checkpoint_hash = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
-        if is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if is_retrieval_probe_campaign(str(args.experiment_campaign)):
             _atomic_copy(checkpoint, output_dir / "checkpoints" / "latest.pt")
         current_sketch = encode_prompted_loader(query_model, val_sketch_loader)
         current_photo = encode_prompted_loader(
@@ -1717,7 +1922,7 @@ def _run_impl(
             device=device,
         )
         masked_view_metrics = None
-        if is_masked_campaign and is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if is_retrieval_probe_campaign(str(args.experiment_campaign)):
             from .evaluation.masked_view import evaluate_benchmark_views
             masked_view_metrics = evaluate_benchmark_views(
                 query_model, current_sketch, loaded_photo,
@@ -1813,6 +2018,17 @@ def _run_impl(
             prompt_model,
             text_bank if isinstance(text_bank, SoftPromptTextBank) else None,
         )
+        probe_anchor = 0.0
+        probe_drift = 0.0
+        if is_semantic_campaign and fixed_text_bank is not None:
+            with torch.no_grad():
+                current_bank = (
+                    text_bank().detach()
+                    if isinstance(text_bank, SoftPromptTextBank)
+                    else fixed_text_bank
+                )
+                probe_anchor = float(text_anchor_loss(current_bank, fixed_text_bank).item())
+                probe_drift = text_drift(current_bank, fixed_text_bank)
         row: dict[str, Any] = {
             "step": probe_step,
             "training_global_step": probe_step,
@@ -1853,6 +2069,9 @@ def _run_impl(
             ),
             "prompt_parameter_norm": parameter_norms["visual_prompts"],
             "soft_prompt_parameter_norm": parameter_norms["soft_text_prompt"],
+            "text_anchor_loss": probe_anchor,
+            "weighted_text_anchor_loss": float(args.get("lambda_anchor", 0.0)) * probe_anchor,
+            "text_drift": probe_drift,
             "parameter_counts": parameter_counts,
             "geometry": geometry,
             "same_class_sketch_photo_cosine": geometry["cross_modal"][
@@ -1905,7 +2124,7 @@ def _run_impl(
         (output_dir / f"probe_step{probe_step}.json").write_text(
             json.dumps(row, indent=2, sort_keys=True) + "\n"
         )
-        if is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if is_retrieval_probe_campaign(str(args.experiment_campaign)):
             checkpoint_root = output_dir / "checkpoints"
             _atomic_copy(checkpoint, checkpoint_root / "latest.pt")
             eligible_steps = (
@@ -1941,8 +2160,18 @@ def _run_impl(
             wandb_experiment.log_retrieval_probe(
                 probe_step, clean_metrics, masked_metrics, fraction_metrics,
                 conditions=conditions,
+                diagnostics=(
+                    {
+                        "text/anchor_loss": float(row["text_anchor_loss"]),
+                        "text/weighted_anchor_loss": float(row["weighted_text_anchor_loss"]),
+                        "text/drift": float(row["text_drift"] or 0.0),
+                        "train/text_gradient_norm": float(last_gradient_norms.get("soft_text_prompt", 0.0)),
+                        **{f"train/{name}": float(value) for name, value in last_train.items() if value is not None},
+                    }
+                    if is_semantic_campaign else None
+                ),
             )
-            if is_masked_view_3600_campaign(str(args.experiment_campaign)) and probe_step > 0:
+            if is_retrieval_probe_campaign(str(args.experiment_campaign)) and probe_step > 0:
                 eligible_steps = (
                     MASKED_VIEW_3600_SELECTION_STEPS
                     if str(args.run_kind) == "primary"
@@ -1986,7 +2215,7 @@ def _run_impl(
         existing_steps.add(probe_step)
 
     def probe(probe_step: int) -> None:
-        if is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if is_retrieval_probe_campaign(str(args.experiment_campaign)):
             with _preserve_global_rng():
                 _probe_impl(probe_step)
         else:
@@ -2002,9 +2231,13 @@ def _run_impl(
     training_started = time.perf_counter()
     if optimizer is not None:
         while step < int(args.max_steps):
-            for batch in train_loader:
-                if step >= int(args.max_steps):
-                    break
+            train_iterator = iter(train_loader)
+            while step < int(args.max_steps):
+                try:
+                    batch = next(train_iterator)
+                except StopIteration:
+                    train_iterator = iter(train_loader)
+                    batch = next(train_iterator)
                 raw_images = batch["sketch"]
                 masked_campaign = is_masked_view_campaign(str(args.experiment_campaign))
                 if masked_campaign:
@@ -2022,7 +2255,14 @@ def _run_impl(
                         else (full_view, masked_images)
                     )
                 else:
-                    view_images, _, mask_rows = _single_training_views(raw_images)
+                    if is_semantic_campaign:
+                        # Keep the historical C concat/chunk route for semantic
+                        # full/full: one encoder call, two identical chunks.
+                        view_images = (raw_images, raw_images)
+                        mask_rows = []
+                    else:
+                        view_images = _single_training_views(raw_images)
+                        mask_rows = view_images[2]
                 images = raw_images.to(device, non_blocking=device.type == "cuda")
                 positives = batch["positive_photos"][:, 0].to(
                     device, non_blocking=device.type == "cuda"
@@ -2035,7 +2275,16 @@ def _run_impl(
                     query_model.train()
                 optimizer.zero_grad(set_to_none=True)
                 query_views = (
-                    (query_model(images),)
+                    tuple(
+                        query_model(
+                            torch.cat(
+                                tuple(view.to(device, non_blocking=device.type == "cuda") for view in view_images),
+                                dim=0,
+                            )
+                        ).chunk(2, dim=0)
+                    )
+                    if is_semantic_campaign
+                    else (query_model(images),)
                     if not masked_campaign
                     else tuple(
                         query_model(
@@ -2053,6 +2302,10 @@ def _run_impl(
                 positive, negative = photo_values.split(
                     (images.shape[0], images.shape[0]), dim=0
                 )
+                learned_bank = (
+                    text_bank() if is_semantic_campaign and isinstance(text_bank, SoftPromptTextBank)
+                    else None
+                )
                 def _losses(current: Tensor) -> tuple[Tensor, Tensor, Tensor]:
                     if float(args.lambda_rank) > 0:
                         query_normalized = F.normalize(current, dim=-1)
@@ -2068,7 +2321,11 @@ def _run_impl(
                     current_cls = current.new_zeros(())
                     current_accuracy = current.new_zeros(())
                     if text_bank is not None:
-                        bank, bank_labels = _text_bank_values(text_bank, device)
+                        if learned_bank is not None:
+                            bank = learned_bank
+                            bank_labels = text_bank.class_labels.to(device)
+                        else:
+                            bank, bank_labels = _text_bank_values(text_bank, device)
                         current_cls, logits = jepa_text_classification_loss(
                             current, bank, bank_labels, labels,
                             temperature=float(args.tau_cls),
@@ -2081,9 +2338,13 @@ def _run_impl(
                 rank = torch.stack([value[0] for value in view_losses]).mean()
                 cls = torch.stack([value[1] for value in view_losses]).mean()
                 accuracy = torch.stack([value[2] for value in view_losses]).mean()
-                total = float(args.lambda_rank) * rank + float(args.lambda_cls) * cls
+                anchor = rank.new_zeros(())
+                if learned_bank is not None and fixed_text_bank is not None:
+                    anchor = text_anchor_loss(learned_bank, fixed_text_bank)
+                total = float(args.lambda_rank) * rank + float(args.lambda_cls) * cls + float(args.get("lambda_anchor", 0.0)) * anchor
                 _check_finite("rank loss", rank)
                 _check_finite("classification loss", cls)
+                _check_finite("anchor loss", anchor)
                 _check_finite("total loss", total)
                 total.backward()
                 _assert_optimizer_gradients(
@@ -2120,6 +2381,9 @@ def _run_impl(
                             "classification"
                         ],
                         "last_train_batch_accuracy": last_train["accuracy"],
+                    "text_anchor_loss": float(anchor.item()),
+                    "weighted_text_anchor_loss": float((float(args.get("lambda_anchor", 0.0)) * anchor).item()),
+                    "text_drift": None if fixed_text_bank is None or learned_bank is None else text_drift(learned_bank, fixed_text_bank),
                     "gradient_norms": dict(last_gradient_norms),
                     "gradient_norms_by_parameter": dict(last_parameter_gradient_norms),
                 }
@@ -2136,9 +2400,18 @@ def _run_impl(
                             float(view_losses[0][1].item()) + float(view_losses[1][1].item())
                         ) / 2.0,
                     })
+                if masked_campaign or is_semantic_campaign:
                     with observations_path.open("a", encoding="utf-8") as trace:
+                        rows = mask_rows if masked_campaign else [
+                            {
+                                "path": _relative_data_path(
+                                    str(batch["sketch_path"][index]), Path(data.root)
+                                )
+                            }
+                            for index in range(raw_images.shape[0])
+                        ]
                         for index, (row, negative_path, label) in enumerate(zip(
-                            mask_rows, batch["negative_photo_path"], batch["label"], strict=True
+                            rows, batch["negative_photo_path"], batch["label"], strict=True
                         )):
                             positive_path = _relative_data_path(
                                 str(batch["positive_photo_paths"][0][index]),
@@ -2152,10 +2425,25 @@ def _run_impl(
                                 "negative_photo_path": negative_path,
                                 "positive_photo_sha256": pairing_photo_sha256.get(positive_path),
                                 "negative_photo_sha256": pairing_photo_sha256.get(negative_path),
-                                "mask_metadata_sha256": canonical_sha256(row["views"]),
                             })
+                            if masked_campaign:
+                                row["mask_metadata_sha256"] = canonical_sha256(row["views"])
                             trace.write(json.dumps(row, sort_keys=True) + "\n")
                 training_history.append(history_row)
+                if (
+                    is_semantic_campaign and wandb_experiment is not None
+                    and step % int(args.log_every) == 0 and step not in probe_steps
+                ):
+                    wandb_experiment.log_metrics(
+                        {
+                            "step_train": step,
+                            **{f"train/{name}": float(value) for name, value in last_train.items()},
+                            "train/text_anchor_loss": float(anchor.item()),
+                            "train/total_loss": float(total.item()),
+                            **{f"train/{name}_gradient_norm": float(value) for name, value in last_gradient_norms.items()},
+                        },
+                        step=step,
+                    )
                 if step in probe_steps:
                     probe(step)
         if role != "frozen_prompt_v2_FP0" and step != int(args.max_steps):
@@ -2218,9 +2506,9 @@ def _run_impl(
             )
     else:
         selected_row = None
-        if is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if is_retrieval_probe_campaign(str(args.experiment_campaign)):
             eligible_steps = (
-                MASKED_VIEW_3600_SELECTION_STEPS
+                (SEMANTIC_TEXT_SELECTION_STEPS if is_semantic_campaign else MASKED_VIEW_3600_SELECTION_STEPS)
                 if str(args.run_kind) == "primary"
                 else tuple(int(value) for value in args.probe_steps if int(value) > 0)
             )
@@ -2234,7 +2522,7 @@ def _run_impl(
             }
             frozen_hold = []
         elif str(args.experiment_campaign) in {
-            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN
         }:
             target_step = 1800 if str(args.run_kind) == "primary" else int(args.max_steps)
             selected_row = next(
@@ -2261,7 +2549,7 @@ def _run_impl(
                 if history
                 else None
             )
-        if not is_masked_view_3600_campaign(str(args.experiment_campaign)):
+        if not is_retrieval_probe_campaign(str(args.experiment_campaign)):
             selected = (
                 None
                 if selected_row is None
@@ -2275,7 +2563,7 @@ def _run_impl(
             )
         frozen_hold = []
 
-    if is_masked_view_3600_campaign(str(args.experiment_campaign)) and history:
+    if is_retrieval_probe_campaign(str(args.experiment_campaign)) and history:
         latest = max(history, key=lambda row: int(row["training_global_step"]))
         for alias in ("latest.pt",):
             _atomic_copy(Path(str(latest["checkpoint"])), output_dir / "checkpoints" / alias)
@@ -2300,7 +2588,11 @@ def _run_impl(
     peak_gpu_memory_bytes = (
         int(torch.cuda.max_memory_allocated(device)) if device.type == "cuda" else None
     )
-    pairing_pilot = is_masked_campaign or str(args.experiment_campaign) == PAIRING_PILOT_CAMPAIGN
+    pairing_pilot = (
+        is_masked_campaign
+        or str(args.experiment_campaign) == PAIRING_PILOT_CAMPAIGN
+        or is_semantic_campaign
+    )
     final_clip_policy = (
         _assert_clip_policy(photo_clip.encoder.model, photo_before, role)
         if pairing_pilot
@@ -2327,16 +2619,18 @@ def _run_impl(
     artifact_status = (
         "CPU_SMOKE"
         if str(args.run_kind) == "smoke" and str(args.experiment_campaign) in {
-            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN,
+            SEMANTIC_TEXT_CAMPAIGN,
         }
         else "PRIMARY_FIXED_STEP_UNCOMPARED"
         if str(args.run_kind) == "primary" and str(args.experiment_campaign) in {
-            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+            PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN,
+            SEMANTIC_TEXT_CAMPAIGN,
         }
         else str(args.run_kind).upper()
     )
     observation_trace = None
-    if is_masked_campaign and observations_path.is_file():
+    if (is_masked_campaign or is_semantic_campaign) and observations_path.is_file():
         observation_trace = {
             "path": str(observations_path),
             "sha256": hashlib.sha256(observations_path.read_bytes()).hexdigest(),
@@ -2352,13 +2646,10 @@ def _run_impl(
             "campaign": str(args.experiment_campaign),
             "run_kind": str(args.run_kind),
             "selection_target_step": (
-                1800
+                int(args.max_steps)
                 if str(args.experiment_campaign) in {
-                    PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN
+                    PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN
                 }
-                and str(args.run_kind) == "primary"
-                else int(args.max_steps)
-                if str(args.experiment_campaign) in {PAIRING_PILOT_CAMPAIGN, MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}
                 else None
             ),
             "actual_final_step": step,
@@ -2395,10 +2686,10 @@ def _run_impl(
             "path": str(args.pairing_manifest_path),
             "sha256": pairing_manifest_sha256,
         },
-        "mask_policy": None if not is_masked_campaign else OmegaConf.to_container(args.mask_policy, resolve=True),
-        "mask_policy_sha256": None if not is_masked_campaign else canonical_sha256(OmegaConf.to_container(args.mask_policy, resolve=True)),
+        "mask_policy": None if not (is_masked_campaign or is_semantic_campaign) else OmegaConf.to_container(args.mask_policy, resolve=True),
+        "mask_policy_sha256": None if not (is_masked_campaign or is_semantic_campaign) else canonical_sha256(OmegaConf.to_container(args.mask_policy, resolve=True)),
         "sketch_view_mode": str(args.sketch_view_mode),
-        "two_view_budget": is_masked_campaign,
+        "two_view_budget": is_masked_campaign or is_semantic_campaign,
         "observation_trace": observation_trace,
         "manifest_path": str(manifest_path),
         "class_list_hashes": {
@@ -2457,12 +2748,12 @@ def _run_impl(
         "resume": resume_records,
         "selection": (
             None
-            if is_masked_view_3600_campaign(str(args.experiment_campaign))
+            if is_retrieval_probe_campaign(str(args.experiment_campaign))
             and str(args.run_kind) == "primary"
             else selected
         ),
         "selections": (
-            None if not is_masked_view_3600_campaign(str(args.experiment_campaign))
+            None if not is_retrieval_probe_campaign(str(args.experiment_campaign))
             else {
                 "latest": {
                     "training_global_step": int(max(history, key=lambda row: int(row["training_global_step"]))["training_global_step"]),
@@ -2514,7 +2805,7 @@ def _run_impl(
         "protocol": {
             "selection_metric": (
                 "mAP@200_prefix_positive"
-                if is_masked_view_3600_campaign(str(args.experiment_campaign))
+                if is_retrieval_probe_campaign(str(args.experiment_campaign))
                 else "full_pseudo_unseen_mAP"
             ),
             "official_unseen_used_for_selection": False,
@@ -2527,8 +2818,10 @@ def _run_impl(
             "distance_prediction": False,
             "num_positive_photos": 1,
             "sketch_view_mode": str(args.sketch_view_mode),
-            "mask_policy": None if not is_masked_campaign else OmegaConf.to_container(args.mask_policy, resolve=True),
-            "two_view_budget": is_masked_campaign,
+            "mask_policy": None if not (is_masked_campaign or is_semantic_campaign) else OmegaConf.to_container(args.mask_policy, resolve=True),
+            "two_view_budget": is_masked_campaign or is_semantic_campaign,
+            "lambda_anchor": float(args.get("lambda_anchor", 0.0)),
+            "semantic_text_identity": semantic_identity,
             "pairing_manifest_sha256": pairing_manifest_sha256,
             "metric_denominator": "prefix_positive" if is_masked_view_3600_campaign(str(args.experiment_campaign)) else None,
             "benchmark_status": "public_sketchlvm_not_verified" if is_masked_view_3600_campaign(str(args.experiment_campaign)) else None,

@@ -32,12 +32,26 @@ MASKED_VIEW_3600_ROLES = (
 MASKED_VIEW_3600_STEPS = (0, 600, 1200, 1800, 2400, 3000, 3600)
 MASKED_VIEW_3600_SELECTION_STEPS = MASKED_VIEW_3600_STEPS[1:]
 MASKED_VIEW_CAMPAIGNS = (MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN)
+SEMANTIC_TEXT_CAMPAIGN = "frozen_prompt_semantic_text_step1_2026-09-07"
+SEMANTIC_TEXT_ROLES = (
+    "semantic_text_S0", "semantic_text_S1", "semantic_text_S2",
+)
+SEMANTIC_TEXT_STEPS = MASKED_VIEW_3600_STEPS
+SEMANTIC_TEXT_SELECTION_STEPS = SEMANTIC_TEXT_STEPS[1:]
+SEMANTIC_TEXT_EVAL_MASK_POLICY = {
+    "version": "ink_centered_square_v1", "ink_threshold": 0.9,
+    "train_fractions": [], "train_seed": None,
+    "eval_fractions": [0.25, 0.5, 0.75], "eval_seeds": [101, 202, 303],
+}
 
 def is_masked_view_campaign(campaign: str) -> bool:
     return campaign in MASKED_VIEW_CAMPAIGNS
 
 def is_masked_view_3600_campaign(campaign: str) -> bool:
     return campaign == MASKED_VIEW_3600_CAMPAIGN
+
+def is_retrieval_probe_campaign(campaign: str) -> bool:
+    return campaign in {MASKED_VIEW_3600_CAMPAIGN, SEMANTIC_TEXT_CAMPAIGN}
 MASK_POLICY = {
     "version": "ink_centered_square_v1",
     "ink_threshold": 0.9,
@@ -78,6 +92,7 @@ ALL_ROLES = (
     + PAIRING_PILOT_ROLES
     + MASKED_VIEW_ROLES
     + MASKED_VIEW_3600_ROLES
+    + SEMANTIC_TEXT_ROLES
 )
 
 
@@ -274,6 +289,25 @@ MASKED_VIEW_3600_TREATMENTS: dict[str, dict[str, Any]] = {
     for role in MASKED_VIEW_3600_ROLES
 }
 
+SEMANTIC_TEXT_TREATMENTS: dict[str, dict[str, Any]] = {
+    role: {
+        **_treatment(
+            visual_prompt_length=3, prompt_mode="prompt_only",
+            text_mode="hard" if role == "semantic_text_S0" else "soft",
+            train_visual_layernorm=False, train_sketch_prompt=True,
+            train_photo_prompt=True, lambda_rank=1.0, lambda_cls=1.0,
+            classification_location="query", encoder_mode="frozen",
+            encoder_unfreeze_depth=0, encoder_train_ln_post=False,
+        ),
+        "positive_sampling": "same_class", "sketch_view_mode": "full_full",
+        "mask_policy": SEMANTIC_TEXT_EVAL_MASK_POLICY,
+        "lambda_anchor": 0.0 if role != "semantic_text_S2" else 1.0,
+        "soft_prompt_length": 4,
+        "semantic_text_identity": SEMANTIC_TEXT_CAMPAIGN,
+    }
+    for role in SEMANTIC_TEXT_ROLES
+}
+
 PAIRING_PILOT_TREATMENTS: dict[str, dict[str, Any]] = {
     "frozen_prompt_pairing_pilot_A": {
         **FINAL_ROLE_TREATMENTS["frozen_prompt_final_FP2"],
@@ -289,7 +323,9 @@ PAIRING_PILOT_TREATMENTS: dict[str, dict[str, Any]] = {
 def treatment_for_role(
     role: str, *, seed: int | None = None, pseudo_val_seed: int | None = None
 ) -> dict[str, Any]:
-    if role in MASKED_VIEW_3600_ROLES:
+    if role in SEMANTIC_TEXT_ROLES:
+        treatments = SEMANTIC_TEXT_TREATMENTS
+    elif role in MASKED_VIEW_3600_ROLES:
         treatments = MASKED_VIEW_3600_TREATMENTS
     elif role in MASKED_VIEW_ROLES:
         treatments = MASKED_VIEW_TREATMENTS
@@ -315,8 +351,20 @@ def canonical_sha256(value: Any) -> str:
 
 
 def treatment_from_config(config: dict[str, Any]) -> dict[str, Any]:
-    keys = next(iter(ROLE_TREATMENTS.values())).keys()
+    semantic_text = config.get("experiment_campaign") == SEMANTIC_TEXT_CAMPAIGN
+    keys = (next(iter(SEMANTIC_TEXT_TREATMENTS.values())).keys()
+            if semantic_text else next(iter(ROLE_TREATMENTS.values())).keys())
     result = {key: config.get(key) for key in keys}
+    if semantic_text:
+        result.update({
+            "positive_sampling": config.get("positive_sampling"),
+            "sketch_view_mode": config.get("sketch_view_mode"),
+            "mask_policy": config.get("mask_policy"),
+            "lambda_anchor": config.get("lambda_anchor"),
+            "soft_prompt_length": config.get("soft_prompt_length"),
+            "semantic_text_identity": config.get("semantic_text_identity", SEMANTIC_TEXT_CAMPAIGN),
+        })
+        return result
     if config.get("experiment_campaign") in {
         PAIRING_PILOT_CAMPAIGN,
         MASKED_VIEW_CAMPAIGN,
@@ -333,6 +381,8 @@ def treatment_from_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def expected_probe_steps(role: str, *, extended: bool = False) -> tuple[int, ...]:
+    if role in SEMANTIC_TEXT_ROLES:
+        return SEMANTIC_TEXT_STEPS
     if role in MASKED_VIEW_3600_ROLES:
         return MASKED_VIEW_3600_STEPS
     if role in MASKED_VIEW_ROLES:
@@ -362,24 +412,29 @@ def make_manifest(
 ) -> dict[str, Any]:
     final_roles = campaign in {FINAL_CAMPAIGN, FINAL_SMOKE_CAMPAIGN}
     pairing_pilot = campaign == PAIRING_PILOT_CAMPAIGN
+    semantic_text = campaign == SEMANTIC_TEXT_CAMPAIGN
     masked_view = campaign in {MASKED_VIEW_CAMPAIGN, MASKED_VIEW_3600_CAMPAIGN}
     masked_view_3600 = campaign == MASKED_VIEW_3600_CAMPAIGN
     roles = (
-        MASKED_VIEW_3600_ROLES
+        SEMANTIC_TEXT_ROLES
+        if semantic_text
+        else MASKED_VIEW_3600_ROLES
         if masked_view_3600
         else MASKED_VIEW_ROLES
         if masked_view
         else PAIRING_PILOT_ROLES if pairing_pilot else FINAL_ROLES if final_roles else ROLES
     )
     treatments = (
-        MASKED_VIEW_3600_TREATMENTS
+        SEMANTIC_TEXT_TREATMENTS
+        if semantic_text
+        else MASKED_VIEW_3600_TREATMENTS
         if masked_view_3600
         else MASKED_VIEW_TREATMENTS
         if masked_view
         else PAIRING_PILOT_TREATMENTS if pairing_pilot else FINAL_ROLE_TREATMENTS if final_roles else ROLE_TREATMENTS
     )
     result = {
-        "schema_version": 5 if masked_view_3600 else 4 if masked_view else 3 if pairing_pilot else 1 if campaign == FINAL_CAMPAIGN else 2,
+        "schema_version": 6 if semantic_text else 5 if masked_view_3600 else 4 if masked_view else 3 if pairing_pilot else 1 if campaign == FINAL_CAMPAIGN else 2,
         "campaign": campaign,
         "dataset": dataset,
         "data_config": data_config,
@@ -395,6 +450,13 @@ def make_manifest(
                 "positive_sampling": positive_sampling,
                 "pairing_manifest_sha256": pairing_manifest_sha256,
                 "run_kind": run_kind,
+                "mask_policy": SEMANTIC_TEXT_EVAL_MASK_POLICY,
+            }
+            if semantic_text
+            else {
+                "positive_sampling": positive_sampling,
+                "pairing_manifest_sha256": pairing_manifest_sha256,
+                "run_kind": run_kind,
                 "mask_policy": MASK_POLICY,
             }
             if masked_view
@@ -402,7 +464,7 @@ def make_manifest(
         ),
         "selection_metric": (
             "mAP@200_prefix_positive"
-            if masked_view_3600
+            if masked_view_3600 or semantic_text
             else "full_pseudo_unseen_mAP"
         ),
         "official_unseen_used_for_selection": False,
@@ -431,13 +493,23 @@ def make_manifest(
                         "sketch_view_mode": treatments[role].get("sketch_view_mode", "single"),
                         "mask_policy": treatments[role].get("mask_policy"),
                     }
-                    if masked_view
+                    if semantic_text or masked_view
                     else {}
                 ),
             }
             for role in roles
         },
     }
+    if campaign == SEMANTIC_TEXT_CAMPAIGN:
+        result["selection_policy"] = {
+            "candidate_steps": list(SEMANTIC_TEXT_SELECTION_STEPS),
+            "primary_clean": "clean.mAP@200_prefix_positive",
+            "primary_masked": "masked_macro.mAP@200_prefix_positive",
+            "denominator": "prefix_positive",
+            "tie_break": "strict_greater_earliest_step",
+            "step_zero_selectable": False,
+            "official_unseen_used_for_selection": False,
+        }
     if campaign == MASKED_VIEW_3600_CAMPAIGN:
         result["selection_policy"] = {
             "candidate_steps": list(MASKED_VIEW_3600_SELECTION_STEPS),
