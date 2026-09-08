@@ -1,0 +1,12 @@
+{
+  "run_id": "1p29dtr0",
+  "run_url": "https://wandb.ai/a-cctest05187-erd/spica/runs/1p29dtr0",
+  "artifact": "a-cctest05187-erd/spica/semantic-text-verified-statistics-1p29dtr0:v0",
+  "original_training_histories_modified": false,
+  "optimizer_updates": 0,
+  "local_files": {
+    "semantic_text_step1_results_2026-09-08.json": "355034dfcb78149869c1b9f44bbd46c0292d67d3b4be0424efd4be7c309a0e2c",
+    "semantic_text_step1_results_2026-09-08.md": "98799aa0a8249a05236029536fcadbb12fc5eddf927eede25f8d3a7928666f19"
+  },
+  "status": "ONLINE_REPORT_AND_DOWNLOADED_ARTIFACT_SHA_PASS"
+}
