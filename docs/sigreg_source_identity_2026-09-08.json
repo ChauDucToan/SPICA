@@ -1,0 +1,71 @@
+{
+  "implementation": {
+    "path": "src/spica/models/sigreg.py",
+    "class": "spica.models.sigreg.SIGReg",
+    "status": "CPU-gated local implementation only; not activated by a trainer and no lambda was selected or measured",
+    "scope": "Independent PyTorch implementation of the pinned LeJEPA MINIMAL SIGReg objective; no source code copied",
+    "input_api": "[B, D] or [V, B, D]; views are evaluated independently over B and averaged",
+    "defaults": {
+      "knots": 17,
+      "num_projections": 256,
+      "t_max": 3.0,
+      "seed": 0
+    },
+    "numerical_policy": [
+      "float32 objective path with autocast disabled",
+      "no batch standardization, centering, normalization, or unbiased estimator correction",
+      "no distributed reduction, clipping, or trainer integration",
+      "quadrature uses t=linspace(0, 3, 17), endpoint half-weights, and Gaussian weight exp(-t^2/2)",
+      "random Gaussian projection columns are L2-normalized",
+      "private CPU generator state is serialized as module extra state; global RNG is not consumed"
+    ],
+    "formula": "A ~ N(0,1)^(D x K), A_:k <- A_:k / ||A_:k||2; x_t=(X A) t; err=(mean_B cos(x_t)-exp(-t^2/2))^2 + mean_B sin(x_t)^2; SIGReg=mean_K [ B * sum_j w_j err_j ], with symmetry-doubled trapezoid weights on [0,3]",
+    "api_extensions": "Optional fixed directions [D,K] and caller-owned torch.Generator are replay/testing hooks; they do not alter the default objective."
+  },
+  "primary_source": {
+    "requested_repository": "https://github.com/rbalestr-lab/lejepa",
+    "resolved_repository": "https://github.com/galilai-group/lejepa",
+    "immutable_commit": "c293d291ca87cd4fddee9d3fffe4e914c7272052",
+    "commit_api": "https://api.github.com/repos/galilai-group/lejepa/commits/main",
+    "commit_message": "MINIMAL num_classes",
+    "source_urls": {
+      "minimal": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/MINIMAL.md",
+      "slicing": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/lejepa/multivariate/slicing.py",
+      "epps_pulley": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/lejepa/univariate/epps_pulley.py",
+      "univariate_base": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/lejepa/univariate/base.py",
+      "license": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/LICENSE",
+      "project_metadata": "https://raw.githubusercontent.com/galilai-group/lejepa/c293d291ca87cd4fddee9d3fffe4e914c7272052/pyproject.toml"
+    },
+    "local_receipt_directory": "outputs/sigreg_source_20260908",
+    "fetch_method": "Python urllib.request with certifi CA bundle where available",
+    "sha256": {
+      "MINIMAL.md": "5fdbd73825ae2e49e25a63cdc1f0caba17438181a817de78f08c11f58dd4224f",
+      "lejepa/multivariate/slicing.py": "86c0fe3a714dc945ba3e23ab4093f6ed41966039f9681bd53c733e3ca5dff56b",
+      "lejepa/univariate/epps_pulley.py": "e6554ee42de27b74d62befb5f353d4d7a4f92c6c1eade25edaa6595a6b593149",
+      "lejepa/univariate/base.py": "08d4f115990656ea3459dacbba5991622725f9040ebc64ae8d34f4e76299eef6",
+      "LICENSE": "1d8ca66080a2701508a70be4ddad4be28c509bcc3397a682fb8edf767fdd7a00",
+      "pyproject.toml": "2193b9c5089c03180e70e053d800fc034a1b6d56c96b402a8ae15a2c806b1947"
+    }
+  },
+  "attribution_and_license": {
+    "authors": ["Randall Balestriero", "Yann LeCun"],
+    "project": "LeJEPA",
+    "citation": "Balestriero and LeCun, LeJEPA: Provable and Scalable Self-Supervised Learning Without the Heuristics, arXiv:2511.08544",
+    "pinned_license_file": "Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)",
+    "metadata_observation": "The pinned pyproject.toml declares MIT while the pinned LICENSE text is CC BY-NC 4.0; this conflict is preserved as a receipt rather than resolved by assumption.",
+    "compliance_note": "This repository implementation is an independent reimplementation and does not copy the pinned source. The source, authors, immutable commit, license text, and inconsistency are recorded here and in the local receipt bundle. Review licensing before redistribution or commercial use."
+  },
+  "verification": {
+    "test_file": "tests/test_sigreg.py",
+    "environment": "CPU only; existing project environment; no dependency changes",
+    "checks": [
+      "fixed-direction numerical parity against the pinned MINIMAL formula",
+      "finite positive zero/shift/scale behavior and nonzero finite gradients",
+      "view-axis behavior",
+      "private generator replay and state_dict restoration without global RNG consumption",
+      "invalid shape, non-finite, and singleton-batch validation",
+      "receipt hash verification"
+    ],
+    "lambda": "unmeasured; no coefficient selected and no training run performed"
+  }
+}

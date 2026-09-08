@@ -1,6 +1,8 @@
 # V1 region-first — quyết định thiết kế mới nhất
 
-**2026-09-08 · DESIGN ONLY · Không cấp phép launch model mới.**
+**2026-09-08 · DESIGN SPECIFICATION · Không cấp phép launch model mới.**
+
+**Cập nhật sau design:** User đã duyệt implement model/loss + CPU gates; [CPU milestone](../../coupled_predictive_v1_cpu_readiness_2026-09-08.md) đã PASS, gồm SIGReg formula-equivalent pinned MINIMAL. Các đoạn “chưa implement” bên dưới mô tả draft minh họa, không phải trạng thái source mới. Lambda diagnostic và GPU/training vẫn chưa thực hiện/được cấp phép.
 
 Bản này bổ sung [architecture.md](architecture.md) và supersede các mục còn ghi “chưa chốt” về region-first, view mixing, loss starting weights, optimizer starting groups và budget. Bản nháp V1 trước đó được giữ nguyên tại `outputs/coupled_predictive_design_20260908T021035Z/` cùng primary TC-JEPA receipts. Code minh họa được soạn/kiểm tra trong output root trong lúc train. Bản tracked này được lưu sau khi runner báo cả S0–S2 COMPLETED; không thay archived source S0–S2.
 

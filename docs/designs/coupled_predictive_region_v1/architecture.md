@@ -1,6 +1,8 @@
 # Coupled predictive sketch retrieval — thiết kế V1
 
-**2026-09-08 · DESIGN + CODE MINH HỌA · CHƯA INTEGRATE/TRAIN.**
+**2026-09-08 · DESIGN + CODE MINH HỌA · CHƯA TRAIN.**
+
+**Cập nhật sau design:** User đã duyệt implement model/loss + CPU gates; source mới và23 targeted/290 full-suite tests PASS tại [CPU milestone](../../coupled_predictive_v1_cpu_readiness_2026-09-08.md). Nội dung bên dưới giữ bối cảnh draft; SIGReg nay có local formula-equivalent implementation nhưng chưa đo λ hoặc GPU/trainer gates. S0–S2 nay đã [verified, giữ S0](../../semantic_text_step1_results_2026-09-08.md).
 
 **Quyết định mới nhất:** [region-first protocol](region_first_protocol.md) chốt region deletion, clean/corrupted50–50, starting loss groups, optimizer/budget; SIGReg diagnostic details và execution gates vẫn pending. Bản V1 trước đó giữ nguyên ở `../coupled_predictive_design_20260908T021035Z/`.
 
