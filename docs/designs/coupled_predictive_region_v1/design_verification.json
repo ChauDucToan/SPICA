@@ -1,0 +1,27 @@
+{
+  "status": "DESIGN_REVIEW_AND_CPU_ILLUSTRATION_PASS",
+  "training_source_sha256_unchanged": "ca4671cc50010a654f217ddb46714a71063ba4e63a25d6cdd634c9298873d9d1",
+  "source_head": "6a4d8fc09c1ba15d8c68bbd67ade9f0a2f344ab1",
+  "review": "PASS after independent restart-receipt reconciliation; new execution root is correct",
+  "active_execution_root": "outputs/semantic_text_execution_20260908T011006Z",
+  "new_model_training_launched": false,
+  "new_model_pretrained_gate": false,
+  "exact_SIGReg_implemented": false,
+  "SIGReg_coefficient_calibrated": false,
+  "thinning_enabled_in_region_trial": false,
+  "commit_status": "DEFERRED_UNTIL_EXISTING_S0_S1_S2_CAMPAIGN_FINISHES",
+  "pending_details": [
+    "SIGReg immutable implementation pin and real diagnostic",
+    "approval of diagnostic specifics rho0.1/4batches/last student block",
+    "schedule warmup180 and cosine floor0 proposal",
+    "final V1 selection/promotion rule and launch authorization"
+  ],
+  "file_sha256": {
+    "architecture.md": "6f91435b1e2af293d0c801dbc49f6b92bd308c4c375afccd9e8537dae2aac1de",
+    "region_first_protocol.md": "8f641983cb7b48790df0d34b3e1cd8b2ace9beea2845a171df3fff2b1241ab1e",
+    "model_sketch.py": "a13b6e62c7f287e6c3239badb6e6909fc8349188a59ea8fa6e915fc8ac657848",
+    "masking_sketch.py": "206bc0c21d4daf651014d57f715899d655b485918581af6b9cfa2fb6a9f717f3",
+    "selfcheck_model.log": "fbfe63934d42849489dcc6e1e4960660d8e227d41a0a2a2fc3338d91d933b201",
+    "selfcheck_masking_final.log": "1880ca45a89591191f8ac18f917b2c1fb666071ca8b99d13f06906b24ec50a15"
+  }
+}
