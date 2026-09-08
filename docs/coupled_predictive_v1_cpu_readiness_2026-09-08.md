@@ -1,6 +1,8 @@
 # Coupled predictive V1 — model/loss CPU milestone
 
-**2026-09-08 · CPU GATES PASS · CHƯA TRAIN / CHƯA GPU-GATE.**
+**2026-09-08 · CPU GATES PASS · CHƯA TRAIN.**
+
+**Cập nhật sau milestone này:** user đã duyệt và hoàn tất [real pretrained/real-data GPU preflight](coupled_predictive_v1_preflight_2026-09-08.md), B32/64views/no-update/noSIG PASS. Những giới hạn “chưa GPU/pretrained gate” bên dưới là trạng thái tại CPU milestone; λ diagnostic/trainer/training vẫn pending.
 
 Sau thống kê S0–S2, user đã chọn implement model/loss V1 và CPU gates trước, **không train**. Báo cáo này cập nhật trạng thái implementation; các bản [architecture](designs/coupled_predictive_region_v1/architecture.md) và [region protocol](designs/coupled_predictive_region_v1/region_first_protocol.md) vẫn là design specification, không phải evidence train. Semantic baseline giữ **S0** theo [kết quả đã verified](semantic_text_step1_results_2026-09-08.md).
 
