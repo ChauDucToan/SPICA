@@ -22,6 +22,7 @@
 
 ## Quy tắc cho agent tiếp theo
 
+- **Mọi cấp subagent phải dùng `cx/gpt-5.6-luna`, thinking `max`**, bao gồm subagent do một subagent khác spawn. Khi delegate phải truyền quy tắc này xuống task của subagent; không tự fallback sang model/thinking khác.
 - Đọc HEAD và `git status` trước khi sửa. Không ghi đè/xóa/di chuyển historical artifacts.
 - Kết luận số liệu phải truy được run → config/source → checkpoint/step → raw metric. Không lấy peak candidate so với fixed-step control.
 - Không coi thiếu checkpoints trên GitHub là chưa chạy: các tensor lớn chỉ lưu local; bundle chứa raw histories, metrics và đường dẫn/SHA256 checkpoint.
