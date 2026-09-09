@@ -133,7 +133,7 @@ def _initialization_hashes(model: CoupledPredictiveModel) -> dict[str, Any]:
 
 
 def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any, *, step: int, config: Mapping[str, Any], source_hash: str, clip: Mapping[str, Any], data_identity: Mapping[str, Any], rng: Mapping[str, Any], selections: Mapping[str, Any], initialization_hashes: Mapping[str, Any]) -> dict[str, Any]:
-    return {
+    payload = {
         "format_version": 1,
         "campaign": str(config.get("method_version", "coupled_predictive_v1")),
         "step": step,
@@ -149,13 +149,27 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
         "initialization_hashes": dict(initialization_hashes),
         "model_state_hash": _state_hash(model),
         "selection_metadata": dict(selections),
-        **({
+    }
+    if config.get("method_version") == "coupled_predictive_fusion_qmp_v1":
+        payload.update({
             "method_version": config["method_version"],
             "main_query": config["main_query"],
             "loss_coefficient_identity": config["loss_coefficient_identity"],
             "sampling_identity": config["sampling_identity"],
-        } if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else {}),
-    }
+            "main_photo_objective": config["main_photo_objective"],
+            "main_photo_temperature": config["main_photo_temperature"],
+            "objective_identity": config["objective_identity"],
+            "primary_comparison": config["primary_comparison"],
+        })
+    elif config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"}:
+        # Preserve the historical checkpoint schema for F2 and F2_MP exactly.
+        payload.update({
+            "method_version": config["method_version"],
+            "main_query": config["main_query"],
+            "loss_coefficient_identity": config["loss_coefficient_identity"],
+            "sampling_identity": config["sampling_identity"],
+        })
+    return payload
 
 
 def _save_checkpoint(path: Path, payload: Mapping[str, Any]) -> str:
@@ -177,22 +191,30 @@ def _loader_cycle(loader: Any):
         yield from loader
 
 
-def _eval_factory(protocol: Mapping[str, Any], transform: Any, model: Any, device: torch.device):
+def _eval_factory(protocol: Mapping[str, Any], transform: Any, model: Any, device: torch.device, query: str | None = None):
     split = protocol["split"]
     sketches = tuple(split.validation_sketch_entries)
     photos = tuple(split.validation_photo_entries)
     from .data.datasets import RetrievalEvalDataset
-    from .evaluation.coupled_predictive import CoupledPredictiveAdapter, evaluate_views
+    from .evaluation.coupled_predictive import CoupledPredictiveAdapter, QOnlyAdapter, evaluate_views
     from .evaluation.masked_view import _masked_loader, _transform_stats
     data = protocol["data"]
     root = Path(str(getattr(data, "root", ".")))
     mean, std = _transform_stats(transform)
-    adapter = CoupledPredictiveAdapter(model, query="q" if model.predictor is None else "mu_i")
+    adapter = QOnlyAdapter(model) if query == "q" else CoupledPredictiveAdapter(model, query="q" if model.predictor is None else "mu_i")
     clean = DataLoader(RetrievalEvalDataset(sketches, transform), batch_size=256, shuffle=False, num_workers=4)
     gallery = DataLoader(RetrievalEvalDataset(photos, transform), batch_size=256, shuffle=False, num_workers=4)
     def masked(fraction: float, seed: int):
         return _masked_loader(sketches, transform, root=root, fraction=fraction, seed=seed, batch_size=256, num_workers=4, mean=mean, std=std, ink_threshold=0.9)
     return lambda: evaluate_views(adapter, clean, gallery, masked, query_entries=sketches, device=device)
+
+
+def _evaluation_query(arm: str) -> str | None:
+    return "q" if arm == "F2_QMP" else None
+
+
+def _make_eval_probe(protocol: Mapping[str, Any], transform: Any, model: Any, device: torch.device, arm: str):
+    return _eval_factory(protocol, transform, model, device, query=_evaluation_query(arm))
 
 
 def _safe_json(value: Any) -> Any:
@@ -322,6 +344,38 @@ def _verify_source(source: Mapping[str, Any], campaign_root: Path) -> str:
     return actual
 
 
+F2_QMP_READOUT = ROOT / "outputs/fusion_mp_q_evaluation_20260909T145000Z/summary.json"
+F2_QMP_READOUT_SHA256 = "f210017b24f93fb659315daa820c1265c698aeb9a52112803543db63cd452afa"
+
+
+def _validate_f2_qmp_readout() -> dict[str, Any]:
+    """Validate the immutable fixed-step q readout used as the QMP baseline."""
+    if not F2_QMP_READOUT.is_file():
+        raise FileNotFoundError(f"F2_QMP baseline readout is missing: {F2_QMP_READOUT}")
+    if _sha256_file(F2_QMP_READOUT) != F2_QMP_READOUT_SHA256:
+        raise ValueError("F2_QMP baseline readout SHA256 does not match the approved receipt")
+    payload = json.loads(F2_QMP_READOUT.read_text(encoding="utf-8"))
+    comparisons = payload.get("comparisons", {})
+    clean = comparisons.get("clean", {}).get("q", {})
+    masked = [
+        comparisons[name]["q"]["full_mAP"]
+        for name in (
+            "mask_25_101", "mask_25_202", "mask_25_303",
+            "mask_50_101", "mask_50_202", "mask_50_303",
+            "mask_75_101", "mask_75_202", "mask_75_303",
+        )
+    ]
+    if payload.get("status") != "COMPLETE" or payload.get("step") != 3600 or payload.get("head") != "q":
+        raise ValueError("F2_QMP baseline readout is not the approved complete q@3600 evaluation")
+    if payload.get("checkpoint_sha256") != "58fb5fb2aa0f822d1df8bee9192a0bda5eec1580b4ce70ed9ae243fdcf9fb14e":
+        raise ValueError("F2_QMP baseline checkpoint identity mismatch")
+    if abs(float(clean["full_mAP"]) - 0.49166918150172645) > 1e-15:
+        raise ValueError("F2_QMP baseline clean q mAP mismatch")
+    if abs(sum(float(value) for value in masked) / len(masked) - 0.3557525980363653) > 1e-15:
+        raise ValueError("F2_QMP baseline masked q mAP mismatch")
+    return payload
+
+
 def _wandb_scalar_metrics(metrics: Mapping[str, Any]) -> dict[str, float]:
     return {name: float(metrics[name]) for name in _RETRIEVAL_NAMES if name in metrics}
 
@@ -382,6 +436,8 @@ def _gradient_diagnostics(model: Any, optimizer: Any) -> dict[str, float]:
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     arm_protocol = _arm_protocol(args.arm, args.campaign_id, args.diagnostic)
+    if args.arm == "F2_QMP":
+        _validate_f2_qmp_readout()
     main_photo_objective = arm_protocol.get("main_photo_objective", "paired_softplus")
     if args.max_steps < 1 or args.max_steps > TOTAL_STEPS:
         raise ValueError("max_steps must be between 1 and 3600")
@@ -437,19 +493,23 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
-    if args.arm in {"F2", "F2_SIG", "F2_MP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP"}:
         config.update({
             "method_version": arm_protocol["method_version"],
             "positive_pool": arm_protocol["positive_pool"],
-            "main_query": "mu_i",
+            "main_query": "q" if args.arm == "F2_QMP" else "mu_i",
             "main_photo_objective": main_photo_objective,
-            "main_photo_temperature": 0.07 if main_photo_objective == "multi_positive_supervised_contrastive" else None,
-            "objective_identity": "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
-            "loss_coefficient_identity": {
+            "main_photo_temperature": 0.07 if main_photo_objective in {"multi_positive_supervised_contrastive", "multi_positive_pooled_contrastive"} else None,
+            "objective_identity": "rank_q_mp=multi_positive_supervised_contrastive_over_unique_live_photobank" if args.arm == "F2_QMP" else "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
+            "loss_coefficient_identity": ({
+                "rank_q_mp": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
+                "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
+                "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
+            } if args.arm == "F2_QMP" else {
                 "rank_i": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
                 "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
                 "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
-            },
+            }),
             "sampling_identity": {
                 "active_positive_pool": "full", "active_positive_pool_count": 58950,
                 "active_negative_pool": "full_other_class", "active_negative_pool_count": 58950,
@@ -466,11 +526,21 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             "baseline_arm": "F2", "baseline_wandb_run_id": "1wxvk2lk",
             "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
         }
+    if args.arm == "F2_QMP":
+        config["primary_comparison"] = {
+            "metric": "clean/full_mAP", "step": 3600,
+            "baseline_arm": "F2_MP-Q", "baseline_wandb_run_id": "y40hu06b",
+            "baseline_training_head": "mu_i", "baseline_readout": "q",
+            "baseline_readout_sha256": F2_QMP_READOUT_SHA256,
+            "baseline_evaluation": "outputs/fusion_mp_q_evaluation_20260909T145000Z/summary.json",
+            "baseline_fixed_values": {"clean/full_mAP@3600": 0.49166918150172645, "masked_macro/full_mAP@3600": 0.3557525980363653},
+            "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
+        }
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
     data_identity = _compact_data_identity(protocol, arm_protocol["positive_pool"])
     config["data_identity"] = data_identity
-    if args.arm in {"F2", "F2_SIG", "F2_MP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP"}:
         config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
     config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
     lambda_sig = 0.0
@@ -506,7 +576,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     if loader.generator is None:
         raise RuntimeError("training loader has no reproducible generator")
     batches = _loader_cycle(loader)
-    eval_probe = None if args.smoke else _eval_factory(protocol, transform, model, device)
+    eval_probe = None if args.smoke else _make_eval_probe(protocol, transform, model, device, args.arm)
     if eval_probe is None and not args.smoke:
         raise ValueError("full campaign requires validated pseudo-validation split entries")
     data_root = Path(str(getattr(protocol["data"], "root", args.data_root)))
@@ -653,7 +723,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if frozen_original_after != frozen_original_before:
             raise RuntimeError("frozen original CLIP state changed")
         result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash,
-                  **({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]} if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else {}), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
+                  **({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]} if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else ({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"], "primary_comparison": config["primary_comparison"]} if config.get("method_version") == "coupled_predictive_fusion_qmp_v1" else {})), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
         _json(output / "run_result.json", result)
         if wandb_run is not None:
             wandb_run.finish()
@@ -683,7 +753,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP", "F2_QMP"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")

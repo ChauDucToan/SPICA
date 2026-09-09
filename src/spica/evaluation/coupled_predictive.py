@@ -57,6 +57,17 @@ class CoupledPredictiveAdapter:
         return self.model.encode_photo(photos)
 
 
+class QOnlyAdapter(CoupledPredictiveAdapter):
+    """Evaluate pooled q while bypassing the predictor entirely."""
+
+    def __init__(self, model: Any) -> None:
+        super().__init__(model, query="q")
+
+    def __call__(self, images: Tensor) -> Tensor:
+        context = self.model._context_tokens(images)
+        return torch.nn.functional.normalize(self.model.pooled_head(context.mean(dim=1)), dim=-1)
+
+
 @contextmanager
 def preserve_rng_and_mode(model: Any):
     """Probes cannot consume training RNG or leave the model in eval mode."""
@@ -187,6 +198,6 @@ def write_probe(path: Path, result: Mapping[str, Any]) -> None:
 
 
 __all__ = [
-    "CoupledPredictiveAdapter", "EVAL_FRACTIONS", "EVAL_SEEDS",
+    "CoupledPredictiveAdapter", "QOnlyAdapter", "EVAL_FRACTIONS", "EVAL_SEEDS",
     "evaluate_views", "preserve_rng_and_mode", "write_probe",
 ]

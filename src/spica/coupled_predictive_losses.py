@@ -30,6 +30,8 @@ def _main_photo_multi_positive(
     log_probability = F.log_softmax(logits / _TEMPERATURE, dim=-1)
     positive = photo_labels[None, :] == labels[:, None]
     positive_count = positive.sum(dim=-1)
+    if not bool(positive_count.gt(0).all()):
+        raise ValueError("multi-positive objective requires at least one live photo per label")
     return (-(log_probability * positive).sum(dim=-1) / positive_count).mean()
 
 
@@ -62,15 +64,19 @@ def _view_terms(
     }
     if architecture in {"predictive", "predictive_fusion_v2"}:
         if main_photo_objective == "paired_softplus":
-            rank_i = _rank_live(output.mu_i, positive, negative)
+            rank_key, rank_value = "rank_i", _rank_live(output.mu_i, positive, negative)
         elif main_photo_objective == "multi_positive_supervised_contrastive":
             if live_photos is None or photo_labels is None:
                 raise ValueError("multi-positive objective requires live photos and labels")
-            rank_i = _main_photo_multi_positive(output.mu_i, live_photos, photo_labels, labels)
+            rank_key, rank_value = "rank_i", _main_photo_multi_positive(output.mu_i, live_photos, photo_labels, labels)
+        elif main_photo_objective == "multi_positive_pooled_contrastive":
+            if live_photos is None or photo_labels is None:
+                raise ValueError("multi-positive objective requires live photos and labels")
+            rank_key, rank_value = "rank_q_mp", _main_photo_multi_positive(output.q, live_photos, photo_labels, labels)
         else:
             raise ValueError(f"unknown main_photo_objective: {main_photo_objective}")
         terms.update(
-            rank_i=rank_i,
+            **{rank_key: rank_value},
             ce_t=_ce(output.mu_t, text, classids, labels),
             align_i=_align(output.mu_i, positive),
             align_t=_align(output.mu_t, text[torch.searchsorted(classids, labels)]),
@@ -80,7 +86,10 @@ def _view_terms(
     return terms
 
 
-def task_loss(terms: dict[str, Tensor], architecture: str) -> Tensor:
+def task_loss(
+    terms: dict[str, Tensor], architecture: str,
+    main_photo_objective: str = "paired_softplus",
+) -> Tensor:
     """Return the two-view main ranking/classification objective."""
     if architecture == "pooled":
         return 0.5 * (
@@ -89,11 +98,12 @@ def task_loss(terms: dict[str, Tensor], architecture: str) -> Tensor:
             + terms["masked_rank_pool"]
             + terms["masked_ce_pool"]
         )
+    rank = "rank_q_mp" if main_photo_objective == "multi_positive_pooled_contrastive" else "rank_i"
     ce = "ce_i" if architecture == "predictive_fusion_v2" else "ce_t"
     return 0.5 * (
-        terms["clean_rank_i"]
+        terms[f"clean_{rank}"]
         + terms[f"clean_{ce}"]
-        + terms["masked_rank_i"]
+        + terms[f"masked_{rank}"]
         + terms[f"masked_{ce}"]
     )
 
@@ -158,7 +168,7 @@ def coupled_region_loss(
         sigreg_loss = clean_output.g.new_zeros(())
     result["sigreg"] = sigreg_loss
 
-    task = task_loss(result, model.architecture)
+    task = task_loss(result, model.architecture, main_photo_objective)
     if model.architecture in {"predictive", "predictive_fusion_v2"}:
         task = task + 0.125 * (
             result["clean_rank_pool"] + result["clean_ce_pool"]
