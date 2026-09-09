@@ -22,6 +22,17 @@ def _rank_live(query: Tensor, positive: Tensor, negative: Tensor) -> Tensor:
     return F.softplus(_MARGIN + negative_score - positive_score[:, None]).mean()
 
 
+def _main_photo_multi_positive(
+    query: Tensor, live_photos: Tensor, photo_labels: Tensor, labels: Tensor
+) -> Tensor:
+    """Average supervised contrastive loss over every positive photo."""
+    logits = F.normalize(query, dim=-1) @ F.normalize(live_photos, dim=-1).T
+    log_probability = F.log_softmax(logits / _TEMPERATURE, dim=-1)
+    positive = photo_labels[None, :] == labels[:, None]
+    positive_count = positive.sum(dim=-1)
+    return (-(log_probability * positive).sum(dim=-1) / positive_count).mean()
+
+
 def _ce(query: Tensor, text: Tensor, classids: Tensor, labels: Tensor) -> Tensor:
     positions = torch.searchsorted(classids, labels)
     logits = F.normalize(query, dim=-1) @ F.normalize(text, dim=-1).T
@@ -40,14 +51,26 @@ def _view_terms(
     classids: Tensor,
     labels: Tensor,
     architecture: str,
+    *,
+    live_photos: Tensor | None = None,
+    photo_labels: Tensor | None = None,
+    main_photo_objective: str = "paired_softplus",
 ) -> dict[str, Tensor]:
     terms = {
         "rank_pool": _rank_live(output.q, positive, negative),
         "ce_pool": _ce(output.q, text, classids, labels),
     }
     if architecture in {"predictive", "predictive_fusion_v2"}:
+        if main_photo_objective == "paired_softplus":
+            rank_i = _rank_live(output.mu_i, positive, negative)
+        elif main_photo_objective == "multi_positive_supervised_contrastive":
+            if live_photos is None or photo_labels is None:
+                raise ValueError("multi-positive objective requires live photos and labels")
+            rank_i = _main_photo_multi_positive(output.mu_i, live_photos, photo_labels, labels)
+        else:
+            raise ValueError(f"unknown main_photo_objective: {main_photo_objective}")
         terms.update(
-            rank_i=_rank_live(output.mu_i, positive, negative),
+            rank_i=rank_i,
             ce_t=_ce(output.mu_t, text, classids, labels),
             align_i=_align(output.mu_i, positive),
             align_t=_align(output.mu_t, text[torch.searchsorted(classids, labels)]),
@@ -88,9 +111,10 @@ def coupled_region_loss(
     *,
     lambda_sig,
     sigreg=None,
+    main_photo_objective: str = "paired_softplus",
 ) -> dict[str, Tensor]:
-    """Build clean/corrupted V1 loss terms from one shared photo/text bank."""
-    del photo_labels, photo_ids
+    """Build clean/corrupted loss terms from one shared photo/text bank."""
+    del photo_ids
     outputs = model(torch.cat((clean, corrupted), dim=0))
     batch = clean.shape[0]
     clean_output = CoupledPredictiveOutput(
@@ -111,10 +135,14 @@ def coupled_region_loss(
     positive = live_photos[positive_indices]
     negative = live_photos[negative_indices]
     clean_terms = _view_terms(
-        clean_output, positive, negative, text, classids, labels, model.architecture
+        clean_output, positive, negative, text, classids, labels, model.architecture,
+        live_photos=live_photos, photo_labels=photo_labels,
+        main_photo_objective=main_photo_objective,
     )
     masked_terms = _view_terms(
-        masked_output, positive, negative, text, classids, labels, model.architecture
+        masked_output, positive, negative, text, classids, labels, model.architecture,
+        live_photos=live_photos, photo_labels=photo_labels,
+        main_photo_objective=main_photo_objective,
     )
 
     result = {

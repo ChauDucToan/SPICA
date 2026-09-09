@@ -154,7 +154,7 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
             "main_query": config["main_query"],
             "loss_coefficient_identity": config["loss_coefficient_identity"],
             "sampling_identity": config["sampling_identity"],
-        } if config.get("method_version") == "coupled_predictive_fusion_v2" else {}),
+        } if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else {}),
     }
 
 
@@ -337,7 +337,8 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "model_trainable_parameters", "model_total_parameters", "initialization_hashes",
         "data_identity", "diagnostic_path_sha256", "lambda_sig", "diagnostic_lambda_source",
         "method_version", "positive_pool", "main_query", "loss_coefficient_identity",
-        "sampling_identity", "sigreg_status",
+        "sampling_identity", "sigreg_status", "main_photo_objective", "main_photo_temperature",
+        "objective_identity", "primary_comparison",
     }
     result = {key: config[key] for key in sorted(allowed) if key in config}
     if isinstance(result.get("clip_identity"), Mapping):
@@ -381,6 +382,7 @@ def _gradient_diagnostics(model: Any, optimizer: Any) -> dict[str, float]:
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     arm_protocol = _arm_protocol(args.arm, args.campaign_id, args.diagnostic)
+    main_photo_objective = arm_protocol.get("main_photo_objective", "paired_softplus")
     if args.max_steps < 1 or args.max_steps > TOTAL_STEPS:
         raise ValueError("max_steps must be between 1 and 3600")
     if args.smoke and args.max_steps != 2:
@@ -435,11 +437,14 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
-    if args.arm in {"F2", "F2_SIG"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP"}:
         config.update({
             "method_version": arm_protocol["method_version"],
             "positive_pool": arm_protocol["positive_pool"],
             "main_query": "mu_i",
+            "main_photo_objective": main_photo_objective,
+            "main_photo_temperature": 0.07 if main_photo_objective == "multi_positive_supervised_contrastive" else None,
+            "objective_identity": "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
             "loss_coefficient_identity": {
                 "rank_i": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
                 "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
@@ -455,11 +460,17 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             },
             "sigreg_status": "fixed_f2_diagnostic" if args.arm == "F2_SIG" else "disabled_control",
         })
+    if args.arm == "F2_MP":
+        config["primary_comparison"] = {
+            "metric": "clean/full_mAP", "step": 3600,
+            "baseline_arm": "F2", "baseline_wandb_run_id": "1wxvk2lk",
+            "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
+        }
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
     data_identity = _compact_data_identity(protocol, arm_protocol["positive_pool"])
     config["data_identity"] = data_identity
-    if args.arm in {"F2", "F2_SIG"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP"}:
         config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
     config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
     lambda_sig = 0.0
@@ -547,7 +558,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             batch = prepare_batch(next(batches), data_root=data_root, step=step - 1, classids=model.classids.detach().cpu().tolist())
             batch = _batch_to_device(batch, device)
             optimizer.zero_grad(set_to_none=True)
-            losses = coupled_region_loss(model, batch["clean"], batch["corrupted"], batch["photos"], batch["positive_indices"], batch["negative_indices"], batch["labels"], batch["photo_labels"], batch["photo_ids"], lambda_sig=lambda_sig, sigreg=sigreg)
+            losses = coupled_region_loss(model, batch["clean"], batch["corrupted"], batch["photos"], batch["positive_indices"], batch["negative_indices"], batch["labels"], batch["photo_labels"], batch["photo_ids"], lambda_sig=lambda_sig, sigreg=sigreg, main_photo_objective=main_photo_objective)
             total = losses["total"]
             if not torch.isfinite(total).item():
                 raise FloatingPointError(f"nonfinite loss at step {step}")
@@ -642,7 +653,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if frozen_original_after != frozen_original_before:
             raise RuntimeError("frozen original CLIP state changed")
         result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash,
-                  **({"method_version": config["method_version"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"]} if config.get("method_version") == "coupled_predictive_fusion_v2" else {}), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
+                  **({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]} if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else {}), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
         _json(output / "run_result.json", result)
         if wandb_run is not None:
             wandb_run.finish()
@@ -672,7 +683,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")

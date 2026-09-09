@@ -59,15 +59,18 @@ def _arm_protocol(arm: str, campaign_id: str, diagnostic: object) -> dict[str, s
         "R1_SIG": {"architecture": "predictive", "method_version": "coupled_predictive_v1", "positive_pool": "canonical"},
         "F2": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_v2", "positive_pool": "full"},
         "F2_SIG": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_v2", "positive_pool": "full"},
+        "F2_MP": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_mp_v1", "positive_pool": "full", "main_photo_objective": "multi_positive_supervised_contrastive"},
     }
     if arm not in protocols:
-        raise ValueError("arm must be R0, R1, R1_SIG, F2, or F2_SIG")
+        raise ValueError("arm must be R0, R1, R1_SIG, F2, F2_SIG, or F2_MP")
     if not isinstance(campaign_id, str) or not campaign_id:
         raise ValueError("campaign_id must be a non-empty string")
     if arm in {"F2", "F2_SIG"} and campaign_id != "coupled_predictive_fusion_v2":
         raise ValueError("F2 requires campaign_id='coupled_predictive_fusion_v2'")
-    if arm == "F2" and diagnostic is not None:
-        raise ValueError("F2 does not accept --diagnostic")
+    if arm == "F2_MP" and campaign_id != "coupled_predictive_fusion_mp_v1":
+        raise ValueError("F2_MP requires campaign_id='coupled_predictive_fusion_mp_v1'")
+    if arm in {"F2", "F2_MP"} and diagnostic is not None:
+        raise ValueError(f"{arm} does not accept --diagnostic")
     if arm in {"R1_SIG", "F2_SIG"} and not diagnostic:
         raise ValueError(f"{arm} requires --diagnostic")
     return dict(protocols[arm])
