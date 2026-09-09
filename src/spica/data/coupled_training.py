@@ -28,6 +28,7 @@ EXPECTED_SPLIT_SHA256 = "3e02604d2ed315aa254d4264ec440a7e50233c7c9b175be224519fe
 EXPECTED_PAIRING_SHA256 = "545f67663682ed5fb79397c775848b90e206579647e605cba24cb6d4dcf8104c"
 EXPECTED_CLIP_SHA256 = "e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31"
 EXPECTED_CLIP_BYTES = 605143284
+EXPECTED_FULL_PHOTO_POOL_SHA256 = "b0dd18492aa9a634ebb04f83ea9f328b8d926301a48886176f5d450533b23973"
 CLIP_PATH = (
     Path.home()
     / ".cache/huggingface/hub/models--timm--vit_base_patch32_clip_224.openai"
@@ -48,6 +49,27 @@ EXPECTED_TRAIN_CLASSES = tuple(
     if value not in {7, 13, 16, 27, 28, 31, 33, 34, 39, 42, 45, 51, 52, 53, 60, 65, 75, 86, 90, 99}
 )
 EXPECTED_VALIDATION_CLASSES = (7, 13, 16, 27, 28, 31, 33, 34, 39, 42, 45, 51, 52, 53, 60, 65, 75, 86, 90, 99)
+
+
+def _arm_protocol(arm: str, campaign_id: str, diagnostic: object) -> dict[str, str]:
+    """Resolve arm routing before device, cache, or data side effects."""
+    protocols = {
+        "R0": {"architecture": "pooled", "method_version": "coupled_predictive_v1", "positive_pool": "canonical"},
+        "R1": {"architecture": "predictive", "method_version": "coupled_predictive_v1", "positive_pool": "canonical"},
+        "R1_SIG": {"architecture": "predictive", "method_version": "coupled_predictive_v1", "positive_pool": "canonical"},
+        "F2": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_v2", "positive_pool": "full"},
+    }
+    if arm not in protocols:
+        raise ValueError("arm must be R0, R1, R1_SIG, or F2")
+    if not isinstance(campaign_id, str) or not campaign_id:
+        raise ValueError("campaign_id must be a non-empty string")
+    if arm == "F2" and campaign_id != "coupled_predictive_fusion_v2":
+        raise ValueError("F2 requires campaign_id='coupled_predictive_fusion_v2'")
+    if arm == "F2" and diagnostic is not None:
+        raise ValueError("F2 does not accept --diagnostic")
+    if arm == "R1_SIG" and not diagnostic:
+        raise ValueError("R1_SIG requires --diagnostic")
+    return dict(protocols[arm])
 
 
 def _sha256(path: Path) -> str:
@@ -168,8 +190,30 @@ def load_protocol_data() -> dict[str, object]:
     }
 
 
-def make_train_loader(context: Mapping[str, object], transform: Any) -> DataLoader:
-    """Build the legacy deterministic loader with the approved positive pairing."""
+def positive_pool_identity(context: Mapping[str, object], positive_pool: str) -> dict[str, object]:
+    """Validate the active positive pool at the data boundary, not in model/loss math."""
+    if positive_pool == "canonical":
+        pairing = context["pairing"]
+        return {"policy": "canonical", "count": int(pairing["unique_photo_pool"]), "sha256": pairing["sha256"]}
+    if positive_pool != "full":
+        raise ValueError("positive_pool must be 'canonical' or 'full'")
+    train_photo = context["manifest_identity"].get("entry_identity", {}).get("train_photo", {})
+    if int(train_photo.get("count", -1)) != EXPECTED_COUNTS["train_photos"]:
+        raise ValueError("full positive pool count differs from the approved protocol")
+    if train_photo.get("sha256") != EXPECTED_FULL_PHOTO_POOL_SHA256:
+        raise ValueError("full positive pool identity differs from the approved ordered photo pool")
+    return {"policy": "full", "count": EXPECTED_COUNTS["train_photos"], "sha256": EXPECTED_FULL_PHOTO_POOL_SHA256}
+
+
+def make_train_loader(
+    context: Mapping[str, object],
+    transform: Any,
+    *,
+    positive_pool: str = "canonical",
+) -> DataLoader:
+    """Build a deterministic loader from the approved positive-pool policy."""
+    if positive_pool not in {"canonical", "full"}:
+        raise ValueError("positive_pool must be 'canonical' or 'full'")
     args = context["args"]
     split = context["split"]
     pairing = context["pairing"]
@@ -177,13 +221,17 @@ def make_train_loader(context: Mapping[str, object], transform: Any) -> DataLoad
         raise TypeError("context['args'] must be the composed DictConfig")
     if not isinstance(pairing, Mapping) or not hasattr(split, "train_sketch_entries"):
         raise TypeError("context is missing protocol split/pairing")
+    if positive_pool == "full":
+        if str(args.positive_sampling) != "same_class":
+            raise ValueError("full positive_pool requires positive_sampling='same_class'")
+        positive_pool_identity(context, positive_pool)
     return _legacy._loader(
         (split.train_sketch_entries, split.train_photo_entries),
         transform,
         args,
         train=True,
         seed=42,
-        positive_pairing=pairing["mapping"],
+        positive_pairing=None if positive_pool == "full" else pairing["mapping"],
     )
 
 
@@ -415,8 +463,10 @@ __all__ = [
     "EXPECTED_CLIP_SHA256",
     "EXPECTED_PAIRING_SHA256",
     "EXPECTED_SPLIT_SHA256",
+    "_arm_protocol",
     "load_protocol_data",
     "make_train_loader",
+    "positive_pool_identity",
     "prepare_batch",
     "verify_clip_cache",
 ]

@@ -1,4 +1,4 @@
-"""Loss graph for coupled-predictive V1."""
+"""Versioned loss graphs for coupled predictive V1 and contextual fusion V2."""
 
 from __future__ import annotations
 
@@ -45,13 +45,15 @@ def _view_terms(
         "rank_pool": _rank_live(output.q, positive, negative),
         "ce_pool": _ce(output.q, text, classids, labels),
     }
-    if architecture == "predictive":
+    if architecture in {"predictive", "predictive_fusion_v2"}:
         terms.update(
             rank_i=_rank_live(output.mu_i, positive, negative),
             ce_t=_ce(output.mu_t, text, classids, labels),
             align_i=_align(output.mu_i, positive),
             align_t=_align(output.mu_t, text[torch.searchsorted(classids, labels)]),
         )
+    if architecture == "predictive_fusion_v2":
+        terms["ce_i"] = _ce(output.mu_i, text, classids, labels)
     return terms
 
 
@@ -64,11 +66,12 @@ def task_loss(terms: dict[str, Tensor], architecture: str) -> Tensor:
             + terms["masked_rank_pool"]
             + terms["masked_ce_pool"]
         )
+    ce = "ce_i" if architecture == "predictive_fusion_v2" else "ce_t"
     return 0.5 * (
         terms["clean_rank_i"]
-        + terms["clean_ce_t"]
+        + terms[f"clean_{ce}"]
         + terms["masked_rank_i"]
-        + terms["masked_ce_t"]
+        + terms[f"masked_{ce}"]
     )
 
 
@@ -128,7 +131,7 @@ def coupled_region_loss(
     result["sigreg"] = sigreg_loss
 
     task = task_loss(result, model.architecture)
-    if model.architecture == "predictive":
+    if model.architecture in {"predictive", "predictive_fusion_v2"}:
         task = task + 0.125 * (
             result["clean_rank_pool"] + result["clean_ce_pool"]
             + result["masked_rank_pool"] + result["masked_ce_pool"]
@@ -137,6 +140,8 @@ def coupled_region_loss(
             result["clean_align_i"] + result["clean_align_t"]
             + result["masked_align_i"] + result["masked_align_t"]
         )
+    if model.architecture == "predictive_fusion_v2":
+        task = task + 0.125 * (result["clean_ce_t"] + result["masked_ce_t"])
     result["total"] = task + 0.5 * result["anchor_i"] + 0.5 * result["anchor_t"] + lambda_sig * sigreg_loss
     return result
 

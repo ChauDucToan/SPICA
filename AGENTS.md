@@ -1,6 +1,8 @@
 # SPICA — bắt đầu ở đây
 
-## Tiến độ mới nhất — semantic baseline / predictive design (2026-09-08)
+## Tiến độ mới nhất — semantic baseline / fusion V2 (2026-09-09)
+
+- **User đã duyệt sửa F2, chưa GPU/train**: [implementation + CPU readiness](docs/coupled_predictive_fusion_v2_implementation_2026-09-09.md), [sơ đồ](docs/designs/coupled_predictive_fusion_v2/architecture.png). Explicit architecture `predictive_fusion_v2`, arm `F2`, campaign `coupled_predictive_fusion_v2`: CA đọc sketch → joint SA trên contextualized photo/text tokens + residual U → FFN; main `mu_i` nhận rank1+CE1, user chọn `mu_t` CEaux0.25; pooled/align/reference giữ hệ số cũ. Positive/negative cùng full58,950photo pool; canonicalpairing8,400 chỉ audit, V1defaultkhông đổi.0SIG; F2 từ chối `--diagnostic`/campaignidV1 trước device/data, không dùng λV1 cũ. Parent `outputs/coupled_fusion_v2_parent_20260909T052000Z/` và independent `outputs/coupled_fusion_v2_independent_20260909T051733Z/` **13PASS/0FAIL/0SKIP**, component-source aggregate `167e77faa4a755522ad57b73fe47f9bbda754d75811775cd27634a5e85503a4a`. Tiny random OpenCLIP CPU,47active gradients finite/nonzero +1synthetic AdamW step; teacherunchanged; R0/R1 archived CPUstate/forward/loss/grad parity; direct crosspromptgradF2nonzero/V1zero. Production SA256/4heads count263,680 và shape2×7×256 kiểm tra CPU riêng, **không full-pretrained/F2GPU certification**. RealGPUpreflight,optimizer gates,newSIGdiagnostic và training/promotion controls pending; không tự chạy. Không retarget launcher3armsV1, không chọn mu_t hậu nghiệm làm inference.
 
 - C/M1800 và3600 đã hoàn tất, online W&B/checkpoint verification đã có: [kết quả3600](docs/masked_view_3600_results_2026-09-07.md). Kết quả có trade-off; không khẳng định baseline tối ưu hoặc masking thắng mọi metric.
 - Progress checkpoint: `4cd4a15`; **không phải source snapshot đã dùng để train**. Raw outputs/tensors và `outputsnewgate/` giữ local, không reset/xóa chúng.

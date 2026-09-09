@@ -1,4 +1,4 @@
-"""Sequential online trainer for the approved coupled-predictive V1 campaign."""
+"""Versioned coupled trainer: historical V1 arms and explicit experimental F2."""
 from __future__ import annotations
 
 import argparse
@@ -19,6 +19,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from .coupled_predictive_losses import coupled_region_loss
+from .data.coupled_training import _arm_protocol, positive_pool_identity
 from .models.clip import load_frozen_clip
 from .models.coupled_predictive import CoupledPredictiveModel
 from .models.sigreg import SIGReg
@@ -132,7 +133,7 @@ def _initialization_hashes(model: CoupledPredictiveModel) -> dict[str, Any]:
 def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any, *, step: int, config: Mapping[str, Any], source_hash: str, clip: Mapping[str, Any], data_identity: Mapping[str, Any], rng: Mapping[str, Any], selections: Mapping[str, Any], initialization_hashes: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "format_version": 1,
-        "campaign": "coupled_predictive_v1",
+        "campaign": str(config.get("method_version", "coupled_predictive_v1")),
         "step": step,
         "model_state_dict": _model_state(model),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -146,6 +147,12 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
         "initialization_hashes": dict(initialization_hashes),
         "model_state_hash": _state_hash(model),
         "selection_metadata": dict(selections),
+        **({
+            "method_version": config["method_version"],
+            "main_query": config["main_query"],
+            "loss_coefficient_identity": config["loss_coefficient_identity"],
+            "sampling_identity": config["sampling_identity"],
+        } if config.get("method_version") == "coupled_predictive_fusion_v2" else {}),
     }
 
 
@@ -198,9 +205,12 @@ def _safe_json(value: Any) -> Any:
     return str(value)
 
 
-def _compact_data_identity(protocol: Mapping[str, Any]) -> dict[str, Any]:
+def _compact_data_identity(
+    protocol: Mapping[str, Any], positive_pool: str = "canonical"
+) -> dict[str, Any]:
+    pool = positive_pool_identity(protocol, positive_pool)
     pairing = protocol["pairing"]
-    return {
+    result = {
         "split": _safe_json(protocol["split_identity"]),
         "manifest": _safe_json(protocol["manifest_identity"]),
         "pairing": {
@@ -209,6 +219,22 @@ def _compact_data_identity(protocol: Mapping[str, Any]) -> dict[str, Any]:
             "unique_photo_pool": int(pairing["unique_photo_pool"]),
         },
     }
+    if positive_pool == "full":
+        result["positive_pool"] = pool
+        result["pairing"]["role"] = "audit_only;not_positive_sampling_source"
+        result["sampling"] = {
+            "positive_pool": "full",
+            "positive_pool_count": pool["count"],
+            "negative_pool_count": pool["count"],
+            "positive_and_negative_pool_sha256": pool["sha256"],
+            "positive_rule": "uniform_photo_within_query_class",
+            "negative_rule": "uniform_other_class_then_uniform_photo",
+            "same_photo_preprocessing": True,
+            "canonical_pairing_records": int(pairing["records"]),
+            "canonical_pairing_unique_photo_pool": int(pairing["unique_photo_pool"]),
+            "pairing_manifest_role": "audit_only;not_positive_sampling_source",
+        }
+    return result
 
 
 def _diagnostic_payload(path: Path) -> Mapping[str, Any]:
@@ -289,6 +315,8 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "class_names", "classmap_sha256", "optimizer_groups",
         "model_trainable_parameters", "model_total_parameters", "initialization_hashes",
         "data_identity", "diagnostic_path_sha256", "lambda_sig", "diagnostic_lambda_source",
+        "method_version", "positive_pool", "main_query", "loss_coefficient_identity",
+        "sampling_identity", "sigreg_status",
     }
     result = {key: config[key] for key in sorted(allowed) if key in config}
     if isinstance(result.get("clip_identity"), Mapping):
@@ -331,17 +359,13 @@ def _gradient_diagnostics(model: Any, optimizer: Any) -> dict[str, float]:
 
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
+    arm_protocol = _arm_protocol(args.arm, args.campaign_id, args.diagnostic)
     if args.max_steps < 1 or args.max_steps > TOTAL_STEPS:
         raise ValueError("max_steps must be between 1 and 3600")
     if args.smoke and args.max_steps != 2:
         raise ValueError("--smoke requires --max-steps 2")
     if not args.smoke and args.max_steps != TOTAL_STEPS:
         raise ValueError("full campaign must run exactly 3600 updates")
-    if args.arm not in {"R0", "R1", "R1_SIG"}:
-        raise ValueError("arm must be R0, R1, or R1_SIG")
-    if args.arm == "R1_SIG" and not args.diagnostic:
-        raise ValueError("R1_SIG requires --diagnostic")
-
     device = _device(args.device)
     from .data.coupled_training import load_protocol_data, make_train_loader, prepare_batch, verify_clip_cache
     protocol = load_protocol_data()
@@ -356,7 +380,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     _seed(42)
     bundle = load_frozen_clip(model_name=CLIP_MODEL, pretrained=str(CLIP_PATH), device=device)
     transform, tokenizer, encoder = bundle.transform, bundle.tokenizer, bundle.encoder
-    architecture = "pooled" if args.arm == "R0" else "predictive"
+    architecture = arm_protocol["architecture"]
     model = CoupledPredictiveModel(encoder, tokenizer, train_classmap, architecture=architecture).to(device)
     if args.arm == "R0":
         model.predictor = None
@@ -390,10 +414,32 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
+    if args.arm == "F2":
+        config.update({
+            "method_version": arm_protocol["method_version"],
+            "positive_pool": arm_protocol["positive_pool"],
+            "main_query": "mu_i",
+            "loss_coefficient_identity": {
+                "rank_i": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
+                "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
+                "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
+            },
+            "sampling_identity": {
+                "active_positive_pool": "full", "active_positive_pool_count": 58950,
+                "active_negative_pool": "full_other_class", "active_negative_pool_count": 58950,
+                "same_photo_preprocessing": True,
+                "canonical_pairing_records": 46624,
+                "canonical_pairing_unique_photo_pool": 8400,
+                "pairing_manifest_role": "audit_only;not_positive_sampling_source",
+            },
+            "sigreg_status": "unavailable_pending_new_diagnostic",
+        })
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
-    data_identity = _compact_data_identity(protocol)
+    data_identity = _compact_data_identity(protocol, arm_protocol["positive_pool"])
     config["data_identity"] = data_identity
+    if args.arm == "F2":
+        config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
     config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
     lambda_sig = 0.0
     if args.arm == "R1_SIG":
@@ -422,7 +468,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     optimizer = _make_optimizer(model)
     scheduler = LambdaLR(optimizer, lr_lambda=_schedule)
     sigreg = SIGReg(seed=42).to(device) if args.arm == "R1_SIG" else None
-    loader = make_train_loader(protocol, transform)
+    loader = make_train_loader(protocol, transform, positive_pool=arm_protocol["positive_pool"])
     if loader.generator is None:
         raise RuntimeError("training loader has no reproducible generator")
     batches = _loader_cycle(loader)
@@ -572,7 +618,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         frozen_original_after = _state_hash(model, prefix="original_clip.")
         if frozen_original_after != frozen_original_before:
             raise RuntimeError("frozen original CLIP state changed")
-        result = {"status": "COMPLETE", "campaign": "coupled_predictive_v1", "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash, "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
+        result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash,
+                  **({"method_version": config["method_version"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"]} if config.get("method_version") == "coupled_predictive_fusion_v2" else {}), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
         _json(output / "run_result.json", result)
         if wandb_run is not None:
             wandb_run.finish()
@@ -602,7 +649,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")

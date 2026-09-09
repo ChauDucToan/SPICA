@@ -1,4 +1,4 @@
-"""Coupled predictive V1 model."""
+"""Coupled predictive V1 and explicit contextual-prompt fusion V2."""
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -54,6 +54,8 @@ class _PromptPredictor(nn.Module):
         )
         self.norm2 = nn.LayerNorm(width)
         self.output = nn.Linear(width, output_dim)
+        self.fusion_attention: nn.MultiheadAttention | None = None
+        self.fusion_norm: nn.LayerNorm | None = None
 
     def forward(
         self,
@@ -69,6 +71,10 @@ class _PromptPredictor(nn.Module):
         queries = queries.unsqueeze(0).expand(context.shape[0], -1, -1)
         attended, _ = self.attention(queries, memory, memory, need_weights=False)
         values = self.norm1(queries + attended)
+        if self.fusion_attention is not None:
+            # Fuse tokens after they have read THIS sketch, preserving each token's context.
+            fused, _ = self.fusion_attention(values, values, values, need_weights=False)
+            values = self.fusion_norm(values + fused)
         values = self.norm2(values + self.ffn(values))
         values = self.output(values)
         photo = F.normalize(values[:, :photo_count].mean(dim=1), dim=-1)
@@ -159,6 +165,12 @@ class CoupledPredictiveModel(nn.Module):
         # R0 still pays the predictor construction RNG cost, but has no predictor state.
         if architecture == "pooled":
             self.predictor = None
+        elif architecture == "predictive_fusion_v2":
+            # Add modules after all V1/common initialization; old parameter draws stay identical.
+            self.predictor.fusion_attention = nn.MultiheadAttention(
+                predictor_width, predictor_heads, dropout=0.0, batch_first=True,
+            ).to(device=fixed.device)
+            self.predictor.fusion_norm = nn.LayerNorm(predictor_width).to(device=fixed.device)
         self.train(True)
 
     @property
