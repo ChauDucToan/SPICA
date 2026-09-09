@@ -1,0 +1,2349 @@
+{
+  "backward_calls": 0,
+  "clip_identity": {
+    "bytes": 605143284,
+    "path": "/home/oslamelon/.cache/huggingface/hub/models--timm--vit_base_patch32_clip_224.openai/snapshots/a6f597a30f7b82c51704746581f9a4e41421e878/open_clip_model.safetensors",
+    "sha256": "e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31"
+  },
+  "elapsed_seconds": 103.68424573299126,
+  "external_baselines": {
+    "R0": {
+      "best_clean": {
+        "clean": {
+          "P@200": 0.4563600190594136,
+          "full_mAP": 0.35322936318684267,
+          "mAP@200_all_relevant": 0.09508344998656047,
+          "mAP@200_min_relevant_k": 0.3327911115515963,
+          "mAP@200_prefix_positive": 0.5152183859197478
+        },
+        "masked_macro": {
+          "P@200": 0.31089061488141023,
+          "full_mAP": 0.24038233187760236,
+          "mAP@200_all_relevant": 0.05797738796652986,
+          "mAP@200_min_relevant_k": 0.20292038329519566,
+          "mAP@200_prefix_positive": 0.3576178381912229
+        }
+      },
+      "best_clean_step": 1200,
+      "external_unmatched": true,
+      "history": {
+        "finished_step": 3600,
+        "history_rows": 361,
+        "retrieval_key_coverage": 490,
+        "retrieval_key_expected": 490
+      },
+      "latest": {
+        "clean": {
+          "P@200": 0.42395146351432,
+          "full_mAP": 0.30584378384307204,
+          "mAP@200_all_relevant": 0.08635499268083068,
+          "mAP@200_min_relevant_k": 0.30224070591686214,
+          "mAP@200_prefix_positive": 0.5076488158905585
+        },
+        "masked_macro": {
+          "P@200": 0.29715268853250826,
+          "full_mAP": 0.21232493358171034,
+          "mAP@200_all_relevant": 0.05421671706558086,
+          "mAP@200_min_relevant_k": 0.18975775961941543,
+          "mAP@200_prefix_positive": 0.3591039526288779
+        }
+      },
+      "run_id": "kyp95y9i",
+      "state": "finished",
+      "trajectory": {
+        "0": {
+          "clean": {
+            "P@200": 0.054071420711323905,
+            "full_mAP": 0.08852629494599908,
+            "mAP@200_all_relevant": 0.010477598705551431,
+            "mAP@200_min_relevant_k": 0.03667159542487916,
+            "mAP@200_prefix_positive": 0.059688204164940174
+          },
+          "masked_macro": {
+            "P@200": 0.05313073137630514,
+            "full_mAP": 0.08711466618286695,
+            "mAP@200_all_relevant": 0.01023869560462117,
+            "mAP@200_min_relevant_k": 0.03583543463242923,
+            "mAP@200_prefix_positive": 0.05801001299004417
+          }
+        },
+        "1200": {
+          "clean": {
+            "P@200": 0.4563600190594136,
+            "full_mAP": 0.35322936318684267,
+            "mAP@200_all_relevant": 0.09508344998656047,
+            "mAP@200_min_relevant_k": 0.3327911115515963,
+            "mAP@200_prefix_positive": 0.5152183859197478
+          },
+          "masked_macro": {
+            "P@200": 0.31089061488141023,
+            "full_mAP": 0.24038233187760236,
+            "mAP@200_all_relevant": 0.05797738796652986,
+            "mAP@200_min_relevant_k": 0.20292038329519566,
+            "mAP@200_prefix_positive": 0.3576178381912229
+          }
+        },
+        "1800": {
+          "clean": {
+            "P@200": 0.41903219010395815,
+            "full_mAP": 0.3152689203464666,
+            "mAP@200_all_relevant": 0.08532948728001458,
+            "mAP@200_min_relevant_k": 0.2986508356827255,
+            "mAP@200_prefix_positive": 0.4860667069458711
+          },
+          "masked_macro": {
+            "P@200": 0.29157422799681426,
+            "full_mAP": 0.2180985066233369,
+            "mAP@200_all_relevant": 0.053578370122240246,
+            "mAP@200_min_relevant_k": 0.18752349850594718,
+            "mAP@200_prefix_positive": 0.342412989336995
+          }
+        },
+        "2400": {
+          "clean": {
+            "P@200": 0.4237070051390988,
+            "full_mAP": 0.3111721543476433,
+            "mAP@200_all_relevant": 0.08693834141402255,
+            "mAP@200_min_relevant_k": 0.30428249924039763,
+            "mAP@200_prefix_positive": 0.5059915817836946
+          },
+          "masked_macro": {
+            "P@200": 0.2936371768221384,
+            "full_mAP": 0.21289875214239062,
+            "mAP@200_all_relevant": 0.05370790679596305,
+            "mAP@200_min_relevant_k": 0.18797694245212862,
+            "mAP@200_prefix_positive": 0.35489819193881406
+          }
+        },
+        "3000": {
+          "clean": {
+            "P@200": 0.42378088974806855,
+            "full_mAP": 0.3056772808634981,
+            "mAP@200_all_relevant": 0.0864433990006242,
+            "mAP@200_min_relevant_k": 0.30255022297031736,
+            "mAP@200_prefix_positive": 0.507350764672423
+          },
+          "masked_macro": {
+            "P@200": 0.29708898941552886,
+            "full_mAP": 0.21188611063360882,
+            "mAP@200_all_relevant": 0.05435207077331888,
+            "mAP@200_min_relevant_k": 0.19023154575087284,
+            "mAP@200_prefix_positive": 0.3591265818970039
+          }
+        },
+        "3600": {
+          "clean": {
+            "P@200": 0.42395146351432,
+            "full_mAP": 0.30584378384307204,
+            "mAP@200_all_relevant": 0.08635499268083068,
+            "mAP@200_min_relevant_k": 0.30224070591686214,
+            "mAP@200_prefix_positive": 0.5076488158905585
+          },
+          "masked_macro": {
+            "P@200": 0.29715268853250826,
+            "full_mAP": 0.21232493358171034,
+            "mAP@200_all_relevant": 0.05421671706558086,
+            "mAP@200_min_relevant_k": 0.18975775961941543,
+            "mAP@200_prefix_positive": 0.3591039526288779
+          }
+        },
+        "600": {
+          "clean": {
+            "P@200": 0.4372854049336313,
+            "full_mAP": 0.35854184608299955,
+            "mAP@200_all_relevant": 0.09042977473571999,
+            "mAP@200_min_relevant_k": 0.3165039336445567,
+            "mAP@200_prefix_positive": 0.4758153176312758
+          },
+          "masked_macro": {
+            "P@200": 0.29110086810563635,
+            "full_mAP": 0.2457439544535799,
+            "mAP@200_all_relevant": 0.054486769231695355,
+            "mAP@200_min_relevant_k": 0.19070354626667624,
+            "mAP@200_prefix_positive": 0.32061619102814304
+          }
+        }
+      },
+      "url": "https://wandb.ai/a-cctest05187-erd/spica/runs/kyp95y9i"
+    },
+    "S0": {
+      "best_clean": {
+        "clean": {
+          "P@200": 0.6703060166445607,
+          "full_mAP": 0.265979746994252,
+          "mAP@200_all_relevant": 0.1688051882388654,
+          "mAP@200_min_relevant_k": 0.5907696275213331,
+          "mAP@200_prefix_positive": 0.7364068969691799
+        },
+        "masked_macro": {
+          "P@200": 0.3050375439471797,
+          "full_mAP": 0.14276705490053349,
+          "mAP@200_all_relevant": 0.06287483941395464,
+          "mAP@200_min_relevant_k": 0.2200474372233122,
+          "mAP@200_prefix_positive": 0.3394480079526116
+        }
+      },
+      "best_clean_step": 1800,
+      "external_unmatched": true,
+      "history": {
+        "finished_step": 3600,
+        "history_rows": 361,
+        "retrieval_key_coverage": 490,
+        "retrieval_key_expected": 490
+      },
+      "latest": {
+        "clean": {
+          "P@200": 0.4498978284133501,
+          "full_mAP": 0.186983949649465,
+          "mAP@200_all_relevant": 0.1039787658080878,
+          "mAP@200_min_relevant_k": 0.36388919572662753,
+          "mAP@200_prefix_positive": 0.6990902532141139
+        },
+        "masked_macro": {
+          "P@200": 0.2251620550265962,
+          "full_mAP": 0.1060770724356085,
+          "mAP@200_all_relevant": 0.040147958376447766,
+          "mAP@200_min_relevant_k": 0.14050786056495385,
+          "mAP@200_prefix_positive": 0.3299660241165466
+        }
+      },
+      "run_id": "ltg40zc4",
+      "state": "finished",
+      "trajectory": {
+        "0": {
+          "clean": {
+            "P@200": 0.2402941656332831,
+            "full_mAP": 0.1744697259384454,
+            "mAP@200_all_relevant": 0.04070566952019353,
+            "mAP@200_min_relevant_k": 0.14246569197786982,
+            "mAP@200_prefix_positive": 0.2760513807665789
+          },
+          "masked_macro": {
+            "P@200": 0.09759939759026373,
+            "full_mAP": 0.08400252642995393,
+            "mAP@200_all_relevant": 0.009467010753983212,
+            "mAP@200_min_relevant_k": 0.03313444476262381,
+            "mAP@200_prefix_positive": 0.11694374042582442
+          }
+        },
+        "1200": {
+          "clean": {
+            "P@200": 0.6583713266795835,
+            "full_mAP": 0.26193353608773917,
+            "mAP@200_all_relevant": 0.1655732635927566,
+            "mAP@200_min_relevant_k": 0.579457717455401,
+            "mAP@200_prefix_positive": 0.735521123614062
+          },
+          "masked_macro": {
+            "P@200": 0.30141682974360334,
+            "full_mAP": 0.14175208022705588,
+            "mAP@200_all_relevant": 0.062237664319357316,
+            "mAP@200_min_relevant_k": 0.21781714387226606,
+            "mAP@200_prefix_positive": 0.3430008044411271
+          }
+        },
+        "1800": {
+          "clean": {
+            "P@200": 0.6703060166445607,
+            "full_mAP": 0.265979746994252,
+            "mAP@200_all_relevant": 0.1688051882388654,
+            "mAP@200_min_relevant_k": 0.5907696275213331,
+            "mAP@200_prefix_positive": 0.7364068969691799
+          },
+          "masked_macro": {
+            "P@200": 0.3050375439471797,
+            "full_mAP": 0.14276705490053349,
+            "mAP@200_all_relevant": 0.06287483941395464,
+            "mAP@200_min_relevant_k": 0.2200474372233122,
+            "mAP@200_prefix_positive": 0.3394480079526116
+          }
+        },
+        "2400": {
+          "clean": {
+            "P@200": 0.6382687083140259,
+            "full_mAP": 0.2527097375414607,
+            "mAP@200_all_relevant": 0.15930667860009093,
+            "mAP@200_min_relevant_k": 0.5575241984681822,
+            "mAP@200_prefix_positive": 0.7314820139178967
+          },
+          "masked_macro": {
+            "P@200": 0.29050684968162294,
+            "full_mAP": 0.1353283035909973,
+            "mAP@200_all_relevant": 0.05885360085416401,
+            "mAP@200_min_relevant_k": 0.2059722680914539,
+            "mAP@200_prefix_positive": 0.336837719460338
+          }
+        },
+        "3000": {
+          "clean": {
+            "P@200": 0.5722644215767919,
+            "full_mAP": 0.22892429326574026,
+            "mAP@200_all_relevant": 0.13924963559695047,
+            "mAP@200_min_relevant_k": 0.4873264721316066,
+            "mAP@200_prefix_positive": 0.7169277346286062
+          },
+          "masked_macro": {
+            "P@200": 0.26414514857316757,
+            "full_mAP": 0.1223247368399719,
+            "mAP@200_all_relevant": 0.051228120678481044,
+            "mAP@200_min_relevant_k": 0.17928517671193922,
+            "mAP@200_prefix_positive": 0.3315539305562265
+          }
+        },
+        "3600": {
+          "clean": {
+            "P@200": 0.4498978284133501,
+            "full_mAP": 0.186983949649465,
+            "mAP@200_all_relevant": 0.1039787658080878,
+            "mAP@200_min_relevant_k": 0.36388919572662753,
+            "mAP@200_prefix_positive": 0.6990902532141139
+          },
+          "masked_macro": {
+            "P@200": 0.2251620550265962,
+            "full_mAP": 0.1060770724356085,
+            "mAP@200_all_relevant": 0.040147958376447766,
+            "mAP@200_min_relevant_k": 0.14050786056495385,
+            "mAP@200_prefix_positive": 0.3299660241165466
+          }
+        },
+        "600": {
+          "clean": {
+            "P@200": 0.6605076029536372,
+            "full_mAP": 0.26345503716385954,
+            "mAP@200_all_relevant": 0.16630879103795232,
+            "mAP@200_min_relevant_k": 0.5820309035269599,
+            "mAP@200_prefix_positive": 0.7299391420433301
+          },
+          "masked_macro": {
+            "P@200": 0.3003519347923597,
+            "full_mAP": 0.1443243957878519,
+            "mAP@200_all_relevant": 0.062388057660821734,
+            "mAP@200_min_relevant_k": 0.21834144469901687,
+            "mAP@200_prefix_positive": 0.33520106744133954
+          }
+        }
+      },
+      "url": "https://wandb.ai/a-cctest05187-erd/spica/runs/ltg40zc4"
+    }
+  },
+  "heads": {
+    "F2": {
+      "checkpoint_sha256": "aa5d3e4c3a530134e419ca9776fde0b41852bb4a3ff6ca0e040fa6006b5d4a00",
+      "cross_head_cosine": {
+        "mu_i__mu_t": {
+          "max": 0.9958945199116387,
+          "mean": 0.9855520136631346,
+          "min": 0.9382318158571799,
+          "std": 0.006565701516597613
+        },
+        "q__mu_i": {
+          "max": 0.9065776592967455,
+          "mean": 0.771425477013511,
+          "min": 0.39078251203796255,
+          "std": 0.059165391831134825
+        },
+        "q__mu_t": {
+          "max": 0.899634418125479,
+          "mean": 0.7607840017843839,
+          "min": 0.38022466973473434,
+          "std": 0.06059374959045057
+        }
+      },
+      "geometry": {
+        "g": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.13114187370270045,
+            "largest_eigenvalue_fraction": 0.07861899894686238,
+            "largest_to_smallest_nonzero_eigenvalue": 10780.552340731965
+          },
+          "centered_rank": 768,
+          "centered_variance": 0.5798939741042656,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 100.71695900367394,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 768,
+          "mean_between_class_cosine": 0.40816588818159594,
+          "mean_offdiagonal_cosine": 0.4200531255149544,
+          "mean_within_class_cosine": 0.6432991763929201,
+          "n": 10963,
+          "participation_ratio": 39.79509847782813,
+          "raw_centered_covariance_trace": 56.390062424171866,
+          "raw_row_norms": {
+            "max": 15.484255546079185,
+            "mean": 9.705022527150726,
+            "min": 6.81261962684757,
+            "std": 1.206475642068891
+          }
+        },
+        "gallery": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.21433826847294504,
+            "largest_eigenvalue_fraction": 0.09641553483829164,
+            "largest_to_smallest_nonzero_eigenvalue": 525009136.8142443
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.551513606791633,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 13999
+          },
+          "covariance_entropy_effective_rank": 109.74119345814786,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.4364008906838667,
+          "mean_offdiagonal_cosine": 0.44844699375081537,
+          "mean_within_class_cosine": 0.6776503854395373,
+          "n": 13999,
+          "participation_ratio": 40.169846040018406,
+          "raw_centered_covariance_trace": 0.5515136067121924,
+          "raw_row_norms": {
+            "max": 1.000000123491865,
+            "mean": 0.9999999999190029,
+            "min": 0.9999998773969089,
+            "std": 3.728077692941989e-08
+          }
+        },
+        "mu_i": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.06771643839433017,
+            "largest_eigenvalue_fraction": 0.12167752675559868,
+            "largest_to_smallest_nonzero_eigenvalue": 4242615177838149.5
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9474434812607466,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 34.67081645789705,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.028691872783992572,
+          "mean_offdiagonal_cosine": 0.05247008893800713,
+          "mean_within_class_cosine": 0.499032457000583,
+          "n": 10963,
+          "participation_ratio": 20.99511577908373,
+          "raw_centered_covariance_trace": 0.9474434809144552,
+          "raw_row_norms": {
+            "max": 1.0000001078770513,
+            "mean": 0.9999999998332211,
+            "min": 0.9999998997995158,
+            "std": 3.0973897771049804e-08
+          }
+        },
+        "mu_t": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.06762057096433848,
+            "largest_eigenvalue_fraction": 0.12196694407054318,
+            "largest_to_smallest_nonzero_eigenvalue": 5955136918103223.0
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9168710117313084,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 34.6217323337413,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.060026046789948356,
+          "mean_offdiagonal_cosine": 0.08304534741741171,
+          "mean_within_class_cosine": 0.5153550435175055,
+          "n": 10963,
+          "participation_ratio": 20.974147202479518,
+          "raw_centered_covariance_trace": 0.9168710120826032,
+          "raw_row_norms": {
+            "max": 1.0000000999316183,
+            "mean": 1.0000000002159573,
+            "min": 0.9999999067888352,
+            "std": 3.129004787078456e-08
+          }
+        },
+        "q": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.10853849404241818,
+            "largest_eigenvalue_fraction": 0.11533219793537594,
+            "largest_to_smallest_nonzero_eigenvalue": 32498.117774332855
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9570984664359043,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 55.57170894971811,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.020049072818991213,
+          "mean_offdiagonal_cosine": 0.04281422299426936,
+          "mean_within_class_cosine": 0.4703508937741758,
+          "n": 10963,
+          "participation_ratio": 24.883243712323086,
+          "raw_centered_covariance_trace": 0.9570984658239179,
+          "raw_row_norms": {
+            "max": 1.0000001189740295,
+            "mean": 0.999999999688889,
+            "min": 0.9999998991007377,
+            "std": 3.347794412155178e-08
+          }
+        }
+      },
+      "main_head_replay_deltas": {
+        "P@200": 0.0,
+        "full_mAP": 0.0,
+        "mAP@200_all_relevant": 0.0,
+        "mAP@200_min_relevant_k": 0.0,
+        "mAP@200_prefix_positive": 0.0
+      },
+      "main_head_top_indices_exact": true,
+      "model_state_after": "eb8b937bb66cf0b4bf7c3c0cacc81006c07e46169444005c84218167a7b2dd59",
+      "model_state_before": "eb8b937bb66cf0b4bf7c3c0cacc81006c07e46169444005c84218167a7b2dd59",
+      "name": "F2",
+      "query_gallery_cosine": {
+        "mu_i": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.13342178341786892,
+          "mean_different_class_photo_cosine": 0.04969415698640906,
+          "mean_same_class_photo_cosine": 0.18311594040427798
+        },
+        "mu_t": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.13112545384768892,
+          "mean_different_class_photo_cosine": 0.05432124747899468,
+          "mean_same_class_photo_cosine": 0.18544670132668362
+        },
+        "q": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.13974771914931625,
+          "mean_different_class_photo_cosine": -0.0024913237707005825,
+          "mean_same_class_photo_cosine": 0.13725639537861567
+        }
+      },
+      "retrieval": {
+        "mu_i": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2/mu_i_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.15317659399799324,
+            "most_popular_top1_share": 0.02672626105992885,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1358,
+            "unique_top200_photos": 13317
+          },
+          "metrics": {
+            "P@1": 0.532518471221381,
+            "P@200": 0.5147628277926906,
+            "full_mAP": 0.4713651857643906,
+            "mAP@200_all_relevant": 0.1157340823923527,
+            "mAP@200_min_relevant_k": 0.4050688825866323,
+            "mAP@200_prefix_positive": 0.5339867556392895
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.115446313093571e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        },
+        "mu_t": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2/mu_t_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.16714539815743865,
+            "most_popular_top1_share": 0.023260056553862995,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1317,
+            "unique_top200_photos": 13154
+          },
+          "metrics": {
+            "P@1": 0.5317887439569461,
+            "P@200": 0.5128007735355344,
+            "full_mAP": 0.4686889501029771,
+            "mAP@200_all_relevant": 0.1145568065569512,
+            "mAP@200_min_relevant_k": 0.40094850736408866,
+            "mAP@200_prefix_positive": 0.5324876448617825
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.1436501856643133e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        },
+        "q": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2/q_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.1625882513910426,
+            "most_popular_top1_share": 0.027820851956581228,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1470,
+            "unique_top200_photos": 13573
+          },
+          "metrics": {
+            "P@1": 0.5329745507616528,
+            "P@200": 0.514694872142175,
+            "full_mAP": 0.47724089330373365,
+            "mAP@200_all_relevant": 0.11781507265562396,
+            "mAP@200_min_relevant_k": 0.4123520428562645,
+            "mAP@200_prefix_positive": 0.5335429399669314
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.1347302875108767e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        }
+      },
+      "step": 3600
+    },
+    "F2_SIG": {
+      "checkpoint_sha256": "6c1090be57af05343aec292273323983c8c9ef14bf0aec9643008862cd5df6ae",
+      "cross_head_cosine": {
+        "mu_i__mu_t": {
+          "max": 0.996647120130755,
+          "mean": 0.9902074709772379,
+          "min": 0.963829257047386,
+          "std": 0.00401709014358929
+        },
+        "q__mu_i": {
+          "max": 0.9179392444529825,
+          "mean": 0.7849271232517234,
+          "min": 0.3683616586077933,
+          "std": 0.05632030304995322
+        },
+        "q__mu_t": {
+          "max": 0.9126031745021639,
+          "mean": 0.7768378252861224,
+          "min": 0.3657199294173062,
+          "std": 0.05705199340063687
+        }
+      },
+      "geometry": {
+        "g": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.10903836014758578,
+            "largest_eigenvalue_fraction": 0.088824790200513,
+            "largest_to_smallest_nonzero_eigenvalue": 21575.437418502817
+          },
+          "centered_rank": 768,
+          "centered_variance": 0.8868223237502777,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 83.74146059334588,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 768,
+          "mean_between_class_cosine": 0.09416816925151472,
+          "mean_offdiagonal_cosine": 0.1130967765668405,
+          "mean_within_class_cosine": 0.4685819673863948,
+          "n": 10963,
+          "participation_ratio": 33.688635929541206,
+          "raw_centered_covariance_trace": 110.23997669709226,
+          "raw_row_norms": {
+            "max": 18.238146657188445,
+            "mean": 11.018269856697248,
+            "min": 6.6966013598382945,
+            "std": 1.5599161326451063
+          }
+        },
+        "gallery": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.2141837980531131,
+            "largest_eigenvalue_fraction": 0.09662329200103328,
+            "largest_to_smallest_nonzero_eigenvalue": 526436045.3460217
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.5529703706677341,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 13999
+          },
+          "covariance_entropy_effective_rank": 109.66210460319391,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.4348984638362356,
+          "mean_offdiagonal_cosine": 0.4469901258052872,
+          "mean_within_class_cosine": 0.6770603750018341,
+          "n": 13999,
+          "participation_ratio": 40.11212124847731,
+          "raw_centered_covariance_trace": 0.5529703708991919,
+          "raw_row_norms": {
+            "max": 1.0000001155805456,
+            "mean": 1.0000000001707765,
+            "min": 0.9999998689250741,
+            "std": 3.762047211062771e-08
+          }
+        },
+        "mu_i": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.0668037251036251,
+            "largest_eigenvalue_fraction": 0.12339797128039216,
+            "largest_to_smallest_nonzero_eigenvalue": 4186587078627709.5
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9502981259115443,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 34.20350725305605,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.025696410694914372,
+          "mean_offdiagonal_cosine": 0.049615183874451914,
+          "mean_within_class_cosine": 0.4988172570250304,
+          "n": 10963,
+          "participation_ratio": 20.75192710128099,
+          "raw_centered_covariance_trace": 0.9502981266920127,
+          "raw_row_norms": {
+            "max": 1.0000000916558076,
+            "mean": 1.0000000004026584,
+            "min": 0.9999999078974926,
+            "std": 3.070060427386927e-08
+          }
+        },
+        "mu_t": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.06674281250783595,
+            "largest_eigenvalue_fraction": 0.12357266759318455,
+            "largest_to_smallest_nonzero_eigenvalue": 5281791531537120.0
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9266422215407727,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 34.17232000401201,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.049948515242311545,
+          "mean_offdiagonal_cosine": 0.07327324623686439,
+          "mean_within_class_cosine": 0.5113190205659667,
+          "n": 10963,
+          "participation_ratio": 20.744462589703247,
+          "raw_centered_covariance_trace": 0.926642221193321,
+          "raw_row_norms": {
+            "max": 1.000000101600717,
+            "mean": 0.999999999804331,
+            "min": 0.9999999022362603,
+            "std": 3.100547708077716e-08
+          }
+        },
+        "q": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.09926553841922206,
+            "largest_eigenvalue_fraction": 0.11988481170850164,
+            "largest_to_smallest_nonzero_eigenvalue": 43068.68975552313
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.9562699159064797,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 50.823955670641695,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.02041692281318839,
+          "mean_offdiagonal_cosine": 0.04364284910757746,
+          "mean_within_class_cosine": 0.47983304013324535,
+          "n": 10963,
+          "participation_ratio": 23.321700562266006,
+          "raw_centered_covariance_trace": 0.9562699160040522,
+          "raw_row_norms": {
+            "max": 1.00000010823337,
+            "mean": 1.000000000054875,
+            "min": 0.9999998859710043,
+            "std": 3.0975459311343545e-08
+          }
+        }
+      },
+      "main_head_replay_deltas": {
+        "P@200": 0.0,
+        "full_mAP": 0.0,
+        "mAP@200_all_relevant": 0.0,
+        "mAP@200_min_relevant_k": 0.0,
+        "mAP@200_prefix_positive": 0.0
+      },
+      "main_head_top_indices_exact": true,
+      "model_state_after": "c99fdb5d406491cad96556d325b4ab311baa8ef2a9498357c32cafa74b026b45",
+      "model_state_before": "c99fdb5d406491cad96556d325b4ab311baa8ef2a9498357c32cafa74b026b45",
+      "name": "F2_SIG",
+      "query_gallery_cosine": {
+        "mu_i": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.1343539294171998,
+          "mean_different_class_photo_cosine": 0.04681702101498577,
+          "mean_same_class_photo_cosine": 0.1811709504321856
+        },
+        "mu_t": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.1325443961753826,
+          "mean_different_class_photo_cosine": 0.04988666345778875,
+          "mean_same_class_photo_cosine": 0.18243105963317136
+        },
+        "q": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.1441952934031709,
+          "mean_different_class_photo_cosine": 3.173945738766583e-05,
+          "mean_same_class_photo_cosine": 0.14422703286055855
+        }
+      },
+      "retrieval": {
+        "mu_i": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2_SIG/mu_i_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.15783635866095047,
+            "most_popular_top1_share": 0.029280306485451064,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1332,
+            "unique_top200_photos": 13267
+          },
+          "metrics": {
+            "P@1": 0.5203867554501505,
+            "P@200": 0.5121951002023096,
+            "full_mAP": 0.46683146262733916,
+            "mAP@200_all_relevant": 0.11472287785606537,
+            "mAP@200_min_relevant_k": 0.4015295860280984,
+            "mAP@200_prefix_positive": 0.5307564972857803
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.0934269045748124e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        },
+        "mu_t": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2_SIG/mu_t_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.17028413755358934,
+            "most_popular_top1_share": 0.024172215634406642,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1325,
+            "unique_top200_photos": 13154
+          },
+          "metrics": {
+            "P@1": 0.5212076986226398,
+            "P@200": 0.5101637217855624,
+            "full_mAP": 0.46432472887860726,
+            "mAP@200_all_relevant": 0.11368784929800557,
+            "mAP@200_min_relevant_k": 0.39790706282873317,
+            "mAP@200_prefix_positive": 0.5292724414098582
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.1430215440810798e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        },
+        "q": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/F2_SIG/q_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.16727127611055367,
+            "most_popular_top1_share": 0.02845936331296178,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1430,
+            "unique_top200_photos": 13498
+          },
+          "metrics": {
+            "P@1": 0.5242178235884338,
+            "P@200": 0.5145867809598573,
+            "full_mAP": 0.47460676916623235,
+            "mAP@200_all_relevant": 0.1177618208657292,
+            "mAP@200_min_relevant_k": 0.4121649824482093,
+            "mAP@200_prefix_positive": 0.5324232234286718
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.1647521280799822e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        }
+      },
+      "step": 3600
+    },
+    "R0": {
+      "cache_sha256": "b99aadf9ea89fe5d3d6807add21a9f183825292e8f358e038e9b4becc7e0f258",
+      "cache_source": "/home/oslamelon/Desktop/Projects/spica/outputs/coupled_retrieval_diagnostics_20260908T191840Z/R0/validation_features.npz",
+      "cross_head_cosine": {},
+      "geometry": {
+        "g": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.12175520434972513,
+            "largest_eigenvalue_fraction": 0.08794296981851542,
+            "largest_to_smallest_nonzero_eigenvalue": 11259.11773758742
+          },
+          "centered_rank": 768,
+          "centered_variance": 0.6497534188676983,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 93.5079969405889,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 768,
+          "mean_between_class_cosine": 0.3363501156122766,
+          "mean_offdiagonal_cosine": 0.3501873078775243,
+          "mean_within_class_cosine": 0.6100541248533183,
+          "n": 10963,
+          "participation_ratio": 36.82700135265148,
+          "raw_centered_covariance_trace": 53.07665851028463,
+          "raw_row_norms": {
+            "max": 13.757943096371072,
+            "mean": 8.906335235066543,
+            "min": 6.146918489148756,
+            "std": 1.1646620307251367
+          }
+        },
+        "gallery": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.19703354504343254,
+            "largest_eigenvalue_fraction": 0.09312426369775934,
+            "largest_to_smallest_nonzero_eigenvalue": 567000497.5695934
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.5282475461010561,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 13999
+          },
+          "covariance_entropy_effective_rank": 100.88117506223746,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.4606517063345619,
+          "mean_offdiagonal_cosine": 0.4717147165403137,
+          "mean_within_class_cosine": 0.6822126217427452,
+          "n": 13999,
+          "participation_ratio": 37.02127872129586,
+          "raw_centered_covariance_trace": 0.5282475462313686,
+          "raw_row_norms": {
+            "max": 1.0000001471502653,
+            "mean": 1.0000000001130378,
+            "min": 0.9999998667280078,
+            "std": 3.787451015786715e-08
+          }
+        },
+        "q": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.10390282579533956,
+            "largest_eigenvalue_fraction": 0.11141085982746339,
+            "largest_to_smallest_nonzero_eigenvalue": 34029.29924453692
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.8645648813346314,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 53.198246807213856,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.11429753113145907,
+          "mean_offdiagonal_cosine": 0.135356249400514,
+          "mean_within_class_cosine": 0.5308455929946965,
+          "n": 10963,
+          "participation_ratio": 24.928734943048074,
+          "raw_centered_covariance_trace": 0.8645648806578193,
+          "raw_row_norms": {
+            "max": 1.0000001193248238,
+            "mean": 0.9999999996159286,
+            "min": 0.999999887347942,
+            "std": 3.367296390084618e-08
+          }
+        }
+      },
+      "name": "R0",
+      "query_gallery_cosine": {
+        "q": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.1252274576521749,
+          "mean_different_class_photo_cosine": -0.060514717151948214,
+          "mean_same_class_photo_cosine": 0.0647127405002267
+        }
+      },
+      "retrieval": {
+        "q": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/R0/q_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.7743391407461462,
+            "most_popular_top1_share": 0.05254036303931406,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 494,
+            "unique_top200_photos": 5138
+          },
+          "metrics": {
+            "P@1": 0.5195658122776612,
+            "P@200": 0.42395146351432,
+            "full_mAP": 0.30584378384307204,
+            "mAP@200_all_relevant": 0.08635499268083068,
+            "mAP@200_min_relevant_k": 0.30224070591686214,
+            "mAP@200_prefix_positive": 0.5076488158905585
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 9.435215997388724e-09,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        }
+      },
+      "step": 3600
+    },
+    "S0": {
+      "checkpoint_sha256": "72f8a6f8058e3da5952fb79dd0ede835dc6bf63bf31787b807a1bef000b42dd7",
+      "cross_head_cosine": {},
+      "geometry": {
+        "embedding": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.09652105528731676,
+            "largest_eigenvalue_fraction": 0.1339777497997198,
+            "largest_to_smallest_nonzero_eigenvalue": 3421665658.4779916
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.7675700584808366,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 49.41878030710618,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.21128240260785727,
+          "mean_offdiagonal_cosine": 0.23235992053225601,
+          "mean_within_class_cosine": 0.6282023275587296,
+          "n": 10963,
+          "participation_ratio": 21.823569971317195,
+          "raw_centered_covariance_trace": 0.7675700588750433,
+          "raw_row_norms": {
+            "max": 1.0000001047318743,
+            "mean": 1.0000000002528258,
+            "min": 0.9999999071578438,
+            "std": 3.179303600024115e-08
+          }
+        },
+        "gallery": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.03805726198996254,
+            "largest_eigenvalue_fraction": 0.4753309457741585,
+            "largest_to_smallest_nonzero_eigenvalue": 7588979289.313749
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.43290819389117396,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 13999
+          },
+          "covariance_entropy_effective_rank": 19.48531813886082,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.5646793259343662,
+          "mean_offdiagonal_cosine": 0.5670608796769153,
+          "mean_within_class_cosine": 0.6123751354364352,
+          "n": 13999,
+          "participation_ratio": 4.223487715157162,
+          "raw_centered_covariance_trace": 0.4329081941763446,
+          "raw_row_norms": {
+            "max": 1.000000102599528,
+            "mean": 1.0000000003011753,
+            "min": 0.9999999009873188,
+            "std": 3.2467705195207284e-08
+          }
+        }
+      },
+      "main_head_replay_deltas": {
+        "P@200": 0.0,
+        "full_mAP": 0.0,
+        "mAP@200_all_relevant": 0.0,
+        "mAP@200_min_relevant_k": 0.0,
+        "mAP@200_prefix_positive": 0.0
+      },
+      "model_state_after": "53389608013d1ddcc3041bd63ab21b257ff49150a63617c17dcd84338f2c29cc",
+      "model_state_before": "53389608013d1ddcc3041bd63ab21b257ff49150a63617c17dcd84338f2c29cc",
+      "name": "S0",
+      "query_gallery_cosine": {
+        "embedding": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.09640255759714901,
+          "mean_different_class_photo_cosine": -0.10378694403496103,
+          "mean_same_class_photo_cosine": -0.0073843864378120095
+        }
+      },
+      "retrieval": {
+        "embedding": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/S0/embedding_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.9154802517559062,
+            "most_popular_top1_share": 0.025814101979385204,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 842,
+            "unique_top200_photos": 2584
+          },
+          "metrics": {
+            "P@1": 0.760649457265347,
+            "P@200": 0.4498978284133501,
+            "full_mAP": 0.186983949649465,
+            "mAP@200_all_relevant": 0.1039787658080878,
+            "mAP@200_min_relevant_k": 0.36388919572662753,
+            "mAP@200_prefix_positive": 0.6990902532141139
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 9.515070342747123e-09,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        }
+      },
+      "step": 3600
+    },
+    "S0_best_clean": {
+      "checkpoint_sha256": "4b18252411208ecde61b0577d635cd7e98d261c0339700949e88dcd7ce46ea58",
+      "cross_head_cosine": {},
+      "geometry": {
+        "embedding": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.09760716629160293,
+            "largest_eigenvalue_fraction": 0.1339248157648684,
+            "largest_to_smallest_nonzero_eigenvalue": 3838889969.681836
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.7549236021492634,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 10963
+          },
+          "covariance_entropy_effective_rank": 49.9748691413007,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.2244500357881974,
+          "mean_offdiagonal_cosine": 0.24500753052705931,
+          "mean_within_class_cosine": 0.6310837387909083,
+          "n": 10963,
+          "participation_ratio": 22.019308941659833,
+          "raw_centered_covariance_trace": 0.7549236021128443,
+          "raw_row_norms": {
+            "max": 1.000000101021085,
+            "mean": 0.9999999999678137,
+            "min": 0.999999900097955,
+            "std": 3.159470765115901e-08
+          }
+        },
+        "gallery": {
+          "anisotropy": {
+            "effective_rank_fraction_of_dimension": 0.026182607639100214,
+            "largest_eigenvalue_fraction": 0.572562830905793,
+            "largest_to_smallest_nonzero_eigenvalue": 11186863744.44706
+          },
+          "centered_rank": 512,
+          "centered_variance": 0.6319019573316408,
+          "class_count": 20,
+          "counts": {
+            "classes": 20,
+            "samples": 13999
+          },
+          "covariance_entropy_effective_rank": 13.40549511121931,
+          "definitions": {
+            "centered_covariance": "C = (U - mean(U))^T (U - mean(U)) / N",
+            "centered_variance": "trace(C)",
+            "effective_rank": "exp(-sum_k p_k log(p_k)), p_k = eigenvalue_k / trace(C)",
+            "mean_offdiagonal_cosine": "(||sum_i u_i||_2^2 - N) / (N*(N-1))",
+            "participation_ratio": "trace(C)^2 / sum_k eigenvalue_k^2",
+            "rank": "number of positive clipped covariance eigenvalues; exactly 0 when centered variance is 0",
+            "unit_features": "u_i = x_i / ||x_i||_2",
+            "within_between": "group-sum identity, excluding self, weighted by exact ordered-pair counts"
+          },
+          "dimension": 512,
+          "mean_between_class_cosine": 0.3642488183709624,
+          "mean_offdiagonal_cosine": 0.3680529003653641,
+          "mean_within_class_cosine": 0.44043385962937326,
+          "n": 13999,
+          "participation_ratio": 3.003298584763825,
+          "raw_centered_covariance_trace": 0.6319019565391527,
+          "raw_row_norms": {
+            "max": 1.0000000999506358,
+            "mean": 0.9999999993627507,
+            "min": 0.9999998994464473,
+            "std": 3.101541486363315e-08
+          }
+        }
+      },
+      "main_head_replay_deltas": {
+        "P@200": 0.0,
+        "full_mAP": 0.0,
+        "mAP@200_all_relevant": 0.0,
+        "mAP@200_min_relevant_k": 0.0,
+        "mAP@200_prefix_positive": 0.0
+      },
+      "model_state_after": "5abc4506d141ef7b22a75a26f0cad7f4b31b594b622dd68932f97601a00000b5",
+      "model_state_before": "5abc4506d141ef7b22a75a26f0cad7f4b31b594b622dd68932f97601a00000b5",
+      "name": "S0_best_clean",
+      "query_gallery_cosine": {
+        "embedding": {
+          "definition": "all-gallery pair mean per query then query macro; class mean NOT renormalized; labels analysis-only",
+          "mean_class_margin": 0.12799686243193714,
+          "mean_different_class_photo_cosine": -0.05253971065673089,
+          "mean_same_class_photo_cosine": 0.07545715177520625
+        }
+      },
+      "retrieval": {
+        "embedding": {
+          "arrays": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_head_measurements_20260909T084200Z/S0_best_clean/embedding_retrieval.npz",
+          "hubness": {
+            "canonical_top200_exposure_share": 0.5385359846757275,
+            "most_popular_top1_share": 0.013682386208154701,
+            "photos_in_every_top200": 0,
+            "unique_top1_photos": 1241,
+            "unique_top200_photos": 4340
+          },
+          "metrics": {
+            "P@1": 0.76238255951838,
+            "P@200": 0.6703060166445607,
+            "full_mAP": 0.265979746994252,
+            "mAP@200_all_relevant": 0.1688051882388654,
+            "mAP@200_min_relevant_k": 0.5907696275213331,
+            "mAP@200_prefix_positive": 0.7364068969691799
+          },
+          "p200_cpu_array_mean_vs_gpu_scalar_abs_delta": 1.3564365408669232e-08,
+          "p200_float32_tolerance": 1.1920928955078125e-07
+        }
+      },
+      "step": 1800
+    }
+  },
+  "optimizer_updates": 0,
+  "promotion": {
+    "candidate": "F2_SIG",
+    "comparison_steps": {
+      "F2": 2400,
+      "F2_SIG": 2400
+    },
+    "criteria": {
+      "clean_full_map_nondec": false,
+      "clean_p200_nondec": false,
+      "clean_prefix_strict": false,
+      "masked_prefix_strict": false
+    },
+    "promote": false
+  },
+  "scope": "clean pseudo-validation no-update head measurements",
+  "source_snapshot_sha256": "56c162142c282cb24f8f8d0d73c7ce9ecd0c69846338b76d13de4caf51e06d8a",
+  "status": "COMPLETE",
+  "training_results": {
+    "F2": {
+      "loss_windows": {
+        "early100": {
+          "anchor_i": 0.08736876659095287,
+          "anchor_t": 0.002986733873342473,
+          "clean_align_i": 0.9517957746982575,
+          "clean_align_t": 0.921127462387085,
+          "clean_ce_i": 4.0109209537506105,
+          "clean_ce_pool": 4.271687126159668,
+          "clean_ce_t": 4.022783303260804,
+          "clean_rank_i": 0.7884860754013061,
+          "clean_rank_pool": 0.793764454126358,
+          "masked_align_i": 0.9604853928089142,
+          "masked_align_t": 0.9267601311206818,
+          "masked_ce_i": 4.1718309164047245,
+          "masked_ce_pool": 4.3362329483032225,
+          "masked_ce_t": 4.181665277481079,
+          "masked_rank_i": 0.7920764505863189,
+          "masked_rank_pool": 0.7956582844257355,
+          "sigreg": 0.0,
+          "total": 7.321062898635864
+        },
+        "early600": {
+          "anchor_i": 0.022743504618604977,
+          "anchor_t": 0.17823870353974486,
+          "clean_align_i": 0.867970155676206,
+          "clean_align_t": 0.6452927649021148,
+          "clean_ce_i": 1.5722217867771784,
+          "clean_ce_pool": 1.6711355780561765,
+          "clean_ce_t": 1.5793972571690877,
+          "clean_rank_i": 0.737856662273407,
+          "clean_rank_pool": 0.7376305600007375,
+          "masked_align_i": 0.8904455314079921,
+          "masked_align_t": 0.7226055214802424,
+          "masked_ce_i": 2.438511637846629,
+          "masked_ce_pool": 2.4954835096995036,
+          "masked_ce_t": 2.4417080601056416,
+          "masked_rank_i": 0.7525836487611135,
+          "masked_rank_pool": 0.7522199908892314,
+          "sigreg": 0.0,
+          "total": 4.138932693004608
+        },
+        "late100": {
+          "anchor_i": 0.01713504201986573,
+          "anchor_t": 0.12967016344720667,
+          "clean_align_i": 0.6751096031882546,
+          "clean_align_t": 0.34983214194124396,
+          "clean_ce_i": 0.11689504981040955,
+          "clean_ce_pool": 0.11986477571454915,
+          "clean_ce_t": 0.11924163760109381,
+          "clean_rank_i": 0.650564275004647,
+          "clean_rank_pool": 0.6421492153948004,
+          "masked_align_i": 0.7019233486869119,
+          "masked_align_t": 0.44589968432079663,
+          "masked_ce_i": 0.8419123129411177,
+          "masked_ce_pool": 0.85894099148837,
+          "masked_ce_t": 0.8445606177503412,
+          "masked_rank_i": 0.6737992817705328,
+          "masked_rank_pool": 0.6686483459039168,
+          "sigreg": 0.0,
+          "total": 1.6759828437458386
+        },
+        "late600": {
+          "anchor_i": 0.017128563562377554,
+          "anchor_t": 0.13043957802115894,
+          "clean_align_i": 0.6793126395491303,
+          "clean_align_t": 0.3504898450413688,
+          "clean_ce_i": 0.129294289306539,
+          "clean_ce_pool": 0.13380845410169148,
+          "clean_ce_t": 0.13187314460023505,
+          "clean_rank_i": 0.6534984150870902,
+          "clean_rank_pool": 0.6448479832195845,
+          "masked_align_i": 0.706146378986171,
+          "masked_align_t": 0.4455019582490452,
+          "masked_ce_i": 0.8660385887153813,
+          "masked_ce_pool": 0.88074450805539,
+          "masked_ce_t": 0.8681062450174426,
+          "masked_rank_i": 0.67632343827701,
+          "masked_rank_pool": 0.670493522628409,
+          "sigreg": 0.0,
+          "total": 1.7071319193136496
+        }
+      },
+      "selections": {
+        "best_clean": {
+          "clean": {
+            "P@200": 0.516573007455979,
+            "full_mAP": 0.46979110535126495,
+            "mAP@200_all_relevant": 0.11584676611154152,
+            "mAP@200_min_relevant_k": 0.40546324436244147,
+            "mAP@200_prefix_positive": 0.5353471335047598
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4363501380704892,
+              "full_mAP": 0.40431782004735695,
+              "mAP@200_all_relevant": 0.09478244744070657,
+              "mAP@200_min_relevant_k": 0.33173829814986716,
+              "mAP@200_prefix_positive": 0.45400882667211634
+            },
+            "0.5": {
+              "P@200": 0.3539697086815324,
+              "full_mAP": 0.33667439458415854,
+              "mAP@200_all_relevant": 0.07326353534591334,
+              "mAP@200_min_relevant_k": 0.2564221293835199,
+              "mAP@200_prefix_positive": 0.3703106674491569
+            },
+            "0.75": {
+              "P@200": 0.2546886438851596,
+              "full_mAP": 0.25196454179882655,
+              "mAP@200_all_relevant": 0.04789944341742497,
+              "mAP@200_min_relevant_k": 0.16764794744876918,
+              "mAP@200_prefix_positive": 0.27013808600462097
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3483361635457271,
+            "full_mAP": 0.3309855854767807,
+            "mAP@200_all_relevant": 0.07198180873468164,
+            "mAP@200_min_relevant_k": 0.2519361249940521,
+            "mAP@200_prefix_positive": 0.364819193375298
+          },
+          "step": 2400
+        },
+        "best_masked": {
+          "clean": {
+            "P@200": 0.5147628277926906,
+            "full_mAP": 0.4713651857643906,
+            "mAP@200_all_relevant": 0.1157340823923527,
+            "mAP@200_min_relevant_k": 0.4050688825866323,
+            "mAP@200_prefix_positive": 0.5339867556392895
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43732949301945134,
+              "full_mAP": 0.40838830992468456,
+              "mAP@200_all_relevant": 0.0954305111434006,
+              "mAP@200_min_relevant_k": 0.3340064485204533,
+              "mAP@200_prefix_positive": 0.4557517040685146
+            },
+            "0.5": {
+              "P@200": 0.3538566011001403,
+              "full_mAP": 0.3399231586121767,
+              "mAP@200_all_relevant": 0.07358903059796248,
+              "mAP@200_min_relevant_k": 0.2575612735953044,
+              "mAP@200_prefix_positive": 0.3708595755921509
+            },
+            "0.75": {
+              "P@200": 0.2559510720283789,
+              "full_mAP": 0.2561381403520464,
+              "mAP@200_all_relevant": 0.048520652096076054,
+              "mAP@200_min_relevant_k": 0.16982209307442964,
+              "mAP@200_prefix_positive": 0.27221702075905413
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3490457220493235,
+            "full_mAP": 0.3348165362963026,
+            "mAP@200_all_relevant": 0.07251339794581305,
+            "mAP@200_min_relevant_k": 0.25379660506339585,
+            "mAP@200_prefix_positive": 0.3662761001399065
+          },
+          "step": 3600
+        },
+        "latest": {
+          "clean": {
+            "P@200": 0.5147628277926906,
+            "full_mAP": 0.4713651857643906,
+            "mAP@200_all_relevant": 0.1157340823923527,
+            "mAP@200_min_relevant_k": 0.4050688825866323,
+            "mAP@200_prefix_positive": 0.5339867556392895
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43732949301945134,
+              "full_mAP": 0.40838830992468456,
+              "mAP@200_all_relevant": 0.0954305111434006,
+              "mAP@200_min_relevant_k": 0.3340064485204533,
+              "mAP@200_prefix_positive": 0.4557517040685146
+            },
+            "0.5": {
+              "P@200": 0.3538566011001403,
+              "full_mAP": 0.3399231586121767,
+              "mAP@200_all_relevant": 0.07358903059796248,
+              "mAP@200_min_relevant_k": 0.2575612735953044,
+              "mAP@200_prefix_positive": 0.3708595755921509
+            },
+            "0.75": {
+              "P@200": 0.2559510720283789,
+              "full_mAP": 0.2561381403520464,
+              "mAP@200_all_relevant": 0.048520652096076054,
+              "mAP@200_min_relevant_k": 0.16982209307442964,
+              "mAP@200_prefix_positive": 0.27221702075905413
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3490457220493235,
+            "full_mAP": 0.3348165362963026,
+            "mAP@200_all_relevant": 0.07251339794581305,
+            "mAP@200_min_relevant_k": 0.25379660506339585,
+            "mAP@200_prefix_positive": 0.3662761001399065
+          },
+          "step": 3600
+        }
+      },
+      "trajectory": {
+        "0": {
+          "clean": {
+            "P@200": 0.049547567856901155,
+            "full_mAP": 0.06833733315288634,
+            "mAP@200_all_relevant": 0.002970990467194879,
+            "mAP@200_min_relevant_k": 0.010398411003818714,
+            "mAP@200_prefix_positive": 0.0613724944156
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.050825198634784095,
+              "full_mAP": 0.06879390010552398,
+              "mAP@200_all_relevant": 0.0031574608258940914,
+              "mAP@200_min_relevant_k": 0.011051085631731293,
+              "mAP@200_prefix_positive": 0.06183869723248043
+            },
+            "0.5": {
+              "P@200": 0.05165906404321052,
+              "full_mAP": 0.06884919227336478,
+              "mAP@200_all_relevant": 0.0033228230955916448,
+              "mAP@200_min_relevant_k": 0.011629858543251626,
+              "mAP@200_prefix_positive": 0.061757477748876966
+            },
+            "0.75": {
+              "P@200": 0.05236765959440639,
+              "full_mAP": 0.06888524947635936,
+              "mAP@200_all_relevant": 0.0034554968796773936,
+              "mAP@200_min_relevant_k": 0.012094218746358215,
+              "mAP@200_prefix_positive": 0.061731408342354126
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.051617307424133674,
+            "full_mAP": 0.06884278061841603,
+            "mAP@200_all_relevant": 0.0033119269337210434,
+            "mAP@200_min_relevant_k": 0.011591720973780377,
+            "mAP@200_prefix_positive": 0.06177586110790385
+          }
+        },
+        "1200": {
+          "clean": {
+            "P@200": 0.4786732542184714,
+            "full_mAP": 0.4367376742788522,
+            "mAP@200_all_relevant": 0.10471590086661065,
+            "mAP@200_min_relevant_k": 0.366505596873408,
+            "mAP@200_prefix_positive": 0.4978256534601877
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4060732982522634,
+              "full_mAP": 0.37812603186546284,
+              "mAP@200_all_relevant": 0.08631399362665661,
+              "mAP@200_min_relevant_k": 0.3020989368570502,
+              "mAP@200_prefix_positive": 0.42454996214273805
+            },
+            "0.5": {
+              "P@200": 0.3256046022811377,
+              "full_mAP": 0.3129055065719708,
+              "mAP@200_all_relevant": 0.06642865746326691,
+              "mAP@200_min_relevant_k": 0.23250026315101213,
+              "mAP@200_prefix_positive": 0.34413172329393626
+            },
+            "0.75": {
+              "P@200": 0.23352807376807516,
+              "full_mAP": 0.23497802596811668,
+              "mAP@200_all_relevant": 0.04388798411200815,
+              "mAP@200_min_relevant_k": 0.15360790935615573,
+              "mAP@200_prefix_positive": 0.24993658864806614
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.32173532476715877,
+            "full_mAP": 0.3086698548018501,
+            "mAP@200_all_relevant": 0.06554354506731055,
+            "mAP@200_min_relevant_k": 0.22940236978807269,
+            "mAP@200_prefix_positive": 0.3395394246949135
+          }
+        },
+        "1800": {
+          "clean": {
+            "P@200": 0.48331021513921735,
+            "full_mAP": 0.438690179400129,
+            "mAP@200_all_relevant": 0.10556552558568605,
+            "mAP@200_min_relevant_k": 0.3694790690330269,
+            "mAP@200_prefix_positive": 0.5027450741500017
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4060073192072357,
+              "full_mAP": 0.37626103034693853,
+              "mAP@200_all_relevant": 0.08584823734608503,
+              "mAP@200_min_relevant_k": 0.30046867245329084,
+              "mAP@200_prefix_positive": 0.4252827462508382
+            },
+            "0.5": {
+              "P@200": 0.3251641817060061,
+              "full_mAP": 0.31108265232832033,
+              "mAP@200_all_relevant": 0.0655699349617055,
+              "mAP@200_min_relevant_k": 0.22949463755421085,
+              "mAP@200_prefix_positive": 0.3422795063080331
+            },
+            "0.75": {
+              "P@200": 0.23446318900884952,
+              "full_mAP": 0.235455018232291,
+              "mAP@200_all_relevant": 0.04366120621241537,
+              "mAP@200_min_relevant_k": 0.15281414916854344,
+              "mAP@200_prefix_positive": 0.2500475414656488
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3218782299740304,
+            "full_mAP": 0.3075995669691832,
+            "mAP@200_all_relevant": 0.0650264595067353,
+            "mAP@200_min_relevant_k": 0.22759248639201501,
+            "mAP@200_prefix_positive": 0.33920326467484
+          }
+        },
+        "2400": {
+          "clean": {
+            "P@200": 0.516573007455979,
+            "full_mAP": 0.46979110535126495,
+            "mAP@200_all_relevant": 0.11584676611154152,
+            "mAP@200_min_relevant_k": 0.40546324436244147,
+            "mAP@200_prefix_positive": 0.5353471335047598
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4363501380704892,
+              "full_mAP": 0.40431782004735695,
+              "mAP@200_all_relevant": 0.09478244744070657,
+              "mAP@200_min_relevant_k": 0.33173829814986716,
+              "mAP@200_prefix_positive": 0.45400882667211634
+            },
+            "0.5": {
+              "P@200": 0.3539697086815324,
+              "full_mAP": 0.33667439458415854,
+              "mAP@200_all_relevant": 0.07326353534591334,
+              "mAP@200_min_relevant_k": 0.2564221293835199,
+              "mAP@200_prefix_positive": 0.3703106674491569
+            },
+            "0.75": {
+              "P@200": 0.2546886438851596,
+              "full_mAP": 0.25196454179882655,
+              "mAP@200_all_relevant": 0.04789944341742497,
+              "mAP@200_min_relevant_k": 0.16764794744876918,
+              "mAP@200_prefix_positive": 0.27013808600462097
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3483361635457271,
+            "full_mAP": 0.3309855854767807,
+            "mAP@200_all_relevant": 0.07198180873468164,
+            "mAP@200_min_relevant_k": 0.2519361249940521,
+            "mAP@200_prefix_positive": 0.364819193375298
+          }
+        },
+        "3000": {
+          "clean": {
+            "P@200": 0.5137722229421605,
+            "full_mAP": 0.4709460332637654,
+            "mAP@200_all_relevant": 0.11528421544702656,
+            "mAP@200_min_relevant_k": 0.4034943032650733,
+            "mAP@200_prefix_positive": 0.5330672900553993
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43746631676429987,
+              "full_mAP": 0.40907065571147344,
+              "mAP@200_all_relevant": 0.09526714116925117,
+              "mAP@200_min_relevant_k": 0.33343457972483376,
+              "mAP@200_prefix_positive": 0.4559361659827976
+            },
+            "0.5": {
+              "P@200": 0.3526517908903292,
+              "full_mAP": 0.3390417679737223,
+              "mAP@200_all_relevant": 0.07305057227305484,
+              "mAP@200_min_relevant_k": 0.25567663532340346,
+              "mAP@200_prefix_positive": 0.3696728798473808
+            },
+            "0.75": {
+              "P@200": 0.2536240021807679,
+              "full_mAP": 0.25442183192311574,
+              "mAP@200_all_relevant": 0.04791771803702074,
+              "mAP@200_min_relevant_k": 0.16771181556032297,
+              "mAP@200_prefix_positive": 0.26971218123943785
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.347914036611799,
+            "full_mAP": 0.3341780852027705,
+            "mAP@200_all_relevant": 0.07207847715977558,
+            "mAP@200_min_relevant_k": 0.2522743435361867,
+            "mAP@200_prefix_positive": 0.3651070756898721
+          }
+        },
+        "3600": {
+          "clean": {
+            "P@200": 0.5147628277926906,
+            "full_mAP": 0.4713651857643906,
+            "mAP@200_all_relevant": 0.1157340823923527,
+            "mAP@200_min_relevant_k": 0.4050688825866323,
+            "mAP@200_prefix_positive": 0.5339867556392895
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43732949301945134,
+              "full_mAP": 0.40838830992468456,
+              "mAP@200_all_relevant": 0.0954305111434006,
+              "mAP@200_min_relevant_k": 0.3340064485204533,
+              "mAP@200_prefix_positive": 0.4557517040685146
+            },
+            "0.5": {
+              "P@200": 0.3538566011001403,
+              "full_mAP": 0.3399231586121767,
+              "mAP@200_all_relevant": 0.07358903059796248,
+              "mAP@200_min_relevant_k": 0.2575612735953044,
+              "mAP@200_prefix_positive": 0.3708595755921509
+            },
+            "0.75": {
+              "P@200": 0.2559510720283789,
+              "full_mAP": 0.2561381403520464,
+              "mAP@200_all_relevant": 0.048520652096076054,
+              "mAP@200_min_relevant_k": 0.16982209307442964,
+              "mAP@200_prefix_positive": 0.27221702075905413
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3490457220493235,
+            "full_mAP": 0.3348165362963026,
+            "mAP@200_all_relevant": 0.07251339794581305,
+            "mAP@200_min_relevant_k": 0.25379660506339585,
+            "mAP@200_prefix_positive": 0.3662761001399065
+          }
+        },
+        "600": {
+          "clean": {
+            "P@200": 0.4472425337660826,
+            "full_mAP": 0.3976495797627546,
+            "mAP@200_all_relevant": 0.09371797108906069,
+            "mAP@200_min_relevant_k": 0.32801276567866033,
+            "mAP@200_prefix_positive": 0.4722115283528762
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.36937637954799457,
+              "full_mAP": 0.33643024169069896,
+              "mAP@200_all_relevant": 0.07428020124399869,
+              "mAP@200_min_relevant_k": 0.25998062351775464,
+              "mAP@200_prefix_positive": 0.39226382136615173
+            },
+            "0.5": {
+              "P@200": 0.2951150777951307,
+              "full_mAP": 0.27737380272750095,
+              "mAP@200_all_relevant": 0.05671977444399553,
+              "mAP@200_min_relevant_k": 0.1985191539357943,
+              "mAP@200_prefix_positive": 0.31502584063896927
+            },
+            "0.75": {
+              "P@200": 0.2131682276392363,
+              "full_mAP": 0.20931071901409126,
+              "mAP@200_all_relevant": 0.037332368552463725,
+              "mAP@200_min_relevant_k": 0.13066325594324216,
+              "mAP@200_prefix_positive": 0.23016573772396298
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.29255322832745384,
+            "full_mAP": 0.2743715878107637,
+            "mAP@200_all_relevant": 0.05611078141348597,
+            "mAP@200_min_relevant_k": 0.19638767779893038,
+            "mAP@200_prefix_positive": 0.31248513324302796
+          }
+        }
+      },
+      "url": "https://wandb.ai/a-cctest05187-erd/spica/runs/1wxvk2lk"
+    },
+    "F2_SIG": {
+      "loss_windows": {
+        "early100": {
+          "anchor_i": 0.08753883428871631,
+          "anchor_t": 0.0032258156839816365,
+          "clean_align_i": 0.9599246501922607,
+          "clean_align_t": 0.9216854989528656,
+          "clean_ce_i": 3.988473725318909,
+          "clean_ce_pool": 4.25985279083252,
+          "clean_ce_t": 4.0059222221374515,
+          "clean_rank_i": 0.7885171234607696,
+          "clean_rank_pool": 0.7940415024757386,
+          "masked_align_i": 0.9702210068702698,
+          "masked_align_t": 0.9297541558742524,
+          "masked_ce_i": 4.153372168540955,
+          "masked_ce_pool": 4.3308289527893065,
+          "masked_ce_t": 4.166413593292236,
+          "masked_rank_i": 0.7924134433269501,
+          "masked_rank_pool": 0.7957468330860138,
+          "sigreg": 15.400818634033204,
+          "total": 7.424666547775269
+        },
+        "early600": {
+          "anchor_i": 0.02289704664920767,
+          "anchor_t": 0.17738335834449875,
+          "clean_align_i": 0.8684392889340719,
+          "clean_align_t": 0.645055856804053,
+          "clean_ce_i": 1.5579334989190101,
+          "clean_ce_pool": 1.6517302960157394,
+          "clean_ce_t": 1.5657540649175643,
+          "clean_rank_i": 0.7370479265848796,
+          "clean_rank_pool": 0.7371936450401942,
+          "masked_align_i": 0.8915608098109563,
+          "masked_align_t": 0.7242956668138504,
+          "masked_ce_i": 2.453610901037852,
+          "masked_ce_pool": 2.505501900116603,
+          "masked_ce_t": 2.4570553302764893,
+          "masked_rank_i": 0.7529705574115118,
+          "masked_rank_pool": 0.7528127123912175,
+          "sigreg": 11.431653833389282,
+          "total": 4.233854611714681
+        },
+        "late100": {
+          "anchor_i": 0.01753381301056255,
+          "anchor_t": 0.12922837788408453,
+          "clean_align_i": 0.6740152673287825,
+          "clean_align_t": 0.3562228191982616,
+          "clean_ce_i": 0.1245880861851302,
+          "clean_ce_pool": 0.12539022957736795,
+          "clean_ce_t": 0.1269236681136218,
+          "clean_rank_i": 0.6496527736837213,
+          "clean_rank_pool": 0.6401248574256897,
+          "masked_align_i": 0.6990788578987122,
+          "masked_align_t": 0.45140334963798523,
+          "masked_ce_i": 0.8158178112723611,
+          "masked_ce_pool": 0.8266374522989447,
+          "masked_ce_t": 0.8188021670688282,
+          "masked_rank_i": 0.6717281449924816,
+          "masked_rank_pool": 0.6648564013567838,
+          "sigreg": 6.610249736092308,
+          "total": 1.7146125815131448
+        },
+        "late600": {
+          "anchor_i": 0.017521659675680222,
+          "anchor_t": 0.12946983475665577,
+          "clean_align_i": 0.6781870292835548,
+          "clean_align_t": 0.35664189252697054,
+          "clean_ce_i": 0.13525632121523873,
+          "clean_ce_pool": 0.13782610701488668,
+          "clean_ce_t": 0.13745833524182194,
+          "clean_rank_i": 0.6525217529203071,
+          "clean_rank_pool": 0.6427205625127573,
+          "masked_align_i": 0.7047585434600955,
+          "masked_align_t": 0.4540461194319803,
+          "masked_ce_i": 0.8771169957567434,
+          "masked_ce_pool": 0.8892370692042054,
+          "masked_ce_t": 0.8786071289758213,
+          "masked_rank_i": 0.6754518063341985,
+          "masked_rank_pool": 0.6682335890707423,
+          "sigreg": 6.679500923782099,
+          "total": 1.7738298080006585
+        }
+      },
+      "selections": {
+        "best_clean": {
+          "clean": {
+            "P@200": 0.5141881677817102,
+            "full_mAP": 0.4669390624013737,
+            "mAP@200_all_relevant": 0.11538922115492345,
+            "mAP@200_min_relevant_k": 0.40386183972976536,
+            "mAP@200_prefix_positive": 0.532509285785444
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4333813646348396,
+              "full_mAP": 0.4013735929429223,
+              "mAP@200_all_relevant": 0.09453726896432675,
+              "mAP@200_min_relevant_k": 0.3308802456657924,
+              "mAP@200_prefix_positive": 0.4507356743399802
+            },
+            "0.5": {
+              "P@200": 0.3546719191671915,
+              "full_mAP": 0.3371145579360881,
+              "mAP@200_all_relevant": 0.07427262632249299,
+              "mAP@200_min_relevant_k": 0.2599539825493857,
+              "mAP@200_prefix_positive": 0.37080750102242394
+            },
+            "0.75": {
+              "P@200": 0.2549691327887099,
+              "full_mAP": 0.2535462484913144,
+              "mAP@200_all_relevant": 0.048976055016789845,
+              "mAP@200_min_relevant_k": 0.17141608803693323,
+              "mAP@200_prefix_positive": 0.2694157491121052
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3476741388635804,
+            "full_mAP": 0.3306781331234416,
+            "mAP@200_all_relevant": 0.07259531676786987,
+            "mAP@200_min_relevant_k": 0.25408343875070377,
+            "mAP@200_prefix_positive": 0.36365297482483644
+          },
+          "step": 2400
+        },
+        "best_masked": {
+          "clean": {
+            "P@200": 0.5121951002023096,
+            "full_mAP": 0.46683146262733916,
+            "mAP@200_all_relevant": 0.11472287785606537,
+            "mAP@200_min_relevant_k": 0.4015295860280984,
+            "mAP@200_prefix_positive": 0.5307564972857803
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43663670843538305,
+              "full_mAP": 0.4056686085314891,
+              "mAP@200_all_relevant": 0.09508349336419752,
+              "mAP@200_min_relevant_k": 0.33279191632427274,
+              "mAP@200_prefix_positive": 0.4546133117666355
+            },
+            "0.5": {
+              "P@200": 0.3580890189959478,
+              "full_mAP": 0.3417043303458331,
+              "mAP@200_all_relevant": 0.07482423631101925,
+              "mAP@200_min_relevant_k": 0.2618845108758487,
+              "mAP@200_prefix_positive": 0.3750891110425794
+            },
+            "0.75": {
+              "P@200": 0.2601939799923183,
+              "full_mAP": 0.2596284157526783,
+              "mAP@200_all_relevant": 0.049901733533875677,
+              "mAP@200_min_relevant_k": 0.1746558841694328,
+              "mAP@200_prefix_positive": 0.27612020066739684
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.35163990247454974,
+            "full_mAP": 0.33566711821000017,
+            "mAP@200_all_relevant": 0.07326982106969747,
+            "mAP@200_min_relevant_k": 0.25644410378985144,
+            "mAP@200_prefix_positive": 0.3686075411588706
+          },
+          "step": 3600
+        },
+        "latest": {
+          "clean": {
+            "P@200": 0.5121951002023096,
+            "full_mAP": 0.46683146262733916,
+            "mAP@200_all_relevant": 0.11472287785606537,
+            "mAP@200_min_relevant_k": 0.4015295860280984,
+            "mAP@200_prefix_positive": 0.5307564972857803
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43663670843538305,
+              "full_mAP": 0.4056686085314891,
+              "mAP@200_all_relevant": 0.09508349336419752,
+              "mAP@200_min_relevant_k": 0.33279191632427274,
+              "mAP@200_prefix_positive": 0.4546133117666355
+            },
+            "0.5": {
+              "P@200": 0.3580890189959478,
+              "full_mAP": 0.3417043303458331,
+              "mAP@200_all_relevant": 0.07482423631101925,
+              "mAP@200_min_relevant_k": 0.2618845108758487,
+              "mAP@200_prefix_positive": 0.3750891110425794
+            },
+            "0.75": {
+              "P@200": 0.2601939799923183,
+              "full_mAP": 0.2596284157526783,
+              "mAP@200_all_relevant": 0.049901733533875677,
+              "mAP@200_min_relevant_k": 0.1746558841694328,
+              "mAP@200_prefix_positive": 0.27612020066739684
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.35163990247454974,
+            "full_mAP": 0.33566711821000017,
+            "mAP@200_all_relevant": 0.07326982106969747,
+            "mAP@200_min_relevant_k": 0.25644410378985144,
+            "mAP@200_prefix_positive": 0.3686075411588706
+          },
+          "step": 3600
+        }
+      },
+      "trajectory": {
+        "0": {
+          "clean": {
+            "P@200": 0.049547567856901155,
+            "full_mAP": 0.06833733315288634,
+            "mAP@200_all_relevant": 0.002970990467194879,
+            "mAP@200_min_relevant_k": 0.010398411003818714,
+            "mAP@200_prefix_positive": 0.0613724944156
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.050825198634784095,
+              "full_mAP": 0.06879390010552398,
+              "mAP@200_all_relevant": 0.0031574608258940914,
+              "mAP@200_min_relevant_k": 0.011051085631731293,
+              "mAP@200_prefix_positive": 0.06183869723248043
+            },
+            "0.5": {
+              "P@200": 0.05165906404321052,
+              "full_mAP": 0.06884919227336478,
+              "mAP@200_all_relevant": 0.0033228230955916448,
+              "mAP@200_min_relevant_k": 0.011629858543251626,
+              "mAP@200_prefix_positive": 0.061757477748876966
+            },
+            "0.75": {
+              "P@200": 0.05236765959440639,
+              "full_mAP": 0.06888524947635936,
+              "mAP@200_all_relevant": 0.0034554968796773936,
+              "mAP@200_min_relevant_k": 0.012094218746358215,
+              "mAP@200_prefix_positive": 0.061731408342354126
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.051617307424133674,
+            "full_mAP": 0.06884278061841603,
+            "mAP@200_all_relevant": 0.0033119269337210434,
+            "mAP@200_min_relevant_k": 0.011591720973780377,
+            "mAP@200_prefix_positive": 0.06177586110790385
+          }
+        },
+        "1200": {
+          "clean": {
+            "P@200": 0.48859389646704804,
+            "full_mAP": 0.4446664016298297,
+            "mAP@200_all_relevant": 0.10733876932498615,
+            "mAP@200_min_relevant_k": 0.37568561099657827,
+            "mAP@200_prefix_positive": 0.5064547336852315
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.41745096236267326,
+              "full_mAP": 0.3857677333241442,
+              "mAP@200_all_relevant": 0.08940347929916999,
+              "mAP@200_min_relevant_k": 0.31291211693495685,
+              "mAP@200_prefix_positive": 0.43507965707577695
+            },
+            "0.5": {
+              "P@200": 0.3377247637381524,
+              "full_mAP": 0.32087732803462415,
+              "mAP@200_all_relevant": 0.06969751982439393,
+              "mAP@200_min_relevant_k": 0.24394124284344232,
+              "mAP@200_prefix_positive": 0.3545837285061924
+            },
+            "0.75": {
+              "P@200": 0.24374045472260353,
+              "full_mAP": 0.24077284750217007,
+              "mAP@200_all_relevant": 0.046337132199077986,
+              "mAP@200_min_relevant_k": 0.16217987222528354,
+              "mAP@200_prefix_positive": 0.25944458423297334
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.33297206027447646,
+            "full_mAP": 0.3158059696203128,
+            "mAP@200_all_relevant": 0.06847937710754731,
+            "mAP@200_min_relevant_k": 0.2396777440012276,
+            "mAP@200_prefix_positive": 0.3497026566049809
+          }
+        },
+        "1800": {
+          "clean": {
+            "P@200": 0.488704267573072,
+            "full_mAP": 0.43858491292733554,
+            "mAP@200_all_relevant": 0.10694686328133651,
+            "mAP@200_min_relevant_k": 0.37431342555411573,
+            "mAP@200_prefix_positive": 0.509232671912017
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4166146646352846,
+              "full_mAP": 0.3807740313955803,
+              "mAP@200_all_relevant": 0.0885806107472451,
+              "mAP@200_min_relevant_k": 0.31003186805625654,
+              "mAP@200_prefix_positive": 0.43600477889946615
+            },
+            "0.5": {
+              "P@200": 0.33974641221475904,
+              "full_mAP": 0.31971279609311937,
+              "mAP@200_all_relevant": 0.06927801328538657,
+              "mAP@200_min_relevant_k": 0.24247275472926066,
+              "mAP@200_prefix_positive": 0.35735949347004486
+            },
+            "0.75": {
+              "P@200": 0.2470061361074186,
+              "full_mAP": 0.24331493098378823,
+              "mAP@200_all_relevant": 0.04655115236457155,
+              "mAP@200_min_relevant_k": 0.16292884178436914,
+              "mAP@200_prefix_positive": 0.2628744498341859
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.33445573765248743,
+            "full_mAP": 0.31460058615749603,
+            "mAP@200_all_relevant": 0.06813659213240107,
+            "mAP@200_min_relevant_k": 0.23847782152329547,
+            "mAP@200_prefix_positive": 0.35207957406789897
+          }
+        },
+        "2400": {
+          "clean": {
+            "P@200": 0.5141881677817102,
+            "full_mAP": 0.4669390624013737,
+            "mAP@200_all_relevant": 0.11538922115492345,
+            "mAP@200_min_relevant_k": 0.40386183972976536,
+            "mAP@200_prefix_positive": 0.532509285785444
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.4333813646348396,
+              "full_mAP": 0.4013735929429223,
+              "mAP@200_all_relevant": 0.09453726896432675,
+              "mAP@200_min_relevant_k": 0.3308802456657924,
+              "mAP@200_prefix_positive": 0.4507356743399802
+            },
+            "0.5": {
+              "P@200": 0.3546719191671915,
+              "full_mAP": 0.3371145579360881,
+              "mAP@200_all_relevant": 0.07427262632249299,
+              "mAP@200_min_relevant_k": 0.2599539825493857,
+              "mAP@200_prefix_positive": 0.37080750102242394
+            },
+            "0.75": {
+              "P@200": 0.2549691327887099,
+              "full_mAP": 0.2535462484913144,
+              "mAP@200_all_relevant": 0.048976055016789845,
+              "mAP@200_min_relevant_k": 0.17141608803693323,
+              "mAP@200_prefix_positive": 0.2694157491121052
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3476741388635804,
+            "full_mAP": 0.3306781331234416,
+            "mAP@200_all_relevant": 0.07259531676786987,
+            "mAP@200_min_relevant_k": 0.25408343875070377,
+            "mAP@200_prefix_positive": 0.36365297482483644
+          }
+        },
+        "3000": {
+          "clean": {
+            "P@200": 0.5122293062080121,
+            "full_mAP": 0.4673011640228979,
+            "mAP@200_all_relevant": 0.11467091955545868,
+            "mAP@200_min_relevant_k": 0.4013477473953322,
+            "mAP@200_prefix_positive": 0.5317343366196855
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43594787608200763,
+              "full_mAP": 0.4054987946224884,
+              "mAP@200_all_relevant": 0.09479668882153024,
+              "mAP@200_min_relevant_k": 0.33178805056044297,
+              "mAP@200_prefix_positive": 0.45457568936590054
+            },
+            "0.5": {
+              "P@200": 0.355773807151216,
+              "full_mAP": 0.3400968141512191,
+              "mAP@200_all_relevant": 0.07418085006780425,
+              "mAP@200_min_relevant_k": 0.2596326474912569,
+              "mAP@200_prefix_positive": 0.37298914639452496
+            },
+            "0.75": {
+              "P@200": 0.25514487546751585,
+              "full_mAP": 0.2559860439965936,
+              "mAP@200_all_relevant": 0.048634394346566634,
+              "mAP@200_min_relevant_k": 0.17022019549893805,
+              "mAP@200_prefix_positive": 0.2711214967948681
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.3489555195669132,
+            "full_mAP": 0.3338605509234337,
+            "mAP@200_all_relevant": 0.07253731107863372,
+            "mAP@200_min_relevant_k": 0.2538802978502127,
+            "mAP@200_prefix_positive": 0.3662287775184312
+          }
+        },
+        "3600": {
+          "clean": {
+            "P@200": 0.5121951002023096,
+            "full_mAP": 0.46683146262733916,
+            "mAP@200_all_relevant": 0.11472287785606537,
+            "mAP@200_min_relevant_k": 0.4015295860280984,
+            "mAP@200_prefix_positive": 0.5307564972857803
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.43663670843538305,
+              "full_mAP": 0.4056686085314891,
+              "mAP@200_all_relevant": 0.09508349336419752,
+              "mAP@200_min_relevant_k": 0.33279191632427274,
+              "mAP@200_prefix_positive": 0.4546133117666355
+            },
+            "0.5": {
+              "P@200": 0.3580890189959478,
+              "full_mAP": 0.3417043303458331,
+              "mAP@200_all_relevant": 0.07482423631101925,
+              "mAP@200_min_relevant_k": 0.2618845108758487,
+              "mAP@200_prefix_positive": 0.3750891110425794
+            },
+            "0.75": {
+              "P@200": 0.2601939799923183,
+              "full_mAP": 0.2596284157526783,
+              "mAP@200_all_relevant": 0.049901733533875677,
+              "mAP@200_min_relevant_k": 0.1746558841694328,
+              "mAP@200_prefix_positive": 0.27612020066739684
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.35163990247454974,
+            "full_mAP": 0.33566711821000017,
+            "mAP@200_all_relevant": 0.07326982106969747,
+            "mAP@200_min_relevant_k": 0.25644410378985144,
+            "mAP@200_prefix_positive": 0.3686075411588706
+          }
+        },
+        "600": {
+          "clean": {
+            "P@200": 0.44422556765287136,
+            "full_mAP": 0.392181720563563,
+            "mAP@200_all_relevant": 0.09129387968395447,
+            "mAP@200_min_relevant_k": 0.31952843683619425,
+            "mAP@200_prefix_positive": 0.4679113645549576
+          },
+          "masked_by_fraction": {
+            "0.25": {
+              "P@200": 0.3678331582327397,
+              "full_mAP": 0.33205197285336907,
+              "mAP@200_all_relevant": 0.07260990054452428,
+              "mAP@200_min_relevant_k": 0.2541345648181379,
+              "mAP@200_prefix_positive": 0.3898635065867356
+            },
+            "0.5": {
+              "P@200": 0.2937535281721844,
+              "full_mAP": 0.2737521411478791,
+              "mAP@200_all_relevant": 0.05539548525631114,
+              "mAP@200_min_relevant_k": 0.19388411647599893,
+              "mAP@200_prefix_positive": 0.3132497244305686
+            },
+            "0.75": {
+              "P@200": 0.21493127899289566,
+              "full_mAP": 0.2088593139869225,
+              "mAP@200_all_relevant": 0.037243526618734306,
+              "mAP@200_min_relevant_k": 0.13035227845826233,
+              "mAP@200_prefix_positive": 0.23235253179343354
+            }
+          },
+          "masked_macro": {
+            "P@200": 0.29217265513260654,
+            "full_mAP": 0.27155447599605687,
+            "mAP@200_all_relevant": 0.055082970806523246,
+            "mAP@200_min_relevant_k": 0.19279031991746642,
+            "mAP@200_prefix_positive": 0.3118219209369125
+          }
+        }
+      },
+      "url": "https://wandb.ai/a-cctest05187-erd/spica/runs/kl6q1zf1"
+    }
+  },
+  "training_source_snapshot_sha256": "9dc0c3df2b730dddf3726587de007ad9df6eccb3d06ccf7a7a0767a0f5e5ec80",
+  "verification": {
+    "campaign_runtime_preserved": "ARMS_FINISHED_UNVERIFIED",
+    "heads": 9,
+    "independent_artifact_hashes_checked": 595,
+    "max_independent_sample_full_ap_delta": 3.2844003268195365e-06,
+    "max_independent_top200_array_delta": 1.4412685189757468e-07,
+    "no_gpu": true,
+    "optimizer_updates": 0,
+    "parent_clean_macro_history_comparisons": 140,
+    "receipt_sha256": {
+      "head_summary": "41a6763a5a7abd64864ceaa8975b60ca5ff42204ccf95fcc7b1107d34de584f4",
+      "independent_cpu": "43f478705ce0a833a814ff224a0b36518dd50735f877c7bd304f79f8abcc397d",
+      "online": "2ca2b1c07e39aac8d84b9ed42011f166591135e05808a989f55734601abc1ae9"
+    },
+    "status": "PASS"
+  }
+}
