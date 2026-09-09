@@ -1,0 +1,1858 @@
+{
+  "backward_calls": 0,
+  "bypass_parity_max_abs": [
+    0.0,
+    0.0
+  ],
+  "checkpoint_sha256": "58fb5fb2aa0f822d1df8bee9192a0bda5eec1580b4ce70ed9ae243fdcf9fb14e",
+  "clean_q_replay_all5scalars_exact": true,
+  "clean_q_top200_and_embeddings_exact": true,
+  "comparisons": {
+    "clean": {
+      "delta": {
+        "P@200": 0.031016600372367087,
+        "full_mAP": 0.01758900259213758,
+        "mAP@200_all_relevant": 0.011060335703567667,
+        "mAP@200_min_relevant_k": 0.0387107298862992,
+        "mAP@200_prefix_positive": 0.031605716006677276
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.4893386746478686,
+        "full_mAP": 0.47408017890958887,
+        "mAP@200_all_relevant": 0.10861403714409693,
+        "mAP@200_min_relevant_k": 0.38014840884231543,
+        "mAP@200_prefix_positive": 0.5038278829704361
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.027852834448282852,
+          "mu_i_full_mAP": 0.76322139199678,
+          "name": "tiger",
+          "q_full_mAP": 0.7910742264450629
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": 0.004200028533476495,
+          "mu_i_full_mAP": 0.09187266177257462,
+          "name": "shoe",
+          "q_full_mAP": 0.09607269030605112
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.04297958567687238,
+          "mu_i_full_mAP": 0.26182340103459645,
+          "name": "hammer",
+          "q_full_mAP": 0.21884381535772407
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.023322945679585958,
+          "mu_i_full_mAP": 0.155743209940871,
+          "name": "spoon",
+          "q_full_mAP": 0.13242026426128506
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.030831197179698695,
+          "mu_i_full_mAP": 0.26337755820325887,
+          "name": "fish",
+          "q_full_mAP": 0.29420875538295754
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": -0.017758930023398078,
+          "mu_i_full_mAP": 0.579932225750217,
+          "name": "hamburger",
+          "q_full_mAP": 0.5621732957268188
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.07286190714098906,
+          "mu_i_full_mAP": 0.8817685090593601,
+          "name": "spider",
+          "q_full_mAP": 0.9546304162003492
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.024960572318430397,
+          "mu_i_full_mAP": 0.263744341891151,
+          "name": "axe",
+          "q_full_mAP": 0.23878376957272057
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": 0.04921541227170102,
+          "mu_i_full_mAP": 0.5799209170841745,
+          "name": "pretzel",
+          "q_full_mAP": 0.6291363293558755
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.04571806480788085,
+          "mu_i_full_mAP": 0.47205562474943735,
+          "name": "hedgehog",
+          "q_full_mAP": 0.5177736895573183
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": 0.04287472262978554,
+          "mu_i_full_mAP": 0.4119880029830066,
+          "name": "strawberry",
+          "q_full_mAP": 0.4548627256127921
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.047061334594164,
+          "mu_i_full_mAP": 0.7562477790761695,
+          "name": "pistol",
+          "q_full_mAP": 0.8033091136703334
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.033643223118290676,
+          "mu_i_full_mAP": 0.37725795132498585,
+          "name": "zebra",
+          "q_full_mAP": 0.41090117444327656
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.10615357657227276,
+          "mu_i_full_mAP": 0.3557866272280243,
+          "name": "bell",
+          "q_full_mAP": 0.46194020380029704
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": -0.005844221033546473,
+          "mu_i_full_mAP": 0.5752113089190736,
+          "name": "trumpet",
+          "q_full_mAP": 0.5693670878855271
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": -0.020510367185482357,
+          "mu_i_full_mAP": 0.376274897569679,
+          "name": "ray",
+          "q_full_mAP": 0.3557645303841967
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.03940132289426401,
+          "mu_i_full_mAP": 0.5381571490899659,
+          "name": "camel",
+          "q_full_mAP": 0.49875582619570197
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.08279645804650884,
+          "mu_i_full_mAP": 0.598797021430426,
+          "name": "piano",
+          "q_full_mAP": 0.6815934794769348
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": 0.0028178778341311416,
+          "mu_i_full_mAP": 0.2938021734698923,
+          "name": "apple",
+          "q_full_mAP": 0.2966200513040234
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.02251642701330514,
+          "mu_i_full_mAP": 0.6609491786561985,
+          "name": "airplane",
+          "q_full_mAP": 0.6384327516428934
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4816,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6147
+      },
+      "q": {
+        "P@200": 0.5203552750202357,
+        "full_mAP": 0.49166918150172645,
+        "mAP@200_all_relevant": 0.11967437284766459,
+        "mAP@200_min_relevant_k": 0.41885913872861463,
+        "mAP@200_prefix_positive": 0.5354335989771134
+      }
+    },
+    "mask_25_101": {
+      "delta": {
+        "P@200": 0.023213992248461157,
+        "full_mAP": 0.013665706985236337,
+        "mAP@200_all_relevant": 0.008265869647592461,
+        "mAP@200_min_relevant_k": 0.028930499998304382,
+        "mAP@200_prefix_positive": 0.023432250872959803
+      },
+      "improved_classes": 11,
+      "mu_i": {
+        "P@200": 0.42052402643798287,
+        "full_mAP": 0.414491872523297,
+        "mAP@200_all_relevant": 0.09099217802064558,
+        "mAP@200_min_relevant_k": 0.3184720449751167,
+        "mAP@200_prefix_positive": 0.43520720311485805
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.026083241562220614,
+          "mu_i_full_mAP": 0.712674999133849,
+          "name": "tiger",
+          "q_full_mAP": 0.7387582406960697
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.008097814350959754,
+          "mu_i_full_mAP": 0.08809747137204413,
+          "name": "shoe",
+          "q_full_mAP": 0.07999965702108439
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.033312406782028806,
+          "mu_i_full_mAP": 0.21470326062118741,
+          "name": "hammer",
+          "q_full_mAP": 0.1813908538391586
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.012553116548614403,
+          "mu_i_full_mAP": 0.12338231326532118,
+          "name": "spoon",
+          "q_full_mAP": 0.11082919671670678
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.021790458366740494,
+          "mu_i_full_mAP": 0.24004577359107013,
+          "name": "fish",
+          "q_full_mAP": 0.26183623195781064
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": -0.0017099024822251707,
+          "mu_i_full_mAP": 0.4754206091951469,
+          "name": "hamburger",
+          "q_full_mAP": 0.4737107067129217
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.06778362007125428,
+          "mu_i_full_mAP": 0.8675560418973889,
+          "name": "spider",
+          "q_full_mAP": 0.9353396619686432
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.020232408557195162,
+          "mu_i_full_mAP": 0.2211132107666977,
+          "name": "axe",
+          "q_full_mAP": 0.20088080220950255
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": 0.015672197308626484,
+          "mu_i_full_mAP": 0.5094685025135692,
+          "name": "pretzel",
+          "q_full_mAP": 0.5251406998221957
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.03897435108290658,
+          "mu_i_full_mAP": 0.4110369824250288,
+          "name": "hedgehog",
+          "q_full_mAP": 0.4500113335079354
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": 0.019084943661635573,
+          "mu_i_full_mAP": 0.3262812309339643,
+          "name": "strawberry",
+          "q_full_mAP": 0.3453661745955998
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.05869002048430808,
+          "mu_i_full_mAP": 0.6474758016865745,
+          "name": "pistol",
+          "q_full_mAP": 0.7061658221708826
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.03987727377323374,
+          "mu_i_full_mAP": 0.37323828496532946,
+          "name": "zebra",
+          "q_full_mAP": 0.4131155587385632
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.0747021561273054,
+          "mu_i_full_mAP": 0.26797696936583676,
+          "name": "bell",
+          "q_full_mAP": 0.34267912549314217
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.009311146069047671,
+          "mu_i_full_mAP": 0.41487559026497745,
+          "name": "trumpet",
+          "q_full_mAP": 0.42418673633402515
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": -0.018951505183791503,
+          "mu_i_full_mAP": 0.3425969367759286,
+          "name": "ray",
+          "q_full_mAP": 0.32364543159213716
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.04565812097571324,
+          "mu_i_full_mAP": 0.4859068866266171,
+          "name": "camel",
+          "q_full_mAP": 0.4402487656509038
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.08177011536279893,
+          "mu_i_full_mAP": 0.5463205862468408,
+          "name": "piano",
+          "q_full_mAP": 0.6280907016096396
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.004008642905308101,
+          "mu_i_full_mAP": 0.2610311869554177,
+          "name": "apple",
+          "q_full_mAP": 0.2570225440501096
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.03040693427276358,
+          "mu_i_full_mAP": 0.5413511139234706,
+          "name": "airplane",
+          "q_full_mAP": 0.510944179650707
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4912,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6051
+      },
+      "q": {
+        "P@200": 0.443738018686444,
+        "full_mAP": 0.42815757950853334,
+        "mAP@200_all_relevant": 0.09925804766823804,
+        "mAP@200_min_relevant_k": 0.3474025449734211,
+        "mAP@200_prefix_positive": 0.45863945398781786
+      }
+    },
+    "mask_25_202": {
+      "delta": {
+        "P@200": 0.02313600252589315,
+        "full_mAP": 0.014259140435607887,
+        "mAP@200_all_relevant": 0.008395519573504581,
+        "mAP@200_min_relevant_k": 0.029384361581330287,
+        "mAP@200_prefix_positive": 0.024006727344539847
+      },
+      "improved_classes": 11,
+      "mu_i": {
+        "P@200": 0.42134861834644577,
+        "full_mAP": 0.4149626739206586,
+        "mAP@200_all_relevant": 0.09106547427164668,
+        "mAP@200_min_relevant_k": 0.3187284552628443,
+        "mAP@200_prefix_positive": 0.435931696386988
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.030500382233362693,
+          "mu_i_full_mAP": 0.7013717438396695,
+          "name": "tiger",
+          "q_full_mAP": 0.7318721260730322
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.008342939504091778,
+          "mu_i_full_mAP": 0.08906715578820196,
+          "name": "shoe",
+          "q_full_mAP": 0.08072421628411018
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.036408945991819576,
+          "mu_i_full_mAP": 0.22033337810479117,
+          "name": "hammer",
+          "q_full_mAP": 0.1839244321129716
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.010502822075000744,
+          "mu_i_full_mAP": 0.1190992984114234,
+          "name": "spoon",
+          "q_full_mAP": 0.10859647633642265
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.021793462239050616,
+          "mu_i_full_mAP": 0.23839003472821788,
+          "name": "fish",
+          "q_full_mAP": 0.2601834969672685
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": -0.0012092194539585193,
+          "mu_i_full_mAP": 0.47626220071806186,
+          "name": "hamburger",
+          "q_full_mAP": 0.47505298126410334
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.07097973540556013,
+          "mu_i_full_mAP": 0.8713761421606729,
+          "name": "spider",
+          "q_full_mAP": 0.9423558775662331
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.020970368312428826,
+          "mu_i_full_mAP": 0.2235241086303216,
+          "name": "axe",
+          "q_full_mAP": 0.20255374031789278
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": 0.008218036370469486,
+          "mu_i_full_mAP": 0.5085670871078424,
+          "name": "pretzel",
+          "q_full_mAP": 0.5167851234783118
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.03956716237202368,
+          "mu_i_full_mAP": 0.41701098940727616,
+          "name": "hedgehog",
+          "q_full_mAP": 0.45657815177929983
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": 0.015871538076211104,
+          "mu_i_full_mAP": 0.32484048965641044,
+          "name": "strawberry",
+          "q_full_mAP": 0.34071202773262155
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.055760405334343476,
+          "mu_i_full_mAP": 0.6277713571337471,
+          "name": "pistol",
+          "q_full_mAP": 0.6835317624680906
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.03726614097727456,
+          "mu_i_full_mAP": 0.37168418141382353,
+          "name": "zebra",
+          "q_full_mAP": 0.40895032239109813
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.07652167719441341,
+          "mu_i_full_mAP": 0.27073258061462374,
+          "name": "bell",
+          "q_full_mAP": 0.3472542578090371
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.010768817444782584,
+          "mu_i_full_mAP": 0.45213564708378284,
+          "name": "trumpet",
+          "q_full_mAP": 0.46290446452856543
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": -0.00960553835074489,
+          "mu_i_full_mAP": 0.3523621434608522,
+          "name": "ray",
+          "q_full_mAP": 0.3427566051101073
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.04599951029813383,
+          "mu_i_full_mAP": 0.4735309277602937,
+          "name": "camel",
+          "q_full_mAP": 0.4275314174621599
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.08758642237035581,
+          "mu_i_full_mAP": 0.5433879176999,
+          "name": "piano",
+          "q_full_mAP": 0.6309743400702559
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.0028491459876120446,
+          "mu_i_full_mAP": 0.2503524702674377,
+          "name": "apple",
+          "q_full_mAP": 0.2475033242798256
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.027614825041978784,
+          "mu_i_full_mAP": 0.5525847038166521,
+          "name": "airplane",
+          "q_full_mAP": 0.5249698787746734
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4834,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6129
+      },
+      "q": {
+        "P@200": 0.4444846208723389,
+        "full_mAP": 0.4292218143562665,
+        "mAP@200_all_relevant": 0.09946099384515127,
+        "mAP@200_min_relevant_k": 0.3481128168441746,
+        "mAP@200_prefix_positive": 0.4599384237315278
+      }
+    },
+    "mask_25_303": {
+      "delta": {
+        "P@200": 0.023579767975260624,
+        "full_mAP": 0.014013247300405984,
+        "mAP@200_all_relevant": 0.008079727165114708,
+        "mAP@200_min_relevant_k": 0.028279192978453715,
+        "mAP@200_prefix_positive": 0.023683473545472455
+      },
+      "improved_classes": 11,
+      "mu_i": {
+        "P@200": 0.4195170027763603,
+        "full_mAP": 0.4136891808224213,
+        "mAP@200_all_relevant": 0.09059738686198392,
+        "mAP@200_min_relevant_k": 0.31709010452985414,
+        "mAP@200_prefix_positive": 0.43452994905186737
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.02590391661267604,
+          "mu_i_full_mAP": 0.7075389633264291,
+          "name": "tiger",
+          "q_full_mAP": 0.7334428799391051
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.010342536884690485,
+          "mu_i_full_mAP": 0.08807920230432384,
+          "name": "shoe",
+          "q_full_mAP": 0.07773666541963335
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.03172063759228346,
+          "mu_i_full_mAP": 0.2165258917604892,
+          "name": "hammer",
+          "q_full_mAP": 0.18480525416820576
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.01283391569693064,
+          "mu_i_full_mAP": 0.12898242922941433,
+          "name": "spoon",
+          "q_full_mAP": 0.1161485135324837
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.02120181682597225,
+          "mu_i_full_mAP": 0.23858616930277396,
+          "name": "fish",
+          "q_full_mAP": 0.2597879861287462
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": -0.004688365840773542,
+          "mu_i_full_mAP": 0.488000684366699,
+          "name": "hamburger",
+          "q_full_mAP": 0.4833123185259255
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.07049318759849196,
+          "mu_i_full_mAP": 0.8625119408037056,
+          "name": "spider",
+          "q_full_mAP": 0.9330051284021976
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.019481682785503242,
+          "mu_i_full_mAP": 0.223682203910489,
+          "name": "axe",
+          "q_full_mAP": 0.20420052112498577
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": 0.011950183780461648,
+          "mu_i_full_mAP": 0.5043032800815875,
+          "name": "pretzel",
+          "q_full_mAP": 0.5162534638620492
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.03740678770740467,
+          "mu_i_full_mAP": 0.4097096579482823,
+          "name": "hedgehog",
+          "q_full_mAP": 0.4471164456556869
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": 0.01450125635347583,
+          "mu_i_full_mAP": 0.31664813071827996,
+          "name": "strawberry",
+          "q_full_mAP": 0.3311493870717558
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.06407424370457689,
+          "mu_i_full_mAP": 0.6263227360360176,
+          "name": "pistol",
+          "q_full_mAP": 0.6903969797405944
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.03829792307482825,
+          "mu_i_full_mAP": 0.3729192729618761,
+          "name": "zebra",
+          "q_full_mAP": 0.4112171960367043
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.08211428170968126,
+          "mu_i_full_mAP": 0.27606770371211997,
+          "name": "bell",
+          "q_full_mAP": 0.35818198542180124
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.00785631890739164,
+          "mu_i_full_mAP": 0.4253770012949263,
+          "name": "trumpet",
+          "q_full_mAP": 0.4332333202023179
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": -0.010766894687922338,
+          "mu_i_full_mAP": 0.33346203653316975,
+          "name": "ray",
+          "q_full_mAP": 0.32269514184524745
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.044336791324894875,
+          "mu_i_full_mAP": 0.47180557001556733,
+          "name": "camel",
+          "q_full_mAP": 0.42746877869067246
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.08441618085564549,
+          "mu_i_full_mAP": 0.547680270206019,
+          "name": "piano",
+          "q_full_mAP": 0.6320964510616645
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.006793110774543709,
+          "mu_i_full_mAP": 0.2622724015957224,
+          "name": "apple",
+          "q_full_mAP": 0.2554792908211787
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.03075764737231869,
+          "mu_i_full_mAP": 0.5557494573125528,
+          "name": "airplane",
+          "q_full_mAP": 0.5249918099402341
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4838,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6125
+      },
+      "q": {
+        "P@200": 0.4430967707516209,
+        "full_mAP": 0.42770242812282727,
+        "mAP@200_all_relevant": 0.09867711402709863,
+        "mAP@200_min_relevant_k": 0.34536929750830786,
+        "mAP@200_prefix_positive": 0.4582134225973398
+      }
+    },
+    "mask_50_101": {
+      "delta": {
+        "P@200": 0.02006749988511558,
+        "full_mAP": 0.013525013615393655,
+        "mAP@200_all_relevant": 0.006652337802351985,
+        "mAP@200_min_relevant_k": 0.02328329617786362,
+        "mAP@200_prefix_positive": 0.019422418431017052
+      },
+      "improved_classes": 11,
+      "mu_i": {
+        "P@200": 0.3460827251785995,
+        "full_mAP": 0.3494108588434161,
+        "mAP@200_all_relevant": 0.07184200432725857,
+        "mAP@200_min_relevant_k": 0.2514462460941106,
+        "mAP@200_prefix_positive": 0.361884201615551
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.021986238193438853,
+          "mu_i_full_mAP": 0.6125659241326271,
+          "name": "tiger",
+          "q_full_mAP": 0.634552162326066
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.011638211946363651,
+          "mu_i_full_mAP": 0.08958519721073249,
+          "name": "shoe",
+          "q_full_mAP": 0.07794698526436884
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.026422178786305674,
+          "mu_i_full_mAP": 0.19037820423493185,
+          "name": "hammer",
+          "q_full_mAP": 0.16395602544862617
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.00046159583191896224,
+          "mu_i_full_mAP": 0.10958220645324471,
+          "name": "spoon",
+          "q_full_mAP": 0.10912061062132575
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.0161225458025001,
+          "mu_i_full_mAP": 0.21421645996160804,
+          "name": "fish",
+          "q_full_mAP": 0.23033900576410815
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.01598198206521539,
+          "mu_i_full_mAP": 0.3870083304742972,
+          "name": "hamburger",
+          "q_full_mAP": 0.4029903125395126
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.09622458580946713,
+          "mu_i_full_mAP": 0.7960641674958823,
+          "name": "spider",
+          "q_full_mAP": 0.8922887533053494
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.015660034958273172,
+          "mu_i_full_mAP": 0.19926120485246612,
+          "name": "axe",
+          "q_full_mAP": 0.18360116989419295
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": -0.00883474652083015,
+          "mu_i_full_mAP": 0.4715714406599585,
+          "name": "pretzel",
+          "q_full_mAP": 0.4627366941391283
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.02952952577882391,
+          "mu_i_full_mAP": 0.3397752941058945,
+          "name": "hedgehog",
+          "q_full_mAP": 0.3693048198847184
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.005505749041383917,
+          "mu_i_full_mAP": 0.24738272906704384,
+          "name": "strawberry",
+          "q_full_mAP": 0.2418769800256599
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.0610812376642904,
+          "mu_i_full_mAP": 0.4857848506472797,
+          "name": "pistol",
+          "q_full_mAP": 0.5468660883115701
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.04147829054637835,
+          "mu_i_full_mAP": 0.3579875563795421,
+          "name": "zebra",
+          "q_full_mAP": 0.39946584692592046
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.04010577924869287,
+          "mu_i_full_mAP": 0.2119401368736498,
+          "name": "bell",
+          "q_full_mAP": 0.2520459161223427
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.012647952212231053,
+          "mu_i_full_mAP": 0.31736461610548317,
+          "name": "trumpet",
+          "q_full_mAP": 0.33001256831771425
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.004637234521886477,
+          "mu_i_full_mAP": 0.25661098659754944,
+          "name": "ray",
+          "q_full_mAP": 0.2612482211194359
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.04132448414748069,
+          "mu_i_full_mAP": 0.40376944340823684,
+          "name": "camel",
+          "q_full_mAP": 0.36244495926075615
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.07977268855026685,
+          "mu_i_full_mAP": 0.4713892370587251,
+          "name": "piano",
+          "q_full_mAP": 0.5511619256089919
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.0066214083785009,
+          "mu_i_full_mAP": 0.19496280505524544,
+          "name": "apple",
+          "q_full_mAP": 0.18834139667674452
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.02174389137913316,
+          "mu_i_full_mAP": 0.42783092093485803,
+          "name": "airplane",
+          "q_full_mAP": 0.40608702955572484
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4829,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6134
+      },
+      "q": {
+        "P@200": 0.3661502250637151,
+        "full_mAP": 0.36293587245880976,
+        "mAP@200_all_relevant": 0.07849434212961055,
+        "mAP@200_min_relevant_k": 0.2747295422719742,
+        "mAP@200_prefix_positive": 0.38130662004656807
+      }
+    },
+    "mask_50_202": {
+      "delta": {
+        "P@200": 0.018730730328902268,
+        "full_mAP": 0.013813264178327789,
+        "mAP@200_all_relevant": 0.006496175726270578,
+        "mAP@200_min_relevant_k": 0.022736699265655913,
+        "mAP@200_prefix_positive": 0.017447801244956596
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.34355102796861897,
+        "full_mAP": 0.3463791174587964,
+        "mAP@200_all_relevant": 0.07061350939597937,
+        "mAP@200_min_relevant_k": 0.24714644322739082,
+        "mAP@200_prefix_positive": 0.3590953034653082
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.024260357670045175,
+          "mu_i_full_mAP": 0.5962623281600585,
+          "name": "tiger",
+          "q_full_mAP": 0.6205226858301037
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.010877702693124451,
+          "mu_i_full_mAP": 0.09087725744522628,
+          "name": "shoe",
+          "q_full_mAP": 0.07999955475210183
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.028493364590016577,
+          "mu_i_full_mAP": 0.1941816289356161,
+          "name": "hammer",
+          "q_full_mAP": 0.16568826434559952
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": 0.0019869650954131,
+          "mu_i_full_mAP": 0.10818393768108997,
+          "name": "spoon",
+          "q_full_mAP": 0.11017090277650307
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.01906781973472486,
+          "mu_i_full_mAP": 0.22373063263172904,
+          "name": "fish",
+          "q_full_mAP": 0.2427984523664539
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.017238083456638995,
+          "mu_i_full_mAP": 0.4039471168542587,
+          "name": "hamburger",
+          "q_full_mAP": 0.42118520031089773
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.10027052788227274,
+          "mu_i_full_mAP": 0.7766992729287922,
+          "name": "spider",
+          "q_full_mAP": 0.8769698008110649
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.015909806315692655,
+          "mu_i_full_mAP": 0.1964333719553669,
+          "name": "axe",
+          "q_full_mAP": 0.18052356563967423
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": -0.0008911405847813204,
+          "mu_i_full_mAP": 0.46297061602674744,
+          "name": "pretzel",
+          "q_full_mAP": 0.46207947544196615
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.02410109974713373,
+          "mu_i_full_mAP": 0.33531839774069366,
+          "name": "hedgehog",
+          "q_full_mAP": 0.3594194974878274
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.008374589681625366,
+          "mu_i_full_mAP": 0.25858325895938006,
+          "name": "strawberry",
+          "q_full_mAP": 0.2502086692777547
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.06475134947860384,
+          "mu_i_full_mAP": 0.44174450688969447,
+          "name": "pistol",
+          "q_full_mAP": 0.5064958563682983
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.04065754999636963,
+          "mu_i_full_mAP": 0.35933234192444324,
+          "name": "zebra",
+          "q_full_mAP": 0.39998989192081286
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.03736556096197064,
+          "mu_i_full_mAP": 0.21725455463391297,
+          "name": "bell",
+          "q_full_mAP": 0.2546201155958836
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.010510746325786796,
+          "mu_i_full_mAP": 0.3357176417409773,
+          "name": "trumpet",
+          "q_full_mAP": 0.3462283880667641
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.00015576666969264674,
+          "mu_i_full_mAP": 0.24853682573725525,
+          "name": "ray",
+          "q_full_mAP": 0.2486925924069479
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.03317271580162924,
+          "mu_i_full_mAP": 0.37846848150657025,
+          "name": "camel",
+          "q_full_mAP": 0.345295765704941
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.07723903560081277,
+          "mu_i_full_mAP": 0.4629517410975442,
+          "name": "piano",
+          "q_full_mAP": 0.540190776698357
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.004344046506249976,
+          "mu_i_full_mAP": 0.20194802287140648,
+          "name": "apple",
+          "q_full_mAP": 0.1976039763651565
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.0290834646310222,
+          "mu_i_full_mAP": 0.4400254235643899,
+          "name": "airplane",
+          "q_full_mAP": 0.4109419589333677
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4764,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6199
+      },
+      "q": {
+        "P@200": 0.36228175829752124,
+        "full_mAP": 0.3601923816371242,
+        "mAP@200_all_relevant": 0.07710968512224994,
+        "mAP@200_min_relevant_k": 0.26988314249304673,
+        "mAP@200_prefix_positive": 0.3765431047102648
+      }
+    },
+    "mask_50_303": {
+      "delta": {
+        "P@200": 0.021649639599785053,
+        "full_mAP": 0.015243956114249668,
+        "mAP@200_all_relevant": 0.007366581068000505,
+        "mAP@200_min_relevant_k": 0.02578298472391316,
+        "mAP@200_prefix_positive": 0.020479412788572293
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.3408036046265308,
+        "full_mAP": 0.3452749138080045,
+        "mAP@200_all_relevant": 0.07006976959764845,
+        "mAP@200_min_relevant_k": 0.2452434365818621,
+        "mAP@200_prefix_positive": 0.35577703042507675
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.023040282124758282,
+          "mu_i_full_mAP": 0.6206832093335849,
+          "name": "tiger",
+          "q_full_mAP": 0.6437234914583432
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.01088548542165588,
+          "mu_i_full_mAP": 0.0896829208884869,
+          "name": "shoe",
+          "q_full_mAP": 0.078797435466831
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.028808958193675172,
+          "mu_i_full_mAP": 0.19182546644530896,
+          "name": "hammer",
+          "q_full_mAP": 0.16301650825163377
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": -0.00041572214248254127,
+          "mu_i_full_mAP": 0.11228435973531192,
+          "name": "spoon",
+          "q_full_mAP": 0.11186863759282938
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.017826314685711015,
+          "mu_i_full_mAP": 0.21805434073709573,
+          "name": "fish",
+          "q_full_mAP": 0.23588065542280673
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.01221639390657597,
+          "mu_i_full_mAP": 0.39528658072059414,
+          "name": "hamburger",
+          "q_full_mAP": 0.4075029746271701
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.0988860418497209,
+          "mu_i_full_mAP": 0.7798469135701134,
+          "name": "spider",
+          "q_full_mAP": 0.8787329554198342
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.010962221700617152,
+          "mu_i_full_mAP": 0.19594352684267188,
+          "name": "axe",
+          "q_full_mAP": 0.18498130514205474
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": 0.0005220193353998305,
+          "mu_i_full_mAP": 0.46978466515970785,
+          "name": "pretzel",
+          "q_full_mAP": 0.47030668449510765
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.031169530061523263,
+          "mu_i_full_mAP": 0.33540387412913775,
+          "name": "hedgehog",
+          "q_full_mAP": 0.36657340419066103
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.0042002403431318025,
+          "mu_i_full_mAP": 0.23956481341949917,
+          "name": "strawberry",
+          "q_full_mAP": 0.23536457307636738
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.06743758854148278,
+          "mu_i_full_mAP": 0.4426945442652916,
+          "name": "pistol",
+          "q_full_mAP": 0.5101321328067744
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.04059264993154874,
+          "mu_i_full_mAP": 0.350972536430564,
+          "name": "zebra",
+          "q_full_mAP": 0.39156518636211274
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.04618649136400156,
+          "mu_i_full_mAP": 0.21719357776177575,
+          "name": "bell",
+          "q_full_mAP": 0.2633800691257773
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.009029482314813762,
+          "mu_i_full_mAP": 0.3300271728526681,
+          "name": "trumpet",
+          "q_full_mAP": 0.33905665516748185
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.002538201614068105,
+          "mu_i_full_mAP": 0.252341131763294,
+          "name": "ray",
+          "q_full_mAP": 0.25487933337736207
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.03610654140356928,
+          "mu_i_full_mAP": 0.3816003387939418,
+          "name": "camel",
+          "q_full_mAP": 0.3454937973903725
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.08273150547813275,
+          "mu_i_full_mAP": 0.4641404000046865,
+          "name": "piano",
+          "q_full_mAP": 0.5468719054828193
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.004774957716821911,
+          "mu_i_full_mAP": 0.20145861955430217,
+          "name": "apple",
+          "q_full_mAP": 0.19668366183748026
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.022375901488301788,
+          "mu_i_full_mAP": 0.4178551055338341,
+          "name": "airplane",
+          "q_full_mAP": 0.39547920404553233
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4757,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6206
+      },
+      "q": {
+        "P@200": 0.36245324422631586,
+        "full_mAP": 0.3605188699222542,
+        "mAP@200_all_relevant": 0.07743635066564895,
+        "mAP@200_min_relevant_k": 0.27102642130577526,
+        "mAP@200_prefix_positive": 0.37625644321364904
+      }
+    },
+    "mask_75_101": {
+      "delta": {
+        "P@200": 0.014510170471228656,
+        "full_mAP": 0.012103297878751695,
+        "mAP@200_all_relevant": 0.004540816175136755,
+        "mAP@200_min_relevant_k": 0.01589306342199101,
+        "mAP@200_prefix_positive": 0.01247639061840955
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.25446227647368896,
+        "full_mAP": 0.26632052116435145,
+        "mAP@200_all_relevant": 0.048681223013273434,
+        "mAP@200_min_relevant_k": 0.17038347367579162,
+        "mAP@200_prefix_positive": 0.27143450772819117
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.008045511032638784,
+          "mu_i_full_mAP": 0.41814166770019656,
+          "name": "tiger",
+          "q_full_mAP": 0.42618717873283535
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.01944384182007202,
+          "mu_i_full_mAP": 0.09783731717916747,
+          "name": "shoe",
+          "q_full_mAP": 0.07839347535909544
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.008229891575629247,
+          "mu_i_full_mAP": 0.17463453298053108,
+          "name": "hammer",
+          "q_full_mAP": 0.16640464140490185
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": 0.004232881302686082,
+          "mu_i_full_mAP": 0.11022259336464184,
+          "name": "spoon",
+          "q_full_mAP": 0.11445547466732792
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.014523428891940663,
+          "mu_i_full_mAP": 0.17860922696612155,
+          "name": "fish",
+          "q_full_mAP": 0.19313265585806222
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.03507785226379517,
+          "mu_i_full_mAP": 0.26976306830387453,
+          "name": "hamburger",
+          "q_full_mAP": 0.3048409205676697
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.1189843697015915,
+          "mu_i_full_mAP": 0.6385564373969509,
+          "name": "spider",
+          "q_full_mAP": 0.7575408070985424
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.0038248610689534225,
+          "mu_i_full_mAP": 0.1774955735899562,
+          "name": "axe",
+          "q_full_mAP": 0.17367071252100277
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": -0.025153054821728867,
+          "mu_i_full_mAP": 0.41368411728908056,
+          "name": "pretzel",
+          "q_full_mAP": 0.3885310624673517
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.028520824114840887,
+          "mu_i_full_mAP": 0.2662882909421248,
+          "name": "hedgehog",
+          "q_full_mAP": 0.2948091150569657
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.013369436406276443,
+          "mu_i_full_mAP": 0.1841128266297958,
+          "name": "strawberry",
+          "q_full_mAP": 0.17074339022351936
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.055195792466847304,
+          "mu_i_full_mAP": 0.2981039191191771,
+          "name": "pistol",
+          "q_full_mAP": 0.3532997115860244
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.040557277509041374,
+          "mu_i_full_mAP": 0.308911890712797,
+          "name": "zebra",
+          "q_full_mAP": 0.3494691682218384
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.010548741518478118,
+          "mu_i_full_mAP": 0.19510260203144333,
+          "name": "bell",
+          "q_full_mAP": 0.20565134354992143
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.0015291530571337189,
+          "mu_i_full_mAP": 0.22590632763345755,
+          "name": "trumpet",
+          "q_full_mAP": 0.22743548069059127
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.011976717720524622,
+          "mu_i_full_mAP": 0.14402772359247518,
+          "name": "ray",
+          "q_full_mAP": 0.15600444131299981
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.030370801239041612,
+          "mu_i_full_mAP": 0.2857704699417809,
+          "name": "camel",
+          "q_full_mAP": 0.2553996687027393
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.07093374861808366,
+          "mu_i_full_mAP": 0.308362011996474,
+          "name": "piano",
+          "q_full_mAP": 0.37929576061455766
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.007857655191760578,
+          "mu_i_full_mAP": 0.16569937274841492,
+          "name": "apple",
+          "q_full_mAP": 0.15784171755665433
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.033841117919735014,
+          "mu_i_full_mAP": 0.3134132656713945,
+          "name": "airplane",
+          "q_full_mAP": 0.27957214775165945
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4889,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6074
+      },
+      "q": {
+        "P@200": 0.2689724469449176,
+        "full_mAP": 0.27842381904310315,
+        "mAP@200_all_relevant": 0.05322203918841019,
+        "mAP@200_min_relevant_k": 0.18627653709778264,
+        "mAP@200_prefix_positive": 0.2839108983466007
+      }
+    },
+    "mask_75_202": {
+      "delta": {
+        "P@200": 0.015099425283045309,
+        "full_mAP": 0.012654893365480036,
+        "mAP@200_all_relevant": 0.004601407126151147,
+        "mAP@200_min_relevant_k": 0.016105155169146096,
+        "mAP@200_prefix_positive": 0.013119701709847054
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.2512852263419496,
+        "full_mAP": 0.26371255633967056,
+        "mAP@200_all_relevant": 0.0477830307374504,
+        "mAP@200_min_relevant_k": 0.16723974549090975,
+        "mAP@200_prefix_positive": 0.26798925342075314
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.004284724184616992,
+          "mu_i_full_mAP": 0.43039220074543794,
+          "name": "tiger",
+          "q_full_mAP": 0.4346769249300549
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.018121058297824236,
+          "mu_i_full_mAP": 0.09706931410267228,
+          "name": "shoe",
+          "q_full_mAP": 0.07894825580484804
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.011217954102102122,
+          "mu_i_full_mAP": 0.17666173598724266,
+          "name": "hammer",
+          "q_full_mAP": 0.16544378188514053
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": 0.005080841512409682,
+          "mu_i_full_mAP": 0.10660973862581646,
+          "name": "spoon",
+          "q_full_mAP": 0.11169058013822615
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.013757676053016137,
+          "mu_i_full_mAP": 0.18832401353865863,
+          "name": "fish",
+          "q_full_mAP": 0.20208168959167475
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.03776352691468056,
+          "mu_i_full_mAP": 0.2879426752881222,
+          "name": "hamburger",
+          "q_full_mAP": 0.3257062022028027
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.12346398862765023,
+          "mu_i_full_mAP": 0.6063495014843188,
+          "name": "spider",
+          "q_full_mAP": 0.729813490111969
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.0030769133447682943,
+          "mu_i_full_mAP": 0.1745174942922819,
+          "name": "axe",
+          "q_full_mAP": 0.1714405809475136
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": -0.022391438617237976,
+          "mu_i_full_mAP": 0.4004915650482243,
+          "name": "pretzel",
+          "q_full_mAP": 0.37810012643098634
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.028062854992869105,
+          "mu_i_full_mAP": 0.26589187010314325,
+          "name": "hedgehog",
+          "q_full_mAP": 0.29395472509601234
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.016174246032129636,
+          "mu_i_full_mAP": 0.19539992932230235,
+          "name": "strawberry",
+          "q_full_mAP": 0.17922568329017272
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.05660975084035283,
+          "mu_i_full_mAP": 0.2898003947717023,
+          "name": "pistol",
+          "q_full_mAP": 0.3464101456120551
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.047821638234440356,
+          "mu_i_full_mAP": 0.3082930371198656,
+          "name": "zebra",
+          "q_full_mAP": 0.35611467535430597
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.013795710905496753,
+          "mu_i_full_mAP": 0.1833654180440162,
+          "name": "bell",
+          "q_full_mAP": 0.19716112894951296
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.00226992717193019,
+          "mu_i_full_mAP": 0.20719820587715554,
+          "name": "trumpet",
+          "q_full_mAP": 0.20946813304908574
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.015183910600140564,
+          "mu_i_full_mAP": 0.14647964832301325,
+          "name": "ray",
+          "q_full_mAP": 0.1616635589231538
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.026753265265142545,
+          "mu_i_full_mAP": 0.2814965620840667,
+          "name": "camel",
+          "q_full_mAP": 0.25474329681892416
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.0640970526272973,
+          "mu_i_full_mAP": 0.3202860719135041,
+          "name": "piano",
+          "q_full_mAP": 0.3843831245408014
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.005587991189486728,
+          "mu_i_full_mAP": 0.168921014275439,
+          "name": "apple",
+          "q_full_mAP": 0.1633330230859523
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.03742871086970989,
+          "mu_i_full_mAP": 0.29193578226624656,
+          "name": "airplane",
+          "q_full_mAP": 0.25450707139653667
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4789,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6174
+      },
+      "q": {
+        "P@200": 0.2663846516249949,
+        "full_mAP": 0.2763674497051506,
+        "mAP@200_all_relevant": 0.05238443786360155,
+        "mAP@200_min_relevant_k": 0.18334490066005585,
+        "mAP@200_prefix_positive": 0.2811089551306002
+      }
+    },
+    "mask_75_303": {
+      "delta": {
+        "P@200": 0.015528596342656575,
+        "full_mAP": 0.01266840264006791,
+        "mAP@200_all_relevant": 0.004800356449207711,
+        "mAP@200_min_relevant_k": 0.016801442315834025,
+        "mAP@200_prefix_positive": 0.012726343809096485
+      },
+      "improved_classes": 12,
+      "mu_i": {
+        "P@200": 0.25361031973913745,
+        "full_mAP": 0.2655847649331509,
+        "mAP@200_all_relevant": 0.0485600539344483,
+        "mAP@200_min_relevant_k": 0.16995947232750291,
+        "mAP@200_prefix_positive": 0.2710048964431112
+      },
+      "per_class": {
+        "13": {
+          "count": 693,
+          "full_mAP_delta": 0.004380493829346666,
+          "mu_i_full_mAP": 0.44125133768680896,
+          "name": "tiger",
+          "q_full_mAP": 0.4456318315161556
+        },
+        "16": {
+          "count": 496,
+          "full_mAP_delta": -0.016618588717744475,
+          "mu_i_full_mAP": 0.09254198122559296,
+          "name": "shoe",
+          "q_full_mAP": 0.07592339250784848
+        },
+        "27": {
+          "count": 581,
+          "full_mAP_delta": -0.011508482112429023,
+          "mu_i_full_mAP": 0.17885637233953877,
+          "name": "hammer",
+          "q_full_mAP": 0.16734789022710975
+        },
+        "28": {
+          "count": 485,
+          "full_mAP_delta": 0.004023327881988791,
+          "mu_i_full_mAP": 0.11217385101103292,
+          "name": "spoon",
+          "q_full_mAP": 0.1161971788930217
+        },
+        "31": {
+          "count": 480,
+          "full_mAP_delta": 0.01701861476758495,
+          "mu_i_full_mAP": 0.18076603775455927,
+          "name": "fish",
+          "q_full_mAP": 0.19778465252214422
+        },
+        "33": {
+          "count": 474,
+          "full_mAP_delta": 0.035916556002973,
+          "mu_i_full_mAP": 0.26811057124444077,
+          "name": "hamburger",
+          "q_full_mAP": 0.30402712724741376
+        },
+        "34": {
+          "count": 570,
+          "full_mAP_delta": 0.12020118941405886,
+          "mu_i_full_mAP": 0.6235671359294078,
+          "name": "spider",
+          "q_full_mAP": 0.7437683253434666
+        },
+        "39": {
+          "count": 552,
+          "full_mAP_delta": -0.0020109633813895607,
+          "mu_i_full_mAP": 0.17709413474169222,
+          "name": "axe",
+          "q_full_mAP": 0.17508317136030266
+        },
+        "42": {
+          "count": 602,
+          "full_mAP_delta": -0.02515532762629051,
+          "mu_i_full_mAP": 0.4152747922487235,
+          "name": "pretzel",
+          "q_full_mAP": 0.390119464622433
+        },
+        "45": {
+          "count": 553,
+          "full_mAP_delta": 0.03503830979492306,
+          "mu_i_full_mAP": 0.2666592068875892,
+          "name": "hedgehog",
+          "q_full_mAP": 0.30169751668251227
+        },
+        "51": {
+          "count": 550,
+          "full_mAP_delta": -0.014277294816618616,
+          "mu_i_full_mAP": 0.18118655794384805,
+          "name": "strawberry",
+          "q_full_mAP": 0.16690926312722942
+        },
+        "52": {
+          "count": 502,
+          "full_mAP_delta": 0.05937474108564545,
+          "mu_i_full_mAP": 0.3013325872203981,
+          "name": "pistol",
+          "q_full_mAP": 0.3607073283060435
+        },
+        "53": {
+          "count": 558,
+          "full_mAP_delta": 0.042454330280663505,
+          "mu_i_full_mAP": 0.3019248055140605,
+          "name": "zebra",
+          "q_full_mAP": 0.34437913579472396
+        },
+        "60": {
+          "count": 536,
+          "full_mAP_delta": 0.00964307409377574,
+          "mu_i_full_mAP": 0.19383898905283814,
+          "name": "bell",
+          "q_full_mAP": 0.20348206314661388
+        },
+        "65": {
+          "count": 496,
+          "full_mAP_delta": 0.0010337800748886601,
+          "mu_i_full_mAP": 0.20189178935552557,
+          "name": "trumpet",
+          "q_full_mAP": 0.20292556943041423
+        },
+        "7": {
+          "count": 468,
+          "full_mAP_delta": 0.013752063700499443,
+          "mu_i_full_mAP": 0.14681131510127687,
+          "name": "ray",
+          "q_full_mAP": 0.1605633788017763
+        },
+        "75": {
+          "count": 640,
+          "full_mAP_delta": -0.027917091149720363,
+          "mu_i_full_mAP": 0.2907444258133182,
+          "name": "camel",
+          "q_full_mAP": 0.26282733466359787
+        },
+        "86": {
+          "count": 567,
+          "full_mAP_delta": 0.06621473845968276,
+          "mu_i_full_mAP": 0.3153220503122876,
+          "name": "piano",
+          "q_full_mAP": 0.38153678877197034
+        },
+        "90": {
+          "count": 501,
+          "full_mAP_delta": -0.00772656623400495,
+          "mu_i_full_mAP": 0.1669654008335696,
+          "name": "apple",
+          "q_full_mAP": 0.15923883459956464
+        },
+        "99": {
+          "count": 659,
+          "full_mAP_delta": -0.03273304733581988,
+          "mu_i_full_mAP": 0.2980964703793455,
+          "name": "airplane",
+          "q_full_mAP": 0.2653634230435256
+        }
+      },
+      "per_query_AP_win_loss_tie": {
+        "loss": 4887,
+        "tie": 0,
+        "tolerance": 1e-07,
+        "win": 6076
+      },
+      "q": {
+        "P@200": 0.269138916081794,
+        "full_mAP": 0.27825316757321883,
+        "mAP@200_all_relevant": 0.053360410383656014,
+        "mAP@200_min_relevant_k": 0.18676091464333694,
+        "mAP@200_prefix_positive": 0.2837312402522077
+      }
+    }
+  },
+  "control_probe": "/home/oslamelon/Desktop/Projects/spica/outputs/fusion_mp_execution_20260909T115500Z/runs/F2_MP/probe_step3600.json",
+  "control_probe_sha256": "267492091d44e9231ded5a33bb6c2ed8cfc8fbaf8b1fcba7ba987e271694fc2e",
+  "elapsed_seconds": 111.9238907879917,
+  "features_sha256": "03c7c96a8847db51f3189dcb665534e78ccf24b72ebe70a2e3febb5208d5a0a5",
+  "head": "q",
+  "main_training_head_unchanged": "mu_i",
+  "mask_records_count": 98667,
+  "mask_records_equal": true,
+  "masked_by_fraction": {
+    "0.25": {
+      "delta": {
+        "P@200": 0.023309920916538274,
+        "full_mAP": 0.013979364907083403,
+        "mAP@200_all_relevant": 0.008247038795403921,
+        "mAP@200_min_relevant_k": 0.02886468485269611,
+        "mAP@200_prefix_positive": 0.023707483920990646
+      },
+      "mu_i": {
+        "P@200": 0.4204632158535963,
+        "full_mAP": 0.4143812424221256,
+        "mAP@200_all_relevant": 0.09088501305142539,
+        "mAP@200_min_relevant_k": 0.3180968682559384,
+        "mAP@200_prefix_positive": 0.43522294951790447
+      },
+      "q": {
+        "P@200": 0.4437731367701346,
+        "full_mAP": 0.428360607329209,
+        "mAP@200_all_relevant": 0.09913205184682931,
+        "mAP@200_min_relevant_k": 0.3469615531086345,
+        "mAP@200_prefix_positive": 0.4589304334388951
+      }
+    },
+    "0.5": {
+      "delta": {
+        "P@200": 0.02014928993793419,
+        "full_mAP": 0.014194077969323704,
+        "mAP@200_all_relevant": 0.006838364865541041,
+        "mAP@200_min_relevant_k": 0.023934326722477584,
+        "mAP@200_prefix_positive": 0.019116544154848703
+      },
+      "mu_i": {
+        "P@200": 0.34347911925791647,
+        "full_mAP": 0.347021630036739,
+        "mAP@200_all_relevant": 0.07084176110696212,
+        "mAP@200_min_relevant_k": 0.24794537530112115,
+        "mAP@200_prefix_positive": 0.3589188451686453
+      },
+      "q": {
+        "P@200": 0.36362840919585065,
+        "full_mAP": 0.36121570800606273,
+        "mAP@200_all_relevant": 0.07768012597250316,
+        "mAP@200_min_relevant_k": 0.27187970202359873,
+        "mAP@200_prefix_positive": 0.378035389323494
+      }
+    },
+    "0.75": {
+      "delta": {
+        "P@200": 0.01504606403231018,
+        "full_mAP": 0.012475531294766529,
+        "mAP@200_all_relevant": 0.004647526583498533,
+        "mAP@200_min_relevant_k": 0.016266553635657044,
+        "mAP@200_prefix_positive": 0.01277414537911764
+      },
+      "mu_i": {
+        "P@200": 0.25311927418492536,
+        "full_mAP": 0.2652059474790576,
+        "mAP@200_all_relevant": 0.048341435895057384,
+        "mAP@200_min_relevant_k": 0.16919423049806812,
+        "mAP@200_prefix_positive": 0.2701428858640185
+      },
+      "q": {
+        "P@200": 0.26816533821723554,
+        "full_mAP": 0.27768147877382415,
+        "mAP@200_all_relevant": 0.05298896247855592,
+        "mAP@200_min_relevant_k": 0.18546078413372516,
+        "mAP@200_prefix_positive": 0.28291703124313616
+      }
+    }
+  },
+  "masked_macro": {
+    "delta": {
+      "P@200": 0.019501758295594196,
+      "full_mAP": 0.013549658057057823,
+      "mAP@200_all_relevant": 0.006577643414814496,
+      "mAP@200_min_relevant_k": 0.02302185507027696,
+      "mAP@200_prefix_positive": 0.018532724484985663
+    },
+    "mu_i": {
+      "P@200": 0.3390205364321461,
+      "full_mAP": 0.34220293997930745,
+      "mAP@200_all_relevant": 0.07002273668448163,
+      "mAP@200_min_relevant_k": 0.24507882468504252,
+      "mAP@200_prefix_positive": 0.3547615601835228
+    },
+    "q": {
+      "P@200": 0.3585222947277403,
+      "full_mAP": 0.3557525980363653,
+      "mAP@200_all_relevant": 0.07660038009929612,
+      "mAP@200_min_relevant_k": 0.2681006797553195,
+      "mAP@200_prefix_positive": 0.37329428466850845
+    }
+  },
+  "model_state_after": "6419b0b94a9d20c17a6b0e7e781d949672899d929bfcefc2dc321e437672e4bd",
+  "model_state_before": "6419b0b94a9d20c17a6b0e7e781d949672899d929bfcefc2dc321e437672e4bd",
+  "official_unseen": false,
+  "optimizer_updates": 0,
+  "parent_verification": {
+    "all_five_metric_wins_all_cases": true,
+    "comparison_cases": 10,
+    "features_sha256": "03c7c96a8847db51f3189dcb665534e78ccf24b72ebe70a2e3febb5208d5a0a5",
+    "independent_receipt_sha256": "b5711c57a84f3c15ee80fd3a3a52de9917e653c39ca8dc00a259fd3d8f441c67",
+    "optimizer_updates": 0,
+    "predictor_calls": 0,
+    "q_probe_sha256": "db23ae8886718ee35aa0601b158f46e0f945e2cc2d1ae424ff94b449f2babc40",
+    "real_bypass_parity_exact": true,
+    "state_unchanged": true,
+    "status": "PASS"
+  },
+  "predictor_calls_during_full_eval": 0,
+  "probe_sha256": "db23ae8886718ee35aa0601b158f46e0f945e2cc2d1ae424ff94b449f2babc40",
+  "query_gallery_identities_equal": true,
+  "selection": "fixed3600 before new masked evaluation; clean q already observed",
+  "source_snapshot_sha256": "6c5f39041205c5b60b8220857e2accc651ff11e8e58f264834c9f775df7b15aa",
+  "status": "COMPLETE",
+  "step": 3600,
+  "training_source_sha256": "ab064ced3b11c95f142ac94b336072d88312f5e14d776a386416bbf3cf70f29e"
+}
