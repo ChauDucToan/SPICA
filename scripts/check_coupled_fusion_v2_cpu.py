@@ -227,6 +227,24 @@ def check_routing() -> dict[str, Any]:
     assert calls == 0
     resolved = _arm_protocol("F2", "coupled_predictive_fusion_v2", None)
     assert resolved == {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_v2", "positive_pool": "full"}
+    assert _arm_protocol("F2_SIG", "coupled_predictive_fusion_v2", "new-receipt.json") == resolved
+    try:
+        _arm_protocol("F2_SIG", "coupled_predictive_fusion_v2", None)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("F2_SIG accepted a missing diagnostic")
+    # A V1 PASS label alone must never enable the F2 regularizer scale.
+    old_receipt = {"status": "PASS", "verified": True, "formula_identity": "old",
+                   "architecture_identity": "predictive", "gradient_batch_source": "old", "lambda_sig": .0078}
+    with patch.object(trainer, "_diagnostic_payload", return_value=old_receipt):
+        try:
+            trainer._diagnostic_lambda(Path("unused"), class_ids=[], initialization={}, source_hash="",
+                                       config={"architecture": "predictive_fusion_v2"})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("F2_SIG accepted the old V1 diagnostic")
     from spica.evaluation.coupled_predictive import CoupledPredictiveAdapter
     adapter = CoupledPredictiveAdapter(object(), query="mu_i")
     assert adapter.query == "mu_i"

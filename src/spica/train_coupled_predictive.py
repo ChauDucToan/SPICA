@@ -127,6 +127,8 @@ def _initialization_hashes(model: CoupledPredictiveModel) -> dict[str, Any]:
         "text": _tensor_hash(model.text_bank.context),
         "T0": _tensor_hash(model.T0),
     }
+    if model.architecture == "predictive_fusion_v2":
+        groups["predictor"] = _state_hash(model, prefix="predictor.")
     return {"groups": groups, "model": hashlib.sha256(json.dumps(groups, sort_keys=True).encode()).hexdigest()}
 
 
@@ -252,6 +254,25 @@ def _diagnostic_payload(path: Path) -> Mapping[str, Any]:
 
 def _diagnostic_lambda(path: Path, *, class_ids: list[int], initialization: Mapping[str, Any], source_hash: str, config: Mapping[str, Any]) -> float:
     payload = _diagnostic_payload(path)
+    if config.get("architecture") == "predictive_fusion_v2":
+        expected = {"architecture": "predictive_fusion_v2", "positive_pool": "full",
+                    "task_identity": "mean_views(rank_i+ce_i)", "batch_size": 32}
+        reported = payload.get("resolved_config", {})
+        if any(reported.get(key) != val for key, val in expected.items()):
+            raise ValueError("F2_SIG requires a new F2/full-pool/main-mu_i diagnostic, not V1")
+        if payload.get("batches") != 4 or payload.get("rho") != 0.1:
+            raise ValueError("F2_SIG requires the locked four-batch rho0.1 protocol")
+        required_components = {"src/spica/models/coupled_predictive.py", "src/spica/models/sigreg.py",
+                               "src/spica/coupled_predictive_losses.py", "src/spica/data/coupled_training.py"}
+        if not required_components <= payload.get("component_sha256", {}).keys():
+            raise ValueError("F2 diagnostic is missing required source components")
+        if payload.get("parameter_scope") != "model.student_visual.transformer.resblocks[-1]":
+            raise ValueError("F2 diagnostic gradient scope mismatch")
+        measured = Path(str(payload.get("measurement_path", "")))
+        if not measured.is_file() or _sha256_file(measured) != payload.get("measurement_sha256"):
+            raise ValueError("F2 diagnostic immutable measurement receipt mismatch")
+        if payload.get("initialization_hashes") != initialization or payload.get("train_class_ids") != class_ids:
+            raise ValueError("F2 diagnostic class/initialization identity mismatch")
     value = payload.get("lambda_sig", payload.get("selection", {}).get("lambda_sig") if isinstance(payload.get("selection"), Mapping) else None)
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or float(value) <= 0:
         raise ValueError("SIGReg diagnostic receipt has no verified positive lambda_sig")
@@ -414,7 +435,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
-    if args.arm == "F2":
+    if args.arm in {"F2", "F2_SIG"}:
         config.update({
             "method_version": arm_protocol["method_version"],
             "positive_pool": arm_protocol["positive_pool"],
@@ -432,20 +453,22 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 "canonical_pairing_unique_photo_pool": 8400,
                 "pairing_manifest_role": "audit_only;not_positive_sampling_source",
             },
-            "sigreg_status": "unavailable_pending_new_diagnostic",
+            "sigreg_status": "fixed_f2_diagnostic" if args.arm == "F2_SIG" else "disabled_control",
         })
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
     data_identity = _compact_data_identity(protocol, arm_protocol["positive_pool"])
     config["data_identity"] = data_identity
-    if args.arm == "F2":
+    if args.arm in {"F2", "F2_SIG"}:
         config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
     config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
     lambda_sig = 0.0
-    if args.arm == "R1_SIG":
+    if args.arm in {"R1_SIG", "F2_SIG"}:
         lambda_sig = _diagnostic_lambda(Path(args.diagnostic), class_ids=list(train_ids), initialization=initialization, source_hash=source_hash, config=config)
     config["lambda_sig"] = lambda_sig
-    config["diagnostic_lambda_source"] = "verified_receipt" if args.arm == "R1_SIG" else "control_zero"
+    config["diagnostic_lambda_source"] = "verified_receipt" if args.arm in {"R1_SIG", "F2_SIG"} else "control_zero"
+    if args.arm in {"F2", "F2_SIG"}:
+        config["loss_coefficient_identity"]["sigreg"] = lambda_sig
     source["resolved_config"] = config
     snapshot = source["source_snapshot"]
     snapshot_root = output / "source_snapshot" / "files"
@@ -467,7 +490,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
 
     optimizer = _make_optimizer(model)
     scheduler = LambdaLR(optimizer, lr_lambda=_schedule)
-    sigreg = SIGReg(seed=42).to(device) if args.arm == "R1_SIG" else None
+    sigreg = SIGReg(seed=42).to(device) if args.arm in {"R1_SIG", "F2_SIG"} else None
     loader = make_train_loader(protocol, transform, positive_pool=arm_protocol["positive_pool"])
     if loader.generator is None:
         raise RuntimeError("training loader has no reproducible generator")
@@ -649,7 +672,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")

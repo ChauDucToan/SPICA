@@ -306,7 +306,7 @@ def _build_initialization_receipt(model: Any, names: Mapping[int, str], split: A
     }
 
 
-def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
+def run(output: Path, device_name: str = "cuda", *, architecture: str = "predictive") -> dict[str, Any]:
     import torch
     from spica.coupled_predictive_losses import coupled_region_loss, task_loss
     from spica.data.coupled_training import (
@@ -319,6 +319,12 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
     from spica.models.coupled_predictive import CoupledPredictiveModel
     from spica.models.sigreg import SIGReg
 
+    if architecture not in {"predictive", "predictive_fusion_v2"}:
+        raise ValueError("unsupported diagnostic architecture")
+    positive_pool = "full" if architecture == "predictive_fusion_v2" else "canonical"
+    diagnostic_config = {"architecture": architecture, "positive_pool": positive_pool,
+                         "task_identity": "mean_views(rank_i+ce_i)" if positive_pool == "full" else "mean_views(rank_i+ce_t)",
+                         "batch_size": BATCH_SIZE}
     if device_name != "cuda" or not torch.cuda.is_available():
         raise RuntimeError("this authorized diagnostic requires CUDA; refusing CPU fallback")
     device = torch.device(device_name)
@@ -357,7 +363,7 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
         bundle.encoder,
         bundle.tokenizer,
         classmap,
-        architecture="predictive",
+        architecture=architecture,
     ).to(device)
     model.train(True)
     if model.predictor is None or model.predictor.context_in.out_features != 256:
@@ -372,7 +378,7 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
         {name: value for name, value in model.original_clip.state_dict().items() if hasattr(value, "detach")}
     )
 
-    loader = make_train_loader(protocol, bundle.transform)
+    loader = make_train_loader(protocol, bundle.transform, positive_pool=positive_pool)
     if loader.generator is None:
         raise AssertionError("train loader has no generator")
     expected_generator = torch.Generator().manual_seed(SEED).get_state()
@@ -445,7 +451,7 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
             raise AssertionError("coupled_region_loss did not produce exactly one captured model output")
         if terms["sigreg"].detach().item() != 0.0:
             raise AssertionError("lambda_sig=0 control computed a nonzero SIGReg term")
-        task = task_loss(terms, "predictive")
+        task = task_loss(terms, architecture)
         if not torch.isfinite(task).item():
             raise FloatingPointError(f"task loss is non-finite at batch {batch_index}")
         g = capture["g"]
@@ -547,6 +553,7 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
         ROOT,
         resolved_config={
             "diagnostic": "coupled_sigreg_gradient_scale",
+            **diagnostic_config,
             "device": str(device),
             "seed": SEED,
             "batches": BATCHES,
@@ -576,8 +583,9 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
         "verified": False,
         "diagnostic": "coupled_sigreg_gradient_scale",
         "formula_identity": "SIGReg pinned MINIMAL: 17 knots [0,3], 256 unit Gaussian projections, FP32 Epps-Pulley statistic; separate clean/corrupted calls",
-        "architecture_identity": "CoupledPredictiveModel predictive default width=256, heads=4, float32",
-        "gradient_batch_source": "load_protocol_data -> make_train_loader(seed=42) -> prepare_batch(step=0..3)",
+        "architecture_identity": f"CoupledPredictiveModel {architecture} default width=256, heads=4, float32",
+        "resolved_config": diagnostic_config,
+        "gradient_batch_source": f"load_protocol_data -> make_train_loader(seed=42,positive_pool={positive_pool}) -> prepare_batch(step=0..3)",
         "started_seed": SEED,
         "batches": BATCHES,
         "batch_size": BATCH_SIZE,
@@ -606,6 +614,9 @@ def run(output: Path, device_name: str = "cuda") -> dict[str, Any]:
                 "records": protocol["pairing"]["records"],
                 "unique_photo_pool": protocol["pairing"]["unique_photo_pool"],
             },
+            "active_positive_pool": positive_pool,
+            "positive_pool_count": 58950 if positive_pool == "full" else 8400,
+            "pairing_role": "audit_only" if positive_pool == "full" else "positive_sampling_source",
             "loader_length": len(loader),
             "batch_records_file": "batch_records.json",
         },
@@ -640,11 +651,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--device", choices=("cuda",), default="cuda")
+    parser.add_argument("--architecture", choices=("predictive", "predictive_fusion_v2"), default="predictive")
     args = parser.parse_args()
     output: Path | None = None
     try:
         output = _fresh_output(args.output_dir)
-        result = run(output, args.device)
+        result = run(output, args.device, architecture=args.architecture)
         print(json.dumps({"status": result["status"], "output_dir": str(output), "lambda_sig": result["lambda_sig"]}, sort_keys=True))
         return 0
     except Exception as error:
