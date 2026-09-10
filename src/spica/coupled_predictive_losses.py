@@ -141,6 +141,17 @@ def _validate_three_head_coefficients(lambda_mp_t: float, lambda_mp_q: float) ->
             raise ValueError(f"{name} must be a finite non-negative scalar")
 
 
+def _validate_photo_ce_coefficient(value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("lambda_photo_ce must be a finite non-negative scalar")
+    try:
+        valid = math.isfinite(value) and value >= 0.0
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if not valid:
+        raise ValueError("lambda_photo_ce must be a finite non-negative scalar")
+
+
 def coupled_region_loss(
     model: CoupledPredictiveModel,
     clean: Tensor,
@@ -157,9 +168,22 @@ def coupled_region_loss(
     main_photo_objective: str = "paired_softplus",
     lambda_mp_t: float = 0.0,
     lambda_mp_q: float = 0.0,
+    lambda_photo_ce: float | None = None,
 ) -> dict[str, Tensor]:
     """Build clean/corrupted loss terms from one shared photo/text bank."""
     del photo_ids
+    if lambda_photo_ce is not None:
+        _validate_photo_ce_coefficient(lambda_photo_ce)
+        if (
+            model.architecture != "predictive_fusion_v2"
+            or main_photo_objective != "multi_positive_supervised_contrastive"
+            or lambda_sig != 0
+            or sigreg is not None
+        ):
+            raise ValueError(
+                "photo CE requires predictive_fusion_v2, supervised multi-positive "
+                "photo objective, and lambda_sig=0 without SIGReg"
+            )
     if main_photo_objective == "multi_positive_three_head_contrastive":
         _validate_three_head_coefficients(lambda_mp_t, lambda_mp_q)
     outputs = model(torch.cat((clean, corrupted), dim=0))
@@ -224,6 +248,10 @@ def coupled_region_loss(
     if model.architecture == "predictive_fusion_v2":
         task = task + 0.125 * (result["clean_ce_t"] + result["masked_ce_t"])
     result["total"] = task + 0.5 * result["anchor_i"] + 0.5 * result["anchor_t"] + lambda_sig * sigreg_loss
+    if lambda_photo_ce is not None:
+        result["photo_ce"] = _ce(live_photos, text, classids, photo_labels)
+        if lambda_photo_ce != 0:
+            result["total"] = result["total"] + lambda_photo_ce * result["photo_ce"]
     return result
 
 

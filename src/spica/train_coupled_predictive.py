@@ -18,7 +18,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
-from .coupled_predictive_losses import coupled_region_loss
+from .coupled_predictive_losses import _validate_photo_ce_coefficient, coupled_region_loss
 from .data.coupled_training import _arm_protocol, positive_pool_identity
 from .models.clip import load_frozen_clip
 from .models.coupled_predictive import CoupledPredictiveModel
@@ -37,6 +37,11 @@ MASK_FRACTIONS = (0.25, 0.5, 0.75)
 MASK_SEEDS = (101, 202, 303)
 WARMUP_STEPS = 180
 _RETRIEVAL_NAMES = ("full_mAP", "P@200", "mAP@200_prefix_positive", "mAP@200_all_relevant", "mAP@200_min_relevant_k")
+_PHOTO_CE_METADATA = (
+    "lambda_photo_ce", "lambda_photo_ce_source", "photo_ce_temperature",
+    "photo_ce_reduction", "photo_ce_target", "training_main_query",
+    "evaluation_query", "evaluation_adapter",
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -150,7 +155,7 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
         "model_state_hash": _state_hash(model),
         "selection_metadata": dict(selections),
     }
-    if config.get("method_version") == "coupled_predictive_fusion_qmp_v1":
+    if config.get("method_version") in {"coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_mp_photo_ce_v1"}:
         payload.update({
             "method_version": config["method_version"],
             "main_query": config["main_query"],
@@ -199,6 +204,8 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
             "loss_coefficient_identity": config["loss_coefficient_identity"],
             "sampling_identity": config["sampling_identity"],
         })
+    if config.get("method_version") == "coupled_predictive_fusion_mp_photo_ce_v1":
+        payload.update({key: config[key] for key in _PHOTO_CE_METADATA})
     return payload
 
 
@@ -240,8 +247,8 @@ def _eval_factory(protocol: Mapping[str, Any], transform: Any, model: Any, devic
 
 
 def _evaluation_query(arm: str) -> str | None:
-    # Q-only readout is explicit for QMP/TQMP; historical F2/F2_MP remain mu_i.
-    return "q" if arm in {"F2_QMP", "F2_TQMP"} else None
+    # Explicit experimental q readouts; historical F2/F2_MP remain mu_i.
+    return "q" if arm in {"F2_QMP", "F2_TQMP", "F2_MP_PCE"} else None
 
 
 def _make_eval_probe(protocol: Mapping[str, Any], transform: Any, model: Any, device: torch.device, arm: str):
@@ -549,6 +556,7 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "diagnostic_selection_metadata", "lambda_selection_metadata", "selection_metadata",
         "diagnostic_identity", "coefficient_identity", "tau", "diagnostic_path", "raw_diagnostic_path",
         "training_main_query", "evaluation_query", "evaluation_adapter", "main_q",
+        *_PHOTO_CE_METADATA,
     }
     result = {key: config[key] for key in sorted(allowed) if key in config}
     if isinstance(result.get("clip_identity"), Mapping):
@@ -592,8 +600,15 @@ def _gradient_diagnostics(model: Any, optimizer: Any) -> dict[str, float]:
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     arm_protocol = _arm_protocol(args.arm, args.campaign_id, args.diagnostic)
+    lambda_photo_ce = getattr(args, "lambda_photo_ce", None)
+    if args.arm == "F2_MP_PCE":
+        if lambda_photo_ce is None:
+            raise ValueError("F2_MP_PCE requires explicit --lambda-photo-ce; no production value is selected")
+        _validate_photo_ce_coefficient(lambda_photo_ce)
+    elif lambda_photo_ce is not None:
+        raise ValueError("only F2_MP_PCE accepts --lambda-photo-ce")
     tqmp_diagnostic = _validate_f2_tqmp_diagnostic(args.diagnostic) if args.arm == "F2_TQMP" else None
-    if args.arm in {"F2_QMP", "F2_TQMP"}:
+    if args.arm in {"F2_QMP", "F2_TQMP", "F2_MP_PCE"}:
         _validate_f2_qmp_readout()
     main_photo_objective = arm_protocol.get("main_photo_objective", "paired_softplus")
     if args.max_steps < 1 or args.max_steps > TOTAL_STEPS:
@@ -652,11 +667,11 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
-    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP", "F2_MP_PCE"}:
         config.update({
             "method_version": arm_protocol["method_version"],
             "positive_pool": arm_protocol["positive_pool"],
-            "main_query": "q" if args.arm == "F2_QMP" else "mu_i",
+            "main_query": "q" if args.arm in {"F2_QMP", "F2_MP_PCE"} else "mu_i",
             "main_photo_objective": main_photo_objective,
             "main_photo_temperature": 0.07 if main_photo_objective in {"multi_positive_supervised_contrastive", "multi_positive_pooled_contrastive", "multi_positive_three_head_contrastive"} else None,
             "objective_identity": "rank_q_mp=multi_positive_supervised_contrastive_over_unique_live_photobank" if args.arm == "F2_QMP" else "MP(mu_i)+lambda_mp_t*MP(mu_t)+lambda_mp_q*MP(q);existing_auxiliaries_unchanged" if args.arm == "F2_TQMP" else "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
@@ -746,7 +761,20 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
             },
         })
-    if args.arm == "F2_QMP":
+    if args.arm == "F2_MP_PCE":
+        config.update({
+            "lambda_photo_ce": float(lambda_photo_ce),
+            "lambda_photo_ce_source": "explicit_argument_no_calibration_claim",
+            "photo_ce_temperature": 0.07,
+            "photo_ce_reduction": "mean_unique_live_photos_once_per_update",
+            "photo_ce_target": "learned_train_class_text_bank;photos_and_text_not_detached",
+            "training_main_query": "mu_i",
+            "evaluation_query": "q",
+            "evaluation_adapter": "QOnlyAdapter;pooled_head(context.mean(dim=1));predictor_forwards=0",
+            "objective_identity": "F2_MP_total+lambda_photo_ce*CE(live_photos,text);existing_auxiliaries_unchanged",
+        })
+        config["loss_coefficient_identity"]["photo_ce"] = float(lambda_photo_ce)
+    if args.arm in {"F2_QMP", "F2_MP_PCE"}:
         config["primary_comparison"] = {
             "metric": "clean/full_mAP", "step": 3600,
             "baseline_arm": "F2_MP-Q", "baseline_wandb_run_id": "y40hu06b",
@@ -766,7 +794,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 or diagnostic_data.get("pool") != data_identity.get("positive_pool")):
             raise ValueError("F2_TQMP data identity does not match the approved diagnostic binding")
     config["data_identity"] = data_identity
-    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP", "F2_MP_PCE"}:
         config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
     if args.arm != "F2_TQMP":
         config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
@@ -862,6 +890,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             batch = _batch_to_device(batch, device)
             optimizer.zero_grad(set_to_none=True)
             objective_kwargs = {"lambda_mp_t": config["lambda_mp_t"], "lambda_mp_q": config["lambda_mp_q"]} if args.arm == "F2_TQMP" else {}
+            if args.arm == "F2_MP_PCE":
+                objective_kwargs["lambda_photo_ce"] = config["lambda_photo_ce"]
             losses = coupled_region_loss(model, batch["clean"], batch["corrupted"], batch["photos"], batch["positive_indices"], batch["negative_indices"], batch["labels"], batch["photo_labels"], batch["photo_ids"], lambda_sig=lambda_sig, sigreg=sigreg, main_photo_objective=main_photo_objective, **objective_kwargs)
             total = losses["total"]
             if not torch.isfinite(total).item():
@@ -957,10 +987,12 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if frozen_original_after != frozen_original_before:
             raise RuntimeError("frozen original CLIP state changed")
         route_metadata = {}
-        if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1", "coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1"}:
+        if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1", "coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1", "coupled_predictive_fusion_mp_photo_ce_v1"}:
             route_metadata = {"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]}
-        if config.get("method_version") in {"coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1"}:
+        if config.get("method_version") in {"coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1", "coupled_predictive_fusion_mp_photo_ce_v1"}:
             route_metadata["primary_comparison"] = config["primary_comparison"]
+        if config.get("method_version") == "coupled_predictive_fusion_mp_photo_ce_v1":
+            route_metadata.update({key: config[key] for key in _PHOTO_CE_METADATA})
         if config.get("method_version") == "coupled_predictive_fusion_tqmp_v1":
             route_metadata.update({key: config[key] for key in ("tau", "main_q", "training_main_query", "evaluation_query", "evaluation_adapter", "coefficient_identity", "diagnostic_selection_metadata", "selection_metadata", "diagnostic_identity", "diagnostic_path", "raw_diagnostic_path", "lambda_mp_t", "lambda_mp_q", "diagnostic_sha256", "diagnostic_path_sha256", "raw_diagnostic_path_sha256", "diagnostic_verified_path_sha256", "diagnostic_input_sha256", "diagnostic_data_identity", "diagnostic_initialization_hashes", "diagnostic_source_snapshot_hash")})
         result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash, **route_metadata, "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
@@ -993,10 +1025,12 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP", "F2_MP_PCE"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")
+    parser.add_argument("--lambda-photo-ce", type=float, default=argparse.SUPPRESS,
+                        help="F2_MP_PCE only: explicit finite nonnegative weight; no selected default")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--wandb-mode", choices=("online", "offline", "disabled"), default="online")
     parser.add_argument("--max-steps", type=int, default=TOTAL_STEPS)

@@ -62,9 +62,10 @@ def _arm_protocol(arm: str, campaign_id: str, diagnostic: object) -> dict[str, s
         "F2_MP": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_mp_v1", "positive_pool": "full", "main_photo_objective": "multi_positive_supervised_contrastive"},
         "F2_QMP": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_qmp_v1", "positive_pool": "full", "main_photo_objective": "multi_positive_pooled_contrastive"},
         "F2_TQMP": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_tqmp_v1", "positive_pool": "full", "main_photo_objective": "multi_positive_three_head_contrastive"},
+        "F2_MP_PCE": {"architecture": "predictive_fusion_v2", "method_version": "coupled_predictive_fusion_mp_photo_ce_v1", "positive_pool": "full", "main_photo_objective": "multi_positive_supervised_contrastive"},
     }
     if arm not in protocols:
-        raise ValueError("arm must be R0, R1, R1_SIG, F2, F2_SIG, F2_MP, F2_QMP, or F2_TQMP")
+        raise ValueError(f"arm must be one of {tuple(protocols)}")
     if not isinstance(campaign_id, str) or not campaign_id:
         raise ValueError("campaign_id must be a non-empty string")
     if arm in {"F2", "F2_SIG"} and campaign_id != "coupled_predictive_fusion_v2":
@@ -77,7 +78,9 @@ def _arm_protocol(arm: str, campaign_id: str, diagnostic: object) -> dict[str, s
         raise ValueError("F2_TQMP requires campaign_id='coupled_predictive_fusion_tqmp_v1'")
     if arm == "F2_TQMP" and diagnostic is None:
         raise ValueError("F2_TQMP requires --diagnostic")
-    if arm in {"F2", "F2_MP", "F2_QMP"} and diagnostic is not None:
+    if arm == "F2_MP_PCE" and campaign_id != "coupled_predictive_fusion_mp_photo_ce_v1":
+        raise ValueError("F2_MP_PCE requires campaign_id='coupled_predictive_fusion_mp_photo_ce_v1'")
+    if arm in {"F2", "F2_MP", "F2_QMP", "F2_MP_PCE"} and diagnostic is not None:
         raise ValueError(f"{arm} does not accept --diagnostic")
     if arm in {"R1_SIG", "F2_SIG"} and not diagnostic:
         raise ValueError(f"{arm} requires --diagnostic")
