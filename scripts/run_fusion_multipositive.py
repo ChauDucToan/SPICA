@@ -1,4 +1,4 @@
-"""Launch one explicit F2_MP or F2_QMP arm; immutable gates, no retries."""
+"""Launch one explicit MP-family arm; immutable gates, no retries."""
 from __future__ import annotations
 
 import argparse
@@ -31,7 +31,11 @@ def gate_check(path, arm=ARM):
     if receipt.get('status') != 'PASS' or receipt.get('arm') != arm:
         raise ValueError(f'{arm} PASS launch gate required')
     components = _components(receipt.get('component_sha256'), 'gate')
-    required = set(COMPONENTS) | ({'scripts/check_fusion_qmp_cpu.py'} if arm == 'F2_QMP' else set())
+    required = set(COMPONENTS)
+    if arm in {'F2_QMP', 'F2_TQMP'}:
+        required.add('scripts/check_fusion_qmp_cpu.py')
+    if arm == 'F2_TQMP':
+        required.update(('scripts/check_fusion_tqmp_cpu.py', 'scripts/diagnose_fusion_mp_tq.py'))
     if set(components) != required:
         raise ValueError('launch gate component coverage differs')
     for name, digest in components.items():
@@ -45,7 +49,7 @@ def gate_check(path, arm=ARM):
 
 def launch(args):
     arm = args.arm
-    campaign = 'coupled_predictive_fusion_qmp_v1' if arm == 'F2_QMP' else CAMPAIGN
+    campaign = {'F2_MP': CAMPAIGN, 'F2_QMP': 'coupled_predictive_fusion_qmp_v1', 'F2_TQMP': 'coupled_predictive_fusion_tqmp_v1'}[arm]
     output = Path(args.output).resolve()
     if not output.is_relative_to(ROOT / 'outputs') or output == ROOT / 'outputs':
         raise ValueError('output must be a fresh child of outputs/')
@@ -56,11 +60,19 @@ def launch(args):
         raise RuntimeError('single-arm launch requires at least24GiB free')
     gate_path = Path(args.gate).resolve()
     gate, components = gate_check(gate_path, arm)
-    baseline_root = ROOT/'outputs/fusion_mp_execution_20260909T115500Z/runs/F2_MP' if arm == 'F2_QMP' else BASELINE
+    diagnostic = None
+    if arm == 'F2_TQMP':
+        from spica.train_coupled_predictive import _validate_f2_tqmp_diagnostic
+        if not args.diagnostic:
+            raise ValueError('F2_TQMP requires --diagnostic')
+        diagnostic = _validate_f2_tqmp_diagnostic(args.diagnostic)
+    elif args.diagnostic:
+        raise ValueError('only F2_TQMP accepts --diagnostic in this runner')
+    baseline_root = ROOT/'outputs/fusion_mp_execution_20260909T115500Z/runs/F2_MP' if arm in {'F2_QMP', 'F2_TQMP'} else BASELINE
     baseline = _read(baseline_root / 'run_result.json')
     latest = dict(baseline['selections']['latest'])
     readout = None
-    if arm == 'F2_QMP':
+    if arm in {'F2_QMP', 'F2_TQMP'}:
         from spica.train_coupled_predictive import _validate_f2_qmp_readout
         readout = _validate_f2_qmp_readout()
         if latest['sha256'] != readout['checkpoint_sha256']:
@@ -82,6 +94,9 @@ def launch(args):
     resolved = {'arm': arm, 'campaign_id': campaign, 'max_steps': 3600,
                 'wandb_mode': 'online', 'lambda_sig': 0, 'temperature': .07,
                 'primary_comparison': comparison, 'gate_sha256': _sha(gate_path)}
+    if diagnostic:
+        resolved.update({k: diagnostic[k] for k in ('lambda_mp_t', 'lambda_mp_q', 'diagnostic_sha256')})
+        resolved.update(main_query='q', main_photo_objective='multi_positive_three_head_contrastive', diagnostic_source_snapshot_hash=diagnostic['source_snapshot_hash'])
     provenance = capture_provenance(ROOT, resolved_config=resolved)
     snapshot = provenance['source_snapshot']
     manifest = {'head_commit': provenance['head_commit'], 'source_snapshot_hash': snapshot['sha256'],
@@ -101,10 +116,19 @@ def launch(args):
             shutil.copyfile(F2_QMP_READOUT, output/'baseline_q_readout.json')
             if _sha(output/'baseline_q_readout.json') != F2_QMP_READOUT_SHA256:
                 raise ValueError('archived baseline readout mismatch')
+        if diagnostic:
+            shutil.copyfile(args.diagnostic, output/'diagnostic_verified.json')
+            if _sha(output/'diagnostic_verified.json') != diagnostic['diagnostic_sha256']:
+                raise ValueError('archived calibration receipt mismatch')
+            shutil.copyfile(ROOT/diagnostic['raw_diagnostic_path'], output/'diagnostic_measurement.json')
+            if _sha(output/'diagnostic_measurement.json') != diagnostic['raw_diagnostic_path_sha256']:
+                raise ValueError('archived raw measurement mismatch')
         run = output/'runs'/arm
         command = [sys.executable, '-m', 'spica.train_coupled_predictive', '--arm', arm,
                    '--campaign-id', campaign, '--campaign-root', str(output), '--output-dir', str(run),
                    '--device', 'cuda', '--max-steps', '3600', '--wandb-mode', 'online']
+        if diagnostic:
+            command += ['--diagnostic', str(output/'diagnostic_verified.json')]
         env = {**os.environ, 'HF_HUB_OFFLINE': '1', 'WANDB_MODE': 'online', 'PYTHONPATH': str(ROOT/'src')}
         child, out, err = _start_child(command, cwd=ROOT, env=env,
                                       stdout=output/'logs/train.stdout.log', stderr=output/'logs/train.stderr.log')
@@ -147,7 +171,8 @@ def launch(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--arm', choices=('F2_MP','F2_QMP'), default=ARM)
+    parser.add_argument('--arm', choices=('F2_MP','F2_QMP','F2_TQMP'), default=ARM)
+    parser.add_argument('--diagnostic')
     parser.add_argument('--output')
     parser.add_argument('--gate')
     parser.add_argument('--launch', action='store_true')

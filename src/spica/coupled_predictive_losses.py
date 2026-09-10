@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -73,10 +75,20 @@ def _view_terms(
             if live_photos is None or photo_labels is None:
                 raise ValueError("multi-positive objective requires live photos and labels")
             rank_key, rank_value = "rank_q_mp", _main_photo_multi_positive(output.q, live_photos, photo_labels, labels)
+        elif main_photo_objective == "multi_positive_three_head_contrastive":
+            if live_photos is None or photo_labels is None:
+                raise ValueError("multi-positive objective requires live photos and labels")
+            terms.update(
+                rank_i=_main_photo_multi_positive(output.mu_i, live_photos, photo_labels, labels),
+                rank_t_mp=_main_photo_multi_positive(output.mu_t, live_photos, photo_labels, labels),
+                rank_q_mp=_main_photo_multi_positive(output.q, live_photos, photo_labels, labels),
+            )
+            rank_key = rank_value = None
         else:
             raise ValueError(f"unknown main_photo_objective: {main_photo_objective}")
+        if rank_key is not None:
+            terms[rank_key] = rank_value
         terms.update(
-            **{rank_key: rank_value},
             ce_t=_ce(output.mu_t, text, classids, labels),
             align_i=_align(output.mu_i, positive),
             align_t=_align(output.mu_t, text[torch.searchsorted(classids, labels)]),
@@ -89,8 +101,13 @@ def _view_terms(
 def task_loss(
     terms: dict[str, Tensor], architecture: str,
     main_photo_objective: str = "paired_softplus",
+    *,
+    lambda_mp_t: float = 0.0,
+    lambda_mp_q: float = 0.0,
 ) -> Tensor:
     """Return the two-view main ranking/classification objective."""
+    if main_photo_objective == "multi_positive_three_head_contrastive":
+        _validate_three_head_coefficients(lambda_mp_t, lambda_mp_q)
     if architecture == "pooled":
         return 0.5 * (
             terms["clean_rank_pool"]
@@ -100,12 +117,28 @@ def task_loss(
         )
     rank = "rank_q_mp" if main_photo_objective == "multi_positive_pooled_contrastive" else "rank_i"
     ce = "ce_i" if architecture == "predictive_fusion_v2" else "ce_t"
-    return 0.5 * (
+    task = 0.5 * (
         terms[f"clean_{rank}"]
         + terms[f"clean_{ce}"]
         + terms[f"masked_{rank}"]
         + terms[f"masked_{ce}"]
     )
+    if main_photo_objective == "multi_positive_three_head_contrastive":
+        task = task + 0.5 * (
+            lambda_mp_t * (terms["clean_rank_t_mp"] + terms["masked_rank_t_mp"])
+            + lambda_mp_q * (terms["clean_rank_q_mp"] + terms["masked_rank_q_mp"])
+        )
+    return task
+
+
+def _validate_three_head_coefficients(lambda_mp_t: float, lambda_mp_q: float) -> None:
+    for name, value in (("lambda_mp_t", lambda_mp_t), ("lambda_mp_q", lambda_mp_q)):
+        try:
+            valid = not isinstance(value, bool) and math.isfinite(value) and value >= 0.0
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            raise ValueError(f"{name} must be a finite non-negative scalar")
 
 
 def coupled_region_loss(
@@ -122,9 +155,13 @@ def coupled_region_loss(
     lambda_sig,
     sigreg=None,
     main_photo_objective: str = "paired_softplus",
+    lambda_mp_t: float = 0.0,
+    lambda_mp_q: float = 0.0,
 ) -> dict[str, Tensor]:
     """Build clean/corrupted loss terms from one shared photo/text bank."""
     del photo_ids
+    if main_photo_objective == "multi_positive_three_head_contrastive":
+        _validate_three_head_coefficients(lambda_mp_t, lambda_mp_q)
     outputs = model(torch.cat((clean, corrupted), dim=0))
     batch = clean.shape[0]
     clean_output = CoupledPredictiveOutput(
@@ -168,7 +205,13 @@ def coupled_region_loss(
         sigreg_loss = clean_output.g.new_zeros(())
     result["sigreg"] = sigreg_loss
 
-    task = task_loss(result, model.architecture, main_photo_objective)
+    task = task_loss(
+        result,
+        model.architecture,
+        main_photo_objective,
+        lambda_mp_t=lambda_mp_t,
+        lambda_mp_q=lambda_mp_q,
+    )
     if model.architecture in {"predictive", "predictive_fusion_v2"}:
         task = task + 0.125 * (
             result["clean_rank_pool"] + result["clean_ce_pool"]

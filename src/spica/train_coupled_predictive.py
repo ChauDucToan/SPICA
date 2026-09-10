@@ -161,6 +161,36 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
             "objective_identity": config["objective_identity"],
             "primary_comparison": config["primary_comparison"],
         })
+    elif config.get("method_version") == "coupled_predictive_fusion_tqmp_v1":
+        payload.update({
+            "method_version": config["method_version"],
+            "main_query": config["main_query"],
+            "main_q": config["main_q"],
+            "training_main_query": config["training_main_query"],
+            "evaluation_query": config["evaluation_query"],
+            "evaluation_adapter": config["evaluation_adapter"],
+            "loss_coefficient_identity": config["loss_coefficient_identity"],
+            "sampling_identity": config["sampling_identity"],
+            "main_photo_objective": config["main_photo_objective"],
+            "main_photo_temperature": config["main_photo_temperature"],
+            "objective_identity": config["objective_identity"],
+            "tau": config["tau"],
+            "coefficient_identity": config["coefficient_identity"],
+            "diagnostic_selection_metadata": config["diagnostic_selection_metadata"],
+            "lambda_selection_metadata": config["selection_metadata"],
+            "primary_comparison": config["primary_comparison"],
+            "diagnostic_identity": config["diagnostic_identity"],
+            "diagnostic_sha256": config["diagnostic_sha256"],
+            "diagnostic_path_sha256": config["diagnostic_path_sha256"],
+            "raw_diagnostic_path_sha256": config["raw_diagnostic_path_sha256"],
+            "diagnostic_verified_path_sha256": config["diagnostic_verified_path_sha256"],
+            "diagnostic_input_sha256": config["diagnostic_input_sha256"],
+            "diagnostic_data_identity": config["diagnostic_data_identity"],
+            "diagnostic_initialization_hashes": config["diagnostic_initialization_hashes"],
+            "diagnostic_source_snapshot_hash": config["diagnostic_source_snapshot_hash"],
+            "lambda_mp_t": config["lambda_mp_t"],
+            "lambda_mp_q": config["lambda_mp_q"],
+        })
     elif config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"}:
         # Preserve the historical checkpoint schema for F2 and F2_MP exactly.
         payload.update({
@@ -210,7 +240,8 @@ def _eval_factory(protocol: Mapping[str, Any], transform: Any, model: Any, devic
 
 
 def _evaluation_query(arm: str) -> str | None:
-    return "q" if arm == "F2_QMP" else None
+    # Q-only readout is explicit for QMP/TQMP; historical F2/F2_MP remain mu_i.
+    return "q" if arm in {"F2_QMP", "F2_TQMP"} else None
 
 
 def _make_eval_probe(protocol: Mapping[str, Any], transform: Any, model: Any, device: torch.device, arm: str):
@@ -346,6 +377,126 @@ def _verify_source(source: Mapping[str, Any], campaign_root: Path) -> str:
 
 F2_QMP_READOUT = ROOT / "outputs/fusion_mp_q_evaluation_20260909T145000Z/summary.json"
 F2_QMP_READOUT_SHA256 = "f210017b24f93fb659315daa820c1265c698aeb9a52112803543db63cd452afa"
+F2_TQMP_DIAGNOSTIC = ROOT / "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/diagnostic_verified.json"
+F2_TQMP_DIAGNOSTIC_SHA256 = "d3021b6ecd7a1b0d89b1da5c62761442728f6f095a1c9a4ace572ca9525cd68b"
+F2_TQMP_RAW_DIAGNOSTIC = ROOT / "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/diagnostic_result.json"
+F2_TQMP_SOURCE_SNAPSHOT_SHA256 = "42485ce4bfc86dc296cba91d997a3d9a810c1859a82d87eb9566bc7d1705b53f"
+F2_TQMP_LAMBDA_T = 0.17877235601108843
+F2_TQMP_LAMBDA_Q = 0.023774345199536452
+F2_TQMP_INPUT_SHA256 = {
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/diagnostic_result.json": "153b47573c0893b794562526dd723ed82f8abbb3c69b94ee5b3e5fe1c6ff633b",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/independent_cpu/receipt.json": "195419b095b6dcf7dcfa0347e50cf693f71feee4db6a552b5392bddcfadf7578",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/independent_cpu/summary.json": "dd49ebcb0d9b0e02bf495046497cdb55a97632b7a127a076ecd63728da5a2fb1",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/independent_cpu/verify_cpu.py": "f9e80a103a72f1d4f7f1c4259778dabe45aac5dd76643b2f221466167943c42f",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/verify_parent.py": "7c7112248481daa9791811b6aa05a4000d0f282fe93ff95b7dc98755984330b2",
+    "scripts/diagnose_fusion_mp_tq.py": "d7aeb62b8ab7715731789a0e440491b30263f95bd937377bd4b91191f8cbe9e8",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/raw_gradients_batch00.pt": "815c7f145ccc8d0e303a9b85d4d501c9ba48721e857df214b77f0b7a7a174d30",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/raw_gradients_batch01.pt": "fcd20fdcdb6820869176ffd10b1a45edac8a6d9500ec8a277629d5cddd496432",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/raw_gradients_batch02.pt": "ff6f570946bfb59da09095622cb571276ded1edd615591ba84189f2249e908ba",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/raw_gradients_batch03.pt": "488e8e342a99d7db468e57cba7fafe063230af84ff22865384cc86a2e507f415",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/data_records.json": "6c123f31e7530517da675361d28cede1ab331c57b416bf68d18eed703a474d1d",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/gradient_layout.json": "70a07db6959b61b57cede117f18128851e5bbbc950b1d2c2f4ffa6a4963de028",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/lambda_selection.json": "012eca0655a19a813c9534b87fe0e88eb17ecb750d3a2e330eac797c22671580",
+    "outputs/fusion_mp_tq_diagnostic_20260910T001200Z/measured_rows.json": "103d13bc15e221bb3a2e0364c5b01c2f5259098eada812a76c79a63a6495a681",
+}
+
+
+def _validate_f2_tqmp_diagnostic(path: str | Path) -> dict[str, Any]:
+    """Validate the immutable, initialization-only TQMP calibration receipt."""
+    if len(F2_TQMP_INPUT_SHA256) != 14:
+        raise RuntimeError("F2_TQMP diagnostic must bind exactly 14 input files")
+    candidate = Path(path).expanduser()
+    try:
+        resolved = candidate.resolve(strict=True)
+        relative = resolved.relative_to(ROOT)
+    except (FileNotFoundError, OSError, ValueError) as error:
+        raise ValueError("F2_TQMP diagnostic must be an existing path inside the repository") from error
+    if _sha256_file(resolved) != F2_TQMP_DIAGNOSTIC_SHA256:
+        raise ValueError("F2_TQMP diagnostic receipt SHA256 mismatch")
+    verified = json.loads(resolved.read_text(encoding="utf-8"))
+    if not isinstance(verified, Mapping) or verified.get("status") != "PASS":
+        raise ValueError("F2_TQMP diagnostic verification receipt must have status PASS")
+    if verified.get("scope") != "RAW_GRADIENT_CALIBRATION_ONLY; no training or mAP claim":
+        raise ValueError("F2_TQMP diagnostic scope mismatch")
+    if verified.get("independent_cpu_check_count") != 2041 or verified.get("no_new_gpu_or_optimizer") is not True:
+        raise ValueError("F2_TQMP diagnostic independent CPU verification is incomplete")
+    if verified.get("input_sha256") != F2_TQMP_INPUT_SHA256:
+        raise ValueError("F2_TQMP diagnostic input hash manifest mismatch")
+    for name, expected in F2_TQMP_INPUT_SHA256.items():
+        input_path = Path(name)
+        if input_path.is_absolute() or ".." in input_path.parts:
+            raise ValueError("F2_TQMP diagnostic input path is not repository-relative")
+        input_resolved = (ROOT / input_path).resolve(strict=True)
+        try:
+            input_resolved.relative_to(ROOT)
+        except ValueError as error:
+            raise ValueError("F2_TQMP diagnostic input escaped the repository") from error
+        if _sha256_file(input_resolved) != expected:
+            raise ValueError(f"F2_TQMP diagnostic input SHA256 mismatch: {name}")
+
+    raw = json.loads(F2_TQMP_RAW_DIAGNOSTIC.read_text(encoding="utf-8"))
+    expected_config = {
+        "baseline": "F2_MP full total", "batch_size": 32, "batches": 4,
+        "diagnostic": "fusion_mp_tq_init_v1", "optimizer_updates": 0,
+        "positive_pool": "full", "rho_q": 0.1, "rho_t": 0.1, "seed": 42,
+        "sequence": "add lambdaT*MP(muT), then lambdaQ*MP(q)", "tau": 0.07,
+        "wandb": "disabled",
+    }
+    selection = {
+        "binding_scope": "pooled_head",
+        "lambda_t": F2_TQMP_LAMBDA_T,
+        "lambda_q": F2_TQMP_LAMBDA_Q,
+        "lambda_q_candidates": {"pooled_head": F2_TQMP_LAMBDA_Q, "student_last_block": 0.2146793430374309},
+        "rho_t": 0.1, "rho_q": 0.1,
+    }
+    if not isinstance(raw, Mapping) or raw.get("status") != "MEASURED_PENDING_REVIEW" or raw.get("verified") is not False:
+        raise ValueError("F2_TQMP raw diagnostic status is not the approved pending-review receipt")
+    raw_selection = raw.get("selection")
+    if raw.get("config") != expected_config or not isinstance(raw_selection, Mapping):
+        raise ValueError("F2_TQMP raw diagnostic protocol mismatch")
+    if any(raw_selection.get(key) != value for key, value in selection.items()):
+        raise ValueError("F2_TQMP raw diagnostic coefficient selection mismatch")
+    if raw_selection.get("formula") != "lambdaT=.1 median(norm(base_last)/norm(T_last)); B1=base+lambdaT*T; lambdaQ=.1 min_scopes median(norm(B1_scope)/norm(Q_scope)), scopes=last,pool" or raw_selection.get("scope") != "initialization-only, median-based target; NOT a per-batch cap, mAP optimum or effective AdamW-update ratio":
+        raise ValueError("F2_TQMP raw diagnostic selection formula mismatch")
+    for key in ("optimizer_updates", "model_hash_before", "model_hash_after", "teacher_hash_before", "teacher_hash_after"):
+        if key == "optimizer_updates" and raw.get(key) != 0:
+            raise ValueError("F2_TQMP diagnostic contains optimizer updates")
+        if key != "optimizer_updates" and not isinstance(raw.get(key), str):
+            raise ValueError("F2_TQMP diagnostic is missing state binding")
+    if raw.get("model_hash_before") != raw.get("model_hash_after") or raw.get("teacher_hash_before") != raw.get("teacher_hash_after"):
+        raise ValueError("F2_TQMP diagnostic model state changed")
+    if raw.get("entire_model_unchanged") is not True or raw.get("parameter_grad_all_none") is not True:
+        raise ValueError("F2_TQMP diagnostic state guards failed")
+    if raw.get("source_snapshot_hash") != F2_TQMP_SOURCE_SNAPSHOT_SHA256:
+        raise ValueError("F2_TQMP diagnostic source snapshot mismatch")
+    if verified.get("selection") != raw_selection or verified.get("source_snapshot_hash") != raw.get("source_snapshot_hash"):
+        raise ValueError("F2_TQMP diagnostic verification binding mismatch")
+    if not isinstance(raw.get("data_identity"), Mapping) or not isinstance(raw.get("initialization_hashes"), Mapping):
+        raise ValueError("F2_TQMP diagnostic is missing data or initialization identity")
+    return {
+        "diagnostic_path": str(relative),
+        "diagnostic_sha256": F2_TQMP_DIAGNOSTIC_SHA256,
+        "diagnostic_path_sha256": F2_TQMP_DIAGNOSTIC_SHA256,
+        "raw_diagnostic_path": str(F2_TQMP_RAW_DIAGNOSTIC.relative_to(ROOT)),
+        "raw_diagnostic_path_sha256": F2_TQMP_INPUT_SHA256[str(F2_TQMP_RAW_DIAGNOSTIC.relative_to(ROOT))],
+        "input_sha256": dict(sorted(F2_TQMP_INPUT_SHA256.items())),
+        "lambda_mp_t": F2_TQMP_LAMBDA_T,
+        "lambda_mp_q": F2_TQMP_LAMBDA_Q,
+        "lambda_q_candidates": dict(selection["lambda_q_candidates"]),
+        "binding_scope": "pooled_head",
+        "selection_metadata": {
+            "formula": raw_selection["formula"],
+            "binding_scope": raw_selection["binding_scope"],
+            "candidates": dict(raw_selection["lambda_q_candidates"]),
+            "rho": {"t": raw_selection["rho_t"], "q": raw_selection["rho_q"]},
+            "scope": raw_selection["scope"],
+            "lambda_mp_t": raw_selection["lambda_t"],
+            "lambda_mp_q": raw_selection["lambda_q"],
+        },
+        "data_identity": raw["data_identity"],
+        "initialization_hashes": raw["initialization_hashes"],
+        "source_snapshot_hash": raw["source_snapshot_hash"],
+    }
 
 
 def _validate_f2_qmp_readout() -> dict[str, Any]:
@@ -389,10 +540,15 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "optimizer_betas", "optimizer_eps", "clip_identity", "train_class_ids",
         "class_names", "classmap_sha256", "optimizer_groups",
         "model_trainable_parameters", "model_total_parameters", "initialization_hashes",
-        "data_identity", "diagnostic_path_sha256", "lambda_sig", "diagnostic_lambda_source",
+        "data_identity", "diagnostic_sha256", "diagnostic_path_sha256", "lambda_sig", "diagnostic_lambda_source", "lambda_mp_source",
         "method_version", "positive_pool", "main_query", "loss_coefficient_identity",
         "sampling_identity", "sigreg_status", "main_photo_objective", "main_photo_temperature",
-        "objective_identity", "primary_comparison",
+        "objective_identity", "primary_comparison", "diagnostic_verified_path_sha256",
+        "raw_diagnostic_path_sha256", "diagnostic_input_sha256", "diagnostic_data_identity",
+        "diagnostic_initialization_hashes", "lambda_mp_t", "lambda_mp_q", "diagnostic_source_snapshot_hash",
+        "diagnostic_selection_metadata", "lambda_selection_metadata", "selection_metadata",
+        "diagnostic_identity", "coefficient_identity", "tau", "diagnostic_path", "raw_diagnostic_path",
+        "training_main_query", "evaluation_query", "evaluation_adapter", "main_q",
     }
     result = {key: config[key] for key in sorted(allowed) if key in config}
     if isinstance(result.get("clip_identity"), Mapping):
@@ -436,7 +592,8 @@ def _gradient_diagnostics(model: Any, optimizer: Any) -> dict[str, float]:
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     arm_protocol = _arm_protocol(args.arm, args.campaign_id, args.diagnostic)
-    if args.arm == "F2_QMP":
+    tqmp_diagnostic = _validate_f2_tqmp_diagnostic(args.diagnostic) if args.arm == "F2_TQMP" else None
+    if args.arm in {"F2_QMP", "F2_TQMP"}:
         _validate_f2_qmp_readout()
     main_photo_objective = arm_protocol.get("main_photo_objective", "paired_softplus")
     if args.max_steps < 1 or args.max_steps > TOTAL_STEPS:
@@ -464,6 +621,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     if args.arm == "R0":
         model.predictor = None
     initialization = _initialization_hashes(model)
+    if tqmp_diagnostic is not None and initialization != tqmp_diagnostic["initialization_hashes"]:
+        raise ValueError("F2_TQMP initialization does not match the approved diagnostic binding")
     frozen_original_before = _state_hash(model, prefix="original_clip.")
 
     config: dict[str, Any] = _safe_json(vars(args))
@@ -493,23 +652,28 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         "initialization_hashes": initialization,
         "frozen_original_state_hash": frozen_original_before,
     })
-    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"}:
         config.update({
             "method_version": arm_protocol["method_version"],
             "positive_pool": arm_protocol["positive_pool"],
             "main_query": "q" if args.arm == "F2_QMP" else "mu_i",
             "main_photo_objective": main_photo_objective,
-            "main_photo_temperature": 0.07 if main_photo_objective in {"multi_positive_supervised_contrastive", "multi_positive_pooled_contrastive"} else None,
-            "objective_identity": "rank_q_mp=multi_positive_supervised_contrastive_over_unique_live_photobank" if args.arm == "F2_QMP" else "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
+            "main_photo_temperature": 0.07 if main_photo_objective in {"multi_positive_supervised_contrastive", "multi_positive_pooled_contrastive", "multi_positive_three_head_contrastive"} else None,
+            "objective_identity": "rank_q_mp=multi_positive_supervised_contrastive_over_unique_live_photobank" if args.arm == "F2_QMP" else "MP(mu_i)+lambda_mp_t*MP(mu_t)+lambda_mp_q*MP(q);existing_auxiliaries_unchanged" if args.arm == "F2_TQMP" else "rank_i=multi_positive_supervised_contrastive_over_unique_live_photobank" if main_photo_objective == "multi_positive_supervised_contrastive" else "rank_i=paired_softplus",
             "loss_coefficient_identity": ({
                 "rank_q_mp": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
                 "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
                 "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
-            } if args.arm == "F2_QMP" else {
+            } if args.arm == "F2_QMP" else ({
+                "rank_i": 1.0, "rank_t_mp": F2_TQMP_LAMBDA_T, "rank_q_mp": F2_TQMP_LAMBDA_Q,
+                "ce_i": 1.0, "ce_t_aux": 0.25,
+                "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
+                "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
+            } if args.arm == "F2_TQMP" else {
                 "rank_i": 1.0, "ce_i": 1.0, "ce_t_aux": 0.25,
                 "rank_pool": 0.25, "ce_pool": 0.25, "align_i": 0.05, "align_t": 0.05,
                 "anchor_i": 0.5, "anchor_t": 0.5, "sigreg": 0.0,
-            }),
+            })),
             "sampling_identity": {
                 "active_positive_pool": "full", "active_positive_pool_count": 58950,
                 "active_negative_pool": "full_other_class", "active_negative_pool_count": 58950,
@@ -520,12 +684,68 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             },
             "sigreg_status": "fixed_f2_diagnostic" if args.arm == "F2_SIG" else "disabled_control",
         })
+    if args.arm == "F2_TQMP":
+        config.update({
+            "lambda_mp_t": tqmp_diagnostic["lambda_mp_t"],
+            "lambda_mp_q": tqmp_diagnostic["lambda_mp_q"],
+            "diagnostic_sha256": tqmp_diagnostic["diagnostic_sha256"],
+            "diagnostic_path_sha256": tqmp_diagnostic["diagnostic_path_sha256"],
+            "raw_diagnostic_path_sha256": tqmp_diagnostic["raw_diagnostic_path_sha256"],
+            "diagnostic_verified_path_sha256": tqmp_diagnostic["diagnostic_path_sha256"],
+            "diagnostic_source_snapshot_hash": tqmp_diagnostic["source_snapshot_hash"],
+            "diagnostic_data_identity": tqmp_diagnostic["data_identity"],
+            "diagnostic_initialization_hashes": tqmp_diagnostic["initialization_hashes"],
+            "diagnostic_input_sha256": tqmp_diagnostic["input_sha256"],
+            "diagnostic_selection_metadata": tqmp_diagnostic["selection_metadata"],
+            "selection_metadata": tqmp_diagnostic["selection_metadata"],
+            "diagnostic_path": tqmp_diagnostic["diagnostic_path"],
+            "raw_diagnostic_path": tqmp_diagnostic["raw_diagnostic_path"],
+            "diagnostic_identity": {
+                "verified_path": tqmp_diagnostic["diagnostic_path"],
+                "verified_path_sha256": tqmp_diagnostic["diagnostic_path_sha256"],
+                "raw_path": tqmp_diagnostic["raw_diagnostic_path"],
+                "raw_path_sha256": tqmp_diagnostic["raw_diagnostic_path_sha256"],
+                "source_snapshot_hash": tqmp_diagnostic["source_snapshot_hash"],
+                "data_identity": tqmp_diagnostic["data_identity"],
+                "initialization_hashes": tqmp_diagnostic["initialization_hashes"],
+                "input_sha256": tqmp_diagnostic["input_sha256"],
+            },
+        })
     if args.arm == "F2_MP":
         config["primary_comparison"] = {
             "metric": "clean/full_mAP", "step": 3600,
             "baseline_arm": "F2", "baseline_wandb_run_id": "1wxvk2lk",
             "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
         }
+    if args.arm == "F2_TQMP":
+        config.update({
+            "main_query": "q",
+            "main_q": "q",
+            "training_main_query": "mu_i",
+            "evaluation_query": "q",
+            "evaluation_adapter": "QOnlyAdapter;pooled_head(context.mean(dim=1));predictor_forwards=0",
+            "tau": 0.07,
+            "coefficient_identity": {
+                **config["loss_coefficient_identity"],
+                "lambda_mp_t": F2_TQMP_LAMBDA_T,
+                "lambda_mp_q": F2_TQMP_LAMBDA_Q,
+            },
+            "primary_comparison": {
+                "metric": "clean/full_mAP", "step": 3600,
+                "baseline_arm": "F2_MP-Q",
+                "baseline_wandb_run_id": "y40hu06b",
+                "baseline_training_head": "mu_i",
+                "baseline_metric_source": "separate_SHA_bound_q_readout_not_training_run_metrics",
+                "baseline_readout": "q",
+                "baseline_readout_sha256": F2_QMP_READOUT_SHA256,
+                "baseline_evaluation": "outputs/fusion_mp_q_evaluation_20260909T145000Z/summary.json",
+                "baseline_fixed_values": {
+                    "clean/full_mAP@3600": 0.49166918150172645,
+                    "masked_macro/full_mAP@3600": 0.3557525980363653,
+                },
+                "selection": "fixed_step;best_clean_and_best_masked_are_auxiliary_prefix_AP200",
+            },
+        })
     if args.arm == "F2_QMP":
         config["primary_comparison"] = {
             "metric": "clean/full_mAP", "step": 3600,
@@ -539,15 +759,28 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
     data_identity = _compact_data_identity(protocol, arm_protocol["positive_pool"])
+    if tqmp_diagnostic is not None:
+        diagnostic_data = tqmp_diagnostic["data_identity"]
+        if (diagnostic_data.get("split") != data_identity["split"]
+                or diagnostic_data.get("manifest") != data_identity["manifest"]
+                or diagnostic_data.get("pool") != data_identity.get("positive_pool")):
+            raise ValueError("F2_TQMP data identity does not match the approved diagnostic binding")
     config["data_identity"] = data_identity
-    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP"}:
+    if args.arm in {"F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"}:
         config["sampling_identity"]["positive_and_negative_pool_sha256"] = data_identity["positive_pool"]["sha256"]
-    config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
+    if args.arm != "F2_TQMP":
+        config["diagnostic_path_sha256"] = None if not args.diagnostic else _sha256_file(Path(args.diagnostic))
     lambda_sig = 0.0
     if args.arm in {"R1_SIG", "F2_SIG"}:
         lambda_sig = _diagnostic_lambda(Path(args.diagnostic), class_ids=list(train_ids), initialization=initialization, source_hash=source_hash, config=config)
     config["lambda_sig"] = lambda_sig
-    config["diagnostic_lambda_source"] = "verified_receipt" if args.arm in {"R1_SIG", "F2_SIG"} else "control_zero"
+    config["diagnostic_lambda_source"] = (
+        "verified_receipt" if args.arm in {"R1_SIG", "F2_SIG"}
+        else "not_applicable_tqmp" if args.arm == "F2_TQMP"
+        else "control_zero"
+    )
+    if args.arm == "F2_TQMP":
+        config["lambda_mp_source"] = "fixed_two_stage_raw_gradient_calibration_not_optimal"
     if args.arm in {"F2", "F2_SIG"}:
         config["loss_coefficient_identity"]["sigreg"] = lambda_sig
     source["resolved_config"] = config
@@ -628,7 +861,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             batch = prepare_batch(next(batches), data_root=data_root, step=step - 1, classids=model.classids.detach().cpu().tolist())
             batch = _batch_to_device(batch, device)
             optimizer.zero_grad(set_to_none=True)
-            losses = coupled_region_loss(model, batch["clean"], batch["corrupted"], batch["photos"], batch["positive_indices"], batch["negative_indices"], batch["labels"], batch["photo_labels"], batch["photo_ids"], lambda_sig=lambda_sig, sigreg=sigreg, main_photo_objective=main_photo_objective)
+            objective_kwargs = {"lambda_mp_t": config["lambda_mp_t"], "lambda_mp_q": config["lambda_mp_q"]} if args.arm == "F2_TQMP" else {}
+            losses = coupled_region_loss(model, batch["clean"], batch["corrupted"], batch["photos"], batch["positive_indices"], batch["negative_indices"], batch["labels"], batch["photo_labels"], batch["photo_ids"], lambda_sig=lambda_sig, sigreg=sigreg, main_photo_objective=main_photo_objective, **objective_kwargs)
             total = losses["total"]
             if not torch.isfinite(total).item():
                 raise FloatingPointError(f"nonfinite loss at step {step}")
@@ -722,8 +956,14 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         frozen_original_after = _state_hash(model, prefix="original_clip.")
         if frozen_original_after != frozen_original_before:
             raise RuntimeError("frozen original CLIP state changed")
-        result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash,
-                  **({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]} if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1"} else ({"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"], "primary_comparison": config["primary_comparison"]} if config.get("method_version") == "coupled_predictive_fusion_qmp_v1" else {})), "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
+        route_metadata = {}
+        if config.get("method_version") in {"coupled_predictive_fusion_v2", "coupled_predictive_fusion_mp_v1", "coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1"}:
+            route_metadata = {"method_version": config["method_version"], "architecture": config["architecture"], "main_query": config["main_query"], "loss_coefficient_identity": config["loss_coefficient_identity"], "sampling_identity": config["sampling_identity"], "main_photo_objective": config["main_photo_objective"], "main_photo_temperature": config["main_photo_temperature"], "objective_identity": config["objective_identity"]}
+        if config.get("method_version") in {"coupled_predictive_fusion_qmp_v1", "coupled_predictive_fusion_tqmp_v1"}:
+            route_metadata["primary_comparison"] = config["primary_comparison"]
+        if config.get("method_version") == "coupled_predictive_fusion_tqmp_v1":
+            route_metadata.update({key: config[key] for key in ("tau", "main_q", "training_main_query", "evaluation_query", "evaluation_adapter", "coefficient_identity", "diagnostic_selection_metadata", "selection_metadata", "diagnostic_identity", "diagnostic_path", "raw_diagnostic_path", "lambda_mp_t", "lambda_mp_q", "diagnostic_sha256", "diagnostic_path_sha256", "raw_diagnostic_path_sha256", "diagnostic_verified_path_sha256", "diagnostic_input_sha256", "diagnostic_data_identity", "diagnostic_initialization_hashes", "diagnostic_source_snapshot_hash")})
+        result = {"status": "COMPLETE", "campaign": str(config.get("method_version", "coupled_predictive_v1")), "arm": args.arm, "step": args.max_steps, "completed_steps": args.max_steps, "source_snapshot_hash": source_hash, **route_metadata, "clip_identity": clip_identity, "data_identity": data_identity, "checkpoints": checkpoints, "probes": probe_records, "selections": selections, "trace": "observation_trace.jsonl", "trace_count": trace_count, "expected_trace_count": expected_trace_count, "mask_metadata": "mask_metadata.jsonl", "training_history": "training_history.jsonl", "initialization_hashes": initialization, "frozen_original_state_hash_before": frozen_original_before, "frozen_original_state_hash_after": frozen_original_after, "memory": {"baseline": memory_baseline, "peak_allocated": torch.cuda.max_memory_allocated(device), "peak_reserved": torch.cuda.max_memory_reserved(device)} if device.type == "cuda" else {}, "wandb_run_id": None if wandb_run is None else wandb_run.run_id, "wandb_url": None if wandb_run is None else wandb_run.run_url}
         _json(output / "run_result.json", result)
         if wandb_run is not None:
             wandb_run.finish()
@@ -753,7 +993,7 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP", "F2_QMP"))
+    parser.add_argument("--arm", required=True, choices=("R0", "R1", "R1_SIG", "F2", "F2_SIG", "F2_MP", "F2_QMP", "F2_TQMP"))
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--campaign-root", required=True)
     parser.add_argument("--diagnostic")
