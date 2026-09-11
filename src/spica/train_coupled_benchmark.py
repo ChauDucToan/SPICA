@@ -1,8 +1,8 @@
 """Standalone official TU-Berlin/QuickDraw F2 MP-Q trainer.
 
 This module owns training only.  Official test data is deliberately left to the
-parent evaluator: no test loader, retrieval metric, or checkpoint selection is
-constructed here.
+parent evaluator. A fixed seen-train probe monitors progress, never selects a
+checkpoint, and never opens official test images.
 """
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import argparse
 import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import shutil
 import traceback
@@ -21,6 +20,8 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from .coupled_predictive_losses import coupled_region_loss
 from .data import coupled_benchmark as benchmark_data
+from .evaluation.training_probe import TrainingProbe
+from .runtime import runtime_policy
 from .models.clip import load_frozen_clip
 from .models.coupled_predictive import CoupledPredictiveModel
 from .provenance import capture_provenance, capture_rng_state
@@ -311,7 +312,8 @@ def _save_run_checkpoint(
     loader: Any,
     initialization: Mapping[str, Any],
 ) -> dict[str, Any]:
-    path = output / f"checkpoint_step{step}.pt"
+    rolling = config.get("checkpoint_policy") == "rolling_latest"
+    path = output / ("checkpoint_latest.pt" if rolling else f"checkpoint_step{step}.pt")
     payload = _checkpoint_payload(
         model, optimizer, scheduler, None,
         step=step, config=config, source_hash=source_hash,
@@ -320,33 +322,39 @@ def _save_run_checkpoint(
         selections={"latest": {"step": step, "metrics": None}},
         initialization_hashes=initialization,
     )
-    sha = _save_checkpoint(path, payload)
-    return {
+    if rolling:
+        learned = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+        payload["model_state_dict"] = {name: value for name, value in payload["model_state_dict"].items() if name in learned}
+        payload["state_format"] = "trainable_only_v1"
+    # Loader worker/iterator state is not captured: do not claim bit-exact resume.
+    payload["exact_data_stream_resume"] = False
+    sha = _save_checkpoint(path, payload, overwrite=rolling)
+    record = {
         "step": step,
         "path": path.name,
         "sha256": sha,
         "model_state_hash": payload["model_state_hash"],
         "initialization_hashes": initialization,
     }
+    if rolling:
+        temporary = output / "checkpoint_latest.json.tmp"
+        _json(temporary, record)
+        temporary.replace(output / "checkpoint_latest.json")
+    return record
 
 
 def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
-    # W&B config must not receive manifests or local path-heavy provenance.
     keys = (
-        "arm", "method_version", "dataset", "device", "smoke", "seed",
-        "batch_size", "total_steps", "warmup_steps", "architecture",
-        "main_photo_objective", "main_photo_temperature", "training_main_query",
-        "evaluation_query", "evaluation_adapter", "clip_identity",
-        "protocol_identity", "source_snapshot_hash", "max_steps", "loss_coefficient_identity",
-        "optimizer", "sampling_identity", "official_unseen_used_for_selection",
+        "arm", "dataset", "seed", "batch_size", "total_steps", "warmup_steps",
+        "architecture", "evaluation_query", "source_snapshot_hash", "runtime",
+        "lambda_sketch_ref", "official_baseline_seen_before_design", "blind_holdout_claim",
     )
-    if "sketch_ref_lambda" in config:
-        keys += ("sketch_ref_lambda", "lambda_sketch_ref", "sketch_ref_identity", "official_baseline_seen_before_design", "blind_holdout_claim")
-    return _safe({key: config[key] for key in keys})
+    return _safe({key: config[key] for key in keys if key in config})
 
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     lambda_sketch_ref = getattr(args, "lambda_sketch_ref", None)
+    policy = runtime_policy(getattr(args, "runtime", None))
     routing = _validate_routing(args.dataset, lambda_sketch_ref=lambda_sketch_ref)
     dataset_info = DATASETS[args.dataset]
     actual_updates = 2 if args.smoke else int(dataset_info["total_steps"])
@@ -376,6 +384,10 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     config["actual_updates"] = actual_updates
     config["warmup_steps"] = warmup_steps
     config.update(routing)
+    config["runtime"] = policy
+    config["tracking_policy"] = "minimal_v1"
+    config["checkpoint_policy"] = "step0_and_final_only" if args.smoke else "rolling_latest"
+    config["probe_scope"] = "disabled_smoke" if args.smoke else "seen_train_probe_not_validation"
 
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
@@ -394,13 +406,16 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     )
     if loader.generator is None:
         raise RuntimeError("official loader must expose its seeded generator")
+    probe = None if args.smoke else TrainingProbe.from_protocol(protocol, bundle.transform)
+    if probe is not None:
+        _json(output / "probe_manifest.json", probe.summary)
     batches = _loader_cycle(loader)
     data_identity = _safe(protocol.identity)
     checkpoints = [_save_run_checkpoint(
         output, step=0, model=model, optimizer=optimizer, scheduler=scheduler,
         config=config, source_hash=source_hash, clip_identity=clip_identity,
         data_identity=data_identity, loader=loader, initialization=initialization,
-    )]
+    )] if args.smoke else []
     history_path = output / "training_history.jsonl"
     lr_path = output / "lr_history_every_step.jsonl"
     trace_path = output / "observation_trace.jsonl"
@@ -431,12 +446,19 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             _json(output / "wandb_runtime.json", {"run_id": wandb_run.run_id, "run_url": wandb_run.run_url})
         if wandb_run is not None:
             wandb_run.define_metric("step_train")
-            wandb_run.define_metric("train/*", step_metric="step_train")
+            wandb_run.define_metric("cleaned/*", step_metric="step_train")
+            wandb_run.define_metric("masked/*", step_metric="step_train")
+            if probe is not None:
+                wandb_run.set_summary({
+                    "probe/scope": config["probe_scope"], "probe/query_count": 32,
+                    "probe/gallery_count": 256, "probe/manifest_hash": probe.manifest_hash,
+                    "probe/cleaned/P@all": probe.summary["P@all"]["clean"],
+                    "probe/masked/P@all": probe.summary["P@all"]["masked"],
+                    "mAP@200_definition": "sum(P(k)*relevance(k), k<=200)/min(R,200)",
+                })
         initial_lr = {f"group_{i}": float(group["lr"]) for i, group in enumerate(optimizer.param_groups)}
         _append_jsonl(lr_history, {"step": 0, "lr": initial_lr})
         _append_jsonl(history, {"step": 0, "loss": None, "lr": initial_lr, "gradient_norm": None})
-        if wandb_run is not None:
-            wandb_run.log_metrics({"step_train": 0, **{f"train/lr_{k}": v for k, v in initial_lr.items()}}, step=0)
         for step in range(1, actual_updates + 1):
             raw = next(batches)
             batch = benchmark_data.prepare_batch(protocol, raw, step - 1)
@@ -452,6 +474,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             if not bool(torch.isfinite(losses["total"]).item()):
                 raise FloatingPointError(f"nonfinite total loss at step {step}")
             losses["total"].backward()
+            log_step = step % policy["probe_every"] == 0 or step == actual_updates
             gradient_norms = _gradient_diagnostics(model, optimizer)
             if not all(math.isfinite(value) for value in gradient_norms.values()):
                 raise FloatingPointError(f"nonfinite gradient at step {step}")
@@ -472,13 +495,24 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 mask_row["step"] = step
                 _append_jsonl(mask_handle, mask_row)
                 mask_count += 1
-            if step % 10 == 0 or step == actual_updates:
+            if log_step:
                 _append_jsonl(history, {"step": step, "loss": last_losses, "lr": actual_lr, "gradient_norm": gradient_norms})
-                if wandb_run is not None:
-                    wandb_run.log_metrics({"step_train": step, **{f"train/{k}": v for k, v in last_losses.items()}, **{f"train/gradnorm_{k}": v for k, v in gradient_norms.items()}, **{f"train/lr_{k}": v for k, v in actual_lr.items()}}, step=step)
-            if step % 10 == 0 or step == actual_updates:
                 for handle in (history, lr_history, trace_handle, mask_handle):
                     handle.flush()
+            if probe is not None and step % policy["probe_every"] == 0:
+                measured = probe(model, device)
+                metrics = {f"{scope}/{key}": value for scope in ("cleaned", "masked")
+                           for key, value in measured[scope].items()}
+                with (output / "probe_metrics.jsonl").open("a", encoding="utf-8") as handle:
+                    _append_jsonl(handle, {"step_train": step, **metrics})
+                if wandb_run is not None:
+                    wandb_run.log_metrics({"step_train": step, **metrics}, step=step)
+            if not args.smoke and step % policy["checkpoint_every"] == 0 and step < actual_updates:
+                _save_run_checkpoint(
+                    output, step=step, model=model, optimizer=optimizer, scheduler=scheduler,
+                    config=config, source_hash=source_hash, clip_identity=clip_identity,
+                    data_identity=data_identity, loader=loader, initialization=initialization,
+                )
 
         final = _save_run_checkpoint(
             output, step=actual_updates, model=model, optimizer=optimizer, scheduler=scheduler,
@@ -497,13 +531,6 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             raise RuntimeError("model state did not change after optimizer updates")
         selections = {"latest": {"step": actual_updates, "path": final["path"], "sha256": final["sha256"], "metrics": None}}
         _json(output / "selections.json", selections)
-        if wandb_run is not None:
-            artifact_dir = output / ".wandb_artifact" / "final"
-            artifact_dir.mkdir(parents=True, exist_ok=False)
-            os.link(output / final["path"], artifact_dir / final["path"])
-            _json(artifact_dir / "resolved_config.json", config)
-            wandb_run.log_artifact(artifact_dir, name=f"coupled-{wandb_run.run_id}", artifact_type="model", aliases=("final",), metadata={"checkpoint_sha256": final["sha256"], "source_snapshot_hash": source_hash})
-
         final_source = capture_provenance(ROOT, resolved_config=config)
         final_source_hash = _verify_source(final_source, Path(args.campaign_root).expanduser())
         _json(output / "provenance_after.json", final_source)

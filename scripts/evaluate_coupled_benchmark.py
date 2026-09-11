@@ -132,6 +132,10 @@ def _run_result(run_dir: Path, *, arm: str = ARM) -> tuple[dict[str, Any], dict[
         raise ValueError("run arm does not match the explicitly requested arm")
     if config.get("method_version") != method or config.get("architecture") != ARCHITECTURE:
         raise ValueError("run method or architecture is not the requested F2_MP route")
+    if config.get("tracking_policy") == "minimal_v1":
+        if (config.get("evaluation_query") != "q" or config.get("training_main_query") != "mu_i"
+                or config.get("main_photo_objective") != "multi_positive_supervised_contrastive"):
+            raise ValueError("minimal coupled runtime requires main MP(mu_i) and q-only evaluation")
     if arm == SREF_ARM:
         baseline = _json(ROOT / "outputs/coupled_benchmark_execution_20260910T164500Z/runs/tuberlin_220_30/resolved_config.json")
         for key in ("seed", "batch_size", "total_steps", "warmup_steps", "main_photo_objective", "main_photo_temperature", "training_main_query", "evaluation_query", "evaluation_adapter", "sampling_identity", "batch_identity", "optimizer", "architecture", "protocol_identity", "initialization_hashes"):
@@ -317,6 +321,8 @@ def _build_model(
     config: Mapping[str, Any], checkpoint: Mapping[str, Any], device: torch.device,
     names: Mapping[int, str], *, expected_original_hash: str,
 ):
+    if checkpoint.get("state_format") not in {None, "trainable_only_v1"}:
+        raise ValueError("unsupported checkpoint state_format")
     clip = config.get("clip_identity")
     if not isinstance(clip, Mapping) or not clip.get("path") or not isinstance(clip.get("sha256"), str):
         raise ValueError("config.clip_identity.path and sha256 are required")
@@ -341,7 +347,11 @@ def _build_model(
     ).to(device)
     load_info = load_trainable_state(model, checkpoint["model_state_dict"])
     missing = load_info.get("missing_frozen_keys", [])
-    if any(not str(key).startswith("original_clip.") for key in missing):
+    if checkpoint.get("state_format") == "trainable_only_v1":
+        learned = {name for name, parameter in model.named_parameters() if parameter.requires_grad}
+        if set(checkpoint["model_state_dict"]) != learned:
+            raise ValueError("trainable-only checkpoint must contain exactly the learned parameters")
+    elif any(not str(key).startswith("original_clip.") for key in missing):
         raise ValueError(f"checkpoint omits non-original frozen state: {sorted(missing)}")
     model.eval()
     if tuple(int(x) for x in model.classids.detach().cpu().tolist()) != tuple(sorted(names)):
@@ -390,7 +400,7 @@ def _official(args: argparse.Namespace) -> dict[str, Any]:
             ink_threshold=0.9,
         )
 
-    return evaluate_coupled_benchmark(
+    report = evaluate_coupled_benchmark(
         model,
         loaders["sketch"],
         loaders["photo"],
@@ -405,6 +415,15 @@ def _official(args: argparse.Namespace) -> dict[str, Any]:
         data_identity=config["protocol_identity"],
         status="COMPLETE",
     )
+    if config.get("tracking_policy") == "minimal_v1" and config.get("wandb_mode") == "online":
+        from collections import Counter
+        from spica.tracking.wandb import publish_final_retrieval
+
+        counts = Counter(entry.label for entry in protocol.test.photo_entries)
+        p_all = sum(counts[e.label] for e in entries) / (len(entries) * len(protocol.test.photo_entries))
+        published = publish_final_retrieval(result, report, p_all=p_all)
+        _atomic(Path(args.output_dir) / "wandb_final.json", published)
+    return report
 
 
 def _train_probe(args: argparse.Namespace) -> dict[str, Any]:
@@ -492,7 +511,7 @@ def _write_failure(output_value: str | None, error: BaseException) -> None:
     })
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--output-dir", type=Path)
@@ -500,7 +519,7 @@ def main() -> int:
     parser.add_argument("--arm", choices=(ARM, SREF_ARM), default=ARM)
     parser.add_argument("--train-probe", action="store_true")
     parser.add_argument("--cpu-self-check", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.cpu_self_check:
         print(json.dumps(cpu_self_check(), sort_keys=True))
         return 0

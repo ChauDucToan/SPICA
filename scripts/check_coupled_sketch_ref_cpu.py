@@ -354,8 +354,8 @@ def check_routing_and_metadata() -> dict[str, Any]:
     assert identity["views"] == "corrupted_teacher_to_clean_student"
     assert identity["direction"] == "teacher_rows_student_columns"
     assert identity["temperature"] == 0.07
-    assert wandb["sketch_ref_lambda"] == LAMBDA and wandb["lambda_sketch_ref"] == LAMBDA
-    assert wandb["arm"] == trainer.SKETCH_REF_ARM and wandb["method_version"] == trainer.SKETCH_REF_METHOD
+    assert wandb["lambda_sketch_ref"] == LAMBDA
+    assert wandb["arm"] == trainer.SKETCH_REF_ARM
     return {
         "invalid_values_and_routes_rejected_predevice": True,
         "old_namespace_shape_unchanged": True,
@@ -475,7 +475,8 @@ def check_mocked_train_impl(output: Path) -> dict[str, Any]:
         assert resolved["method_version"] == trainer.SKETCH_REF_METHOD
         assert resolved["lambda_sketch_ref"] == LAMBDA and resolved["sketch_ref_lambda"] == LAMBDA
         wandb_config = trainer._wandb_config(resolved)
-        assert wandb_config["lambda_sketch_ref"] == LAMBDA and wandb_config["sketch_ref_lambda"] == LAMBDA
+        assert wandb_config["lambda_sketch_ref"] == LAMBDA
+        assert wandb_config["arm"] == trainer.SKETCH_REF_ARM
         (mock_output / "wandb_config.json").write_text(json.dumps(wandb_config, indent=2, sort_keys=True) + "\n")
         trace_rows = [json.loads(line) for line in (mock_output / "observation_trace.jsonl").read_text().splitlines()]
         mask_rows = [json.loads(line) for line in (mock_output / "mask_metadata.jsonl").read_text().splitlines()]

@@ -1,0 +1,3 @@
+# Shared I/O cadence; model, loss and dataset protocol are not configured here.
+probe_every: 5
+checkpoint_every: 100

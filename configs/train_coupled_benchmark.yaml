@@ -1,0 +1,15 @@
+defaults:
+  - runtime: minimal
+  - _self_
+
+dataset: tuberlin_220_30
+device: cuda
+wandb_mode: online
+lambda_sketch_ref: null
+smoke: false
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/coupled_${dataset}_${now:%Y%m%dT%H%M%S}

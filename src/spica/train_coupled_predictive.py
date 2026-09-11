@@ -209,12 +209,16 @@ def _checkpoint_payload(model: Any, optimizer: Any, scheduler: Any, sigreg: Any,
     return payload
 
 
-def _save_checkpoint(path: Path, payload: Mapping[str, Any]) -> str:
-    if path.exists():
+def _save_checkpoint(path: Path, payload: Mapping[str, Any], *, overwrite: bool = False) -> str:
+    if path.exists() and not overwrite:
         raise FileExistsError(f"checkpoint already exists: {path}")
     temporary = path.with_name(path.name + ".tmp")
-    torch.save(dict(payload), temporary)
-    temporary.replace(path)
+    try:
+        torch.save(dict(payload), temporary)
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
     return _sha256_file(path)
 
 

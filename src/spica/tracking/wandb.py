@@ -13,10 +13,22 @@ _RETRIEVAL_METRICS = frozenset({
     "full_mAP", "P@200", "mAP@200_prefix_positive",
     "mAP@200_all_relevant", "mAP@200_min_relevant_k",
 })
-_CONDITION_METADATA = frozenset({"fraction", "seed"})
+_LOGGED_RETRIEVAL_METRICS = {
+    "full_mAP": "mAP@all",
+    "mAP@200_min_relevant_k": "mAP@200",
+    "P@200": "P@200",
+}
+_ALLOWED_LOG_METRICS = frozenset({
+    "step_train",
+    "cleaned/mAP@200", "cleaned/mAP@all", "cleaned/P@200",
+    "masked/mAP@200", "masked/mAP@all", "masked/P@200",
+})
+_ALLOWED_METRIC_SCOPES = frozenset({"step_train", "cleaned/*", "masked/*"})
 
 
 class WandbExperiment:
+    """Small W&B adapter; it logs supplied metrics but never schedules evaluation."""
+
     def __init__(
         self,
         *,
@@ -29,7 +41,18 @@ class WandbExperiment:
         mode: WandbMode = "disabled",
         job_type: str | None = None,
         directory: Path | None = None,
+        allow_artifacts: bool = False,
     ) -> None:
+        self._allow_artifacts = allow_artifacts
+        settings = wandb.Settings(
+            x_disable_meta=True,
+            x_disable_machine_info=True,
+            x_disable_stats=True,
+            disable_code=True,
+            disable_git=True,
+            x_save_requirements=False,
+            console="off",
+        )
         self._run = wandb.init(
             project=project,
             name=name,
@@ -41,6 +64,7 @@ class WandbExperiment:
             job_type=job_type,
             dir=str(directory) if directory is not None else None,
             reinit="create_new",
+            settings=settings,
         )
         self._finished = False
 
@@ -59,7 +83,17 @@ class WandbExperiment:
         step: int | None = None,
     ) -> None:
         self._ensure_active()
-        self._run.log(dict(metrics), step=step)
+        unknown = {name for name in metrics if name.startswith(("cleaned/", "masked/"))} - _ALLOWED_LOG_METRICS
+        if unknown:
+            raise ValueError(f"unknown minimal retrieval metrics: {sorted(unknown)}")
+        logged = {
+            name: value for name, value in metrics.items()
+            if name in _ALLOWED_LOG_METRICS
+        }
+        for name, value in logged.items():
+            self._validate_scalar(name, value)
+        if logged.keys() - {"step_train"}:
+            self._run.log(logged, step=step)
 
     def define_metric(
         self,
@@ -69,6 +103,8 @@ class WandbExperiment:
         summary: object = None,
     ) -> None:
         self._ensure_active()
+        if name not in _ALLOWED_METRIC_SCOPES:
+            return
         self._run.define_metric(name, step_metric=step_metric, summary=summary)
 
     def set_summary(self, values: Mapping[str, Any]) -> None:
@@ -86,29 +122,26 @@ class WandbExperiment:
         diagnostics: Mapping[str, Scalar] | None = None,
     ) -> None:
         self._ensure_active()
+        self._validate_scalar("step_train", step)
         logged: dict[str, Scalar] = {"step_train": step}
-        logged.update(self._prefixed_metrics("clean", clean))
-        logged.update(self._prefixed_metrics("masked/macro", masked_macro))
+        logged.update(self._prefixed_metrics("cleaned", clean))
+        logged.update(self._prefixed_metrics("masked", masked_macro))
+        # Validate legacy inputs for callers, but do not create fraction, seed,
+        # or diagnostic curves under the shared tracking policy.
         for fraction, metrics in masked_by_fraction.items():
-            logged.update(self._prefixed_metrics(
-                f"masked/fraction_{self._fraction_label(fraction)}", metrics,
-            ))
-        for index, condition in enumerate(conditions):
-            metadata = {key: condition[key] for key in _CONDITION_METADATA if key in condition}
-            metrics = {key: value for key, value in condition.items() if key not in _CONDITION_METADATA}
-            if "fraction" in metadata:
-                prefix = f"masked/fraction_{self._fraction_label(metadata['fraction'])}"
-                if "seed" in metadata:
-                    prefix += f"/seed_{metadata['seed']}"
-            else:
-                prefix = f"masked/condition_{index}"
-            logged.update(self._prefixed_metrics(prefix, metrics))
+            self._fraction_label(fraction)
+            self._prefixed_metrics("masked", metrics)
+        for condition in conditions:
+            if "fraction" in condition:
+                self._fraction_label(condition["fraction"])
+            self._prefixed_metrics("masked", {
+                key: value for key, value in condition.items()
+                if key not in {"fraction", "seed"}
+            })
         for name, value in (diagnostics or {}).items():
             if not name.startswith(("text/", "train/")):
                 raise ValueError("probe diagnostics must use text/ or train/ namespaces")
-            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(float(value)):
-                raise ValueError("probe diagnostics must be finite scalars")
-            logged[name] = value
+            self._validate_scalar(name, value)
         self._run.log(logged, step=step)
 
     @staticmethod
@@ -118,12 +151,17 @@ class WandbExperiment:
             raise ValueError(f"unknown retrieval metric(s): {sorted(unknown)}")
         result: dict[str, Scalar] = {}
         for name, value in metrics.items():
-            if isinstance(value, bool) or not isinstance(value, Real):
-                raise TypeError(f"retrieval metric {name!r} must be a finite scalar")
-            if not math.isfinite(float(value)):
-                raise ValueError(f"retrieval metric {name!r} must be finite")
-            result[f"{prefix}/{name}"] = value
+            WandbExperiment._validate_scalar(f"{prefix}/{name}", value)
+            if name in _LOGGED_RETRIEVAL_METRICS:
+                result[f"{prefix}/{_LOGGED_RETRIEVAL_METRICS[name]}"] = value
         return result
+
+    @staticmethod
+    def _validate_scalar(name: str, value: object) -> None:
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{name!r} must be a finite scalar")
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{name!r} must be finite")
 
     @staticmethod
     def _fraction_label(fraction: object) -> str:
@@ -142,6 +180,8 @@ class WandbExperiment:
         step: int | None = None,
     ) -> None:
         self._ensure_active()
+        if not self._allow_artifacts:
+            return
 
         column_list = list(columns)
         row_list = [list(row) for row in rows]
@@ -168,6 +208,8 @@ class WandbExperiment:
         aliases: Sequence[str] = ("latest",),
     ) -> None:
         self._ensure_active()
+        if not self._allow_artifacts:
+            return
         if not path.exists():
             raise FileNotFoundError(f"Artifact path not found: {path}")
 
@@ -204,3 +246,20 @@ class WandbExperiment:
     def _ensure_active(self) -> None:
         if self._finished:
             raise RuntimeError("Cannot log to a finished W&B run")
+
+
+def publish_final_retrieval(result: Mapping, report: Mapping, *, p_all: float) -> dict:
+    """Publish final scalars to this run's summary, never into probe curves."""
+    run = wandb.Api().run(f"a-cctest05187-erd/spica/{result['wandb_run_id']}")
+    expected = {"source_snapshot_hash": result["source_snapshot_hash"],
+                "arm": result["arm"], "dataset": result["dataset"], "total_steps": result["step"]}
+    if any(run.config.get(key) != value for key, value in expected.items()):
+        raise ValueError("W&B final summary source/run identity mismatch")
+    WandbExperiment._validate_scalar("P@all", p_all)
+    values = {"final/step": result["step"], "final/scope": "official_test_final_only",
+              "final/checkpoint_sha256": result["selections"]["latest"]["sha256"]}
+    for scope, source in [("cleaned", "clean"), ("masked", "masked_macro")]:
+        values.update(WandbExperiment._prefixed_metrics(f"final/{scope}", report[source]))
+        values[f"final/{scope}/P@all"] = p_all
+    run.summary.update(values)
+    return {"status": "PASS", "run_id": result["wandb_run_id"], "summary": values}
