@@ -152,6 +152,24 @@ def _validate_photo_ce_coefficient(value: object) -> None:
         raise ValueError("lambda_photo_ce must be a finite non-negative scalar")
 
 
+def _validate_sketch_ref_coefficient(value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("lambda_sketch_ref must be a finite non-negative scalar")
+    try:
+        valid = math.isfinite(value) and value >= 0.0
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if not valid:
+        raise ValueError("lambda_sketch_ref must be a finite non-negative scalar")
+
+
+def _sketch_reference_ce(teacher: Tensor, student: Tensor) -> Tensor:
+    """Match masked original-CLIP teacher rows to clean student-q columns."""
+    logits = F.normalize(teacher.detach(), dim=-1) @ F.normalize(student, dim=-1).T
+    labels = torch.arange(teacher.shape[0], device=teacher.device)
+    return F.cross_entropy(logits / _TEMPERATURE, labels)
+
+
 def coupled_region_loss(
     model: CoupledPredictiveModel,
     clean: Tensor,
@@ -169,9 +187,23 @@ def coupled_region_loss(
     lambda_mp_t: float = 0.0,
     lambda_mp_q: float = 0.0,
     lambda_photo_ce: float | None = None,
+    lambda_sketch_ref: float | None = None,
 ) -> dict[str, Tensor]:
     """Build clean/corrupted loss terms from one shared photo/text bank."""
     del photo_ids
+    if lambda_sketch_ref is not None:
+        _validate_sketch_ref_coefficient(lambda_sketch_ref)
+        if (
+            model.architecture != "predictive_fusion_v2"
+            or main_photo_objective != "multi_positive_supervised_contrastive"
+            or lambda_sig != 0
+            or sigreg is not None
+            or lambda_photo_ce is not None
+        ):
+            raise ValueError(
+                "sketch reference requires predictive_fusion_v2, supervised multi-positive "
+                "photo objective, lambda_sig=0 without SIGReg, and no photo CE"
+            )
     if lambda_photo_ce is not None:
         _validate_photo_ce_coefficient(lambda_photo_ce)
         if (
@@ -252,6 +284,12 @@ def coupled_region_loss(
         result["photo_ce"] = _ce(live_photos, text, classids, photo_labels)
         if lambda_photo_ce != 0:
             result["total"] = result["total"] + lambda_photo_ce * result["photo_ce"]
+    if lambda_sketch_ref is not None:
+        # Original CLIP encodes either modality; preserve the old photo batch exactly.
+        sketch_reference = model.photo_reference(corrupted)
+        result["sketch_ref"] = _sketch_reference_ce(sketch_reference, clean_output.q)
+        if lambda_sketch_ref != 0:
+            result["total"] = result["total"] + lambda_sketch_ref * result["sketch_ref"]
     return result
 
 

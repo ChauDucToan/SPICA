@@ -47,6 +47,8 @@ from spica.provenance import source_snapshot  # noqa: E402
 
 METHOD = "coupled_predictive_mp_official_v1"
 ARM = "F2_MP_Q_OFFICIAL"
+SREF_ARM = "F2_MP_Q_SREF_OFFICIAL"
+SREF_METHOD = "coupled_predictive_mp_sketch_ref_official_v1"
 ARCHITECTURE = "predictive_fusion_v2"
 EXPECTED_STEPS = {"tuberlin_220_30": 1189, "quickdraw_80_30": 18229}
 
@@ -112,7 +114,7 @@ def _class_names(config: Mapping[str, Any]) -> dict[int, str]:
     return result
 
 
-def _run_result(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
+def _run_result(run_dir: Path, *, arm: str = ARM) -> tuple[dict[str, Any], dict[str, Any], Path]:
     run_dir = run_dir.expanduser().resolve()
     result_path = run_dir / "run_result.json"
     if not result_path.is_file():
@@ -121,12 +123,35 @@ def _run_result(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any], Path]:
     config = _config(result, run_dir)
     if result.get("status") != "COMPLETE":
         raise ValueError("official evaluation requires a COMPLETE trainer result")
-    if result.get("campaign") != METHOD or result.get("method_version", METHOD) != METHOD:
-        raise ValueError("run is not coupled_predictive_mp_official_v1")
-    if result.get("arm") != ARM or config.get("arm") not in {None, ARM}:
-        raise ValueError("run is not F2_MP_Q_OFFICIAL")
-    if config.get("method_version") != METHOD or config.get("architecture") != ARCHITECTURE:
-        raise ValueError("run method or architecture is not the official F2_MP route")
+    if arm not in {ARM, SREF_ARM}:
+        raise ValueError("unsupported official arm")
+    method = SREF_METHOD if arm == SREF_ARM else METHOD
+    if result.get("campaign") != method or result.get("method_version", method) != method:
+        raise ValueError("run method does not match the explicitly requested arm")
+    if result.get("arm") != arm or config.get("arm") not in {None, arm}:
+        raise ValueError("run arm does not match the explicitly requested arm")
+    if config.get("method_version") != method or config.get("architecture") != ARCHITECTURE:
+        raise ValueError("run method or architecture is not the requested F2_MP route")
+    if arm == SREF_ARM:
+        baseline = _json(ROOT / "outputs/coupled_benchmark_execution_20260910T164500Z/runs/tuberlin_220_30/resolved_config.json")
+        for key in ("seed", "batch_size", "total_steps", "warmup_steps", "main_photo_objective", "main_photo_temperature", "training_main_query", "evaluation_query", "evaluation_adapter", "sampling_identity", "batch_identity", "optimizer", "architecture", "protocol_identity", "initialization_hashes"):
+            if config.get(key) != baseline[key]:
+                raise ValueError(f"SREF locked baseline configuration mismatch: {key}")
+        if config.get("arm") != SREF_ARM or config.get("actual_updates") != (2 if config.get("smoke") else 1189):
+            raise ValueError("SREF explicit arm/update identity mismatch")
+        expected_coefficients = {**baseline["loss_coefficient_identity"], "sketch_ref": config.get("lambda_sketch_ref")}
+        if config.get("loss_coefficient_identity") != expected_coefficients:
+            raise ValueError("SREF full coefficient map mismatch")
+        from spica.coupled_predictive_losses import _validate_sketch_ref_coefficient
+        coefficient = config.get("lambda_sketch_ref")
+        _validate_sketch_ref_coefficient(coefficient)
+        if config.get("dataset") != "tuberlin_220_30" or config.get("sketch_ref_lambda") != coefficient:
+            raise ValueError("SREF requires TU and matching explicit coefficients")
+        expected = {"coefficient": coefficient, "target": "masked_corrupted_sketch_original_clip_teacher", "student": "clean_q", "temperature": 0.07, "views": "corrupted_teacher_to_clean_student", "direction": "teacher_rows_student_columns", "instance_nce": True, "official_baseline_seen_before_design": True}
+        if config.get("sketch_ref_identity") != expected:
+            raise ValueError("SREF view/direction/temperature identity mismatch")
+        if config.get("loss_coefficient_identity", {}).get("sketch_ref") != coefficient or config.get("official_baseline_seen_before_design") is not True:
+            raise ValueError("SREF coefficient/disclosure identity mismatch")
     if config.get("official_unseen_used_for_selection", False) is not False:
         raise ValueError("official test data was used for selection")
     if config.get("official_unseen_used_for_training", False) is not False:
@@ -331,7 +356,7 @@ def _build_model(
 
 def _official(args: argparse.Namespace) -> dict[str, Any]:
     run_dir = Path(args.run_dir).expanduser().resolve()
-    result, config, run_dir = _run_result(run_dir)
+    result, config, run_dir = _run_result(run_dir, arm=getattr(args, "arm", ARM))
     benchmark = _benchmark_name(config)
     latest, checkpoint, payload = _gate_checkpoint(result, config, run_dir, benchmark, smoke=False)
     source_hash = _source_gate(result)
@@ -384,7 +409,7 @@ def _official(args: argparse.Namespace) -> dict[str, Any]:
 
 def _train_probe(args: argparse.Namespace) -> dict[str, Any]:
     run_dir = Path(args.run_dir).expanduser().resolve()
-    result, config, run_dir = _run_result(run_dir)
+    result, config, run_dir = _run_result(run_dir, arm=getattr(args, "arm", ARM))
     requested_device = torch.device(args.device)
     if requested_device.type != "cuda" or not torch.cuda.is_available():
         raise ValueError("--train-probe requires an available CUDA device")
@@ -472,6 +497,7 @@ def main() -> int:
     parser.add_argument("--run-dir", type=Path)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument("--arm", choices=(ARM, SREF_ARM), default=ARM)
     parser.add_argument("--train-probe", action="store_true")
     parser.add_argument("--cpu-self-check", action="store_true")
     args = parser.parse_args()
@@ -487,6 +513,15 @@ def main() -> int:
     except Exception as error:
         _write_failure(str(args.output_dir), error)
         raise
+    if args.arm == SREF_ARM:
+        config = _json(args.run_dir / "resolved_config.json")
+        _atomic(args.output_dir / "sketch_ref_identity.json", {
+            "arm": SREF_ARM, "method": SREF_METHOD,
+            "lambda_sketch_ref": config["lambda_sketch_ref"],
+            "sketch_ref_identity": config["sketch_ref_identity"],
+            "official_baseline_seen_before_design": True, "blind_holdout_claim": False,
+            "summary_sha256": _sha256(args.output_dir / "summary.json"),
+        })
     print(json.dumps({"status": report["status"], "output_dir": str(args.output_dir)}, sort_keys=True))
     return 0
 

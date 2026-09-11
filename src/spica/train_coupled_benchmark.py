@@ -48,6 +48,8 @@ from .train_coupled_predictive import (
 ROOT = Path(__file__).resolve().parents[2]
 METHOD_VERSION = "coupled_predictive_mp_official_v1"
 ARM = "F2_MP_Q_OFFICIAL"
+SKETCH_REF_ARM = "F2_MP_Q_SREF_OFFICIAL"
+SKETCH_REF_METHOD = "coupled_predictive_mp_sketch_ref_official_v1"
 MAIN_OBJECTIVE = "multi_positive_supervised_contrastive"
 TEMPERATURE = 0.07
 SEED = 42
@@ -81,8 +83,13 @@ def _sha_json(value: Any) -> str:
     return hashlib.sha256(json.dumps(_safe(value), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def _validate_routing(dataset: str, *, main_photo_objective: str = MAIN_OBJECTIVE) -> dict[str, Any]:
-    """Reject accidental QMP/pooled routing before device or data side effects."""
+def _validate_routing(
+    dataset: str,
+    *,
+    main_photo_objective: str = MAIN_OBJECTIVE,
+    lambda_sketch_ref: object = None,
+) -> dict[str, Any]:
+    """Reject accidental routes before device, output, or data side effects."""
     if dataset not in DATASETS:
         raise ValueError(f"dataset must be one of {tuple(DATASETS)}")
     if main_photo_objective != MAIN_OBJECTIVE:
@@ -90,14 +97,35 @@ def _validate_routing(dataset: str, *, main_photo_objective: str = MAIN_OBJECTIV
             f"{ARM} requires the historical F2_MP objective {MAIN_OBJECTIVE!r}; "
             "pooled q multi-positive routing is forbidden"
         )
+    if lambda_sketch_ref is None:
+        return {
+            "arm": ARM,
+            "method_version": METHOD_VERSION,
+            "main_photo_objective": MAIN_OBJECTIVE,
+            "main_query": "mu_i",
+            "training_main_query": "mu_i",
+            "evaluation_query": "q",
+            "evaluation_adapter": "QOnlyAdapter;predictor_forwards=0",
+        }
+    if dataset != "tuberlin_220_30":
+        raise ValueError(f"{SKETCH_REF_ARM} is authorized for TU-Berlin only")
+    if isinstance(lambda_sketch_ref, bool) or not isinstance(lambda_sketch_ref, (int, float)):
+        raise ValueError("lambda_sketch_ref must be a finite non-negative scalar")
+    try:
+        valid = math.isfinite(lambda_sketch_ref) and lambda_sketch_ref >= 0.0
+    except (TypeError, ValueError, OverflowError):
+        valid = False
+    if not valid:
+        raise ValueError("lambda_sketch_ref must be a finite non-negative scalar")
     return {
-        "arm": ARM,
-        "method_version": METHOD_VERSION,
+        "arm": SKETCH_REF_ARM,
+        "method_version": SKETCH_REF_METHOD,
         "main_photo_objective": MAIN_OBJECTIVE,
         "main_query": "mu_i",
         "training_main_query": "mu_i",
         "evaluation_query": "q",
         "evaluation_adapter": "QOnlyAdapter;predictor_forwards=0",
+        "lambda_sketch_ref": float(lambda_sketch_ref),
     }
 
 
@@ -172,9 +200,12 @@ def _config(
         "anchor_t": 0.5,
         "sigreg": 0.0,
     }
-    return _safe({
-        "arm": ARM,
-        "method_version": METHOD_VERSION,
+    sketch_ref_enabled = getattr(args, "lambda_sketch_ref", None) is not None
+    if sketch_ref_enabled:
+        coefficients["sketch_ref"] = float(args.lambda_sketch_ref)
+    config = _safe({
+        "arm": SKETCH_REF_ARM if sketch_ref_enabled else ARM,
+        "method_version": SKETCH_REF_METHOD if sketch_ref_enabled else METHOD_VERSION,
         "dataset": args.dataset,
         "dataset_config": str(protocol.config_path),
         "dataset_config_sha256": protocol.config_sha256,
@@ -245,6 +276,25 @@ def _config(
         "checkpoint_policy": "step0_and_final_only",
         "metrics": None,
     })
+    if sketch_ref_enabled:
+        config.update({
+            "sketch_ref_lambda": float(args.lambda_sketch_ref),
+            "lambda_sketch_ref": float(args.lambda_sketch_ref),
+            "official_baseline_seen_before_design": True,
+            "blind_holdout_claim": False,
+            "objective_identity": "historical_F2_MP_total_plus_masked_original_clip_sketch_ref;clean_q_student",
+            "sketch_ref_identity": {
+                "coefficient": float(args.lambda_sketch_ref),
+                "target": "masked_corrupted_sketch_original_clip_teacher",
+                "student": "clean_q",
+                "temperature": TEMPERATURE,
+                "views": "corrupted_teacher_to_clean_student",
+                "direction": "teacher_rows_student_columns",
+                "instance_nce": True,
+                "official_baseline_seen_before_design": True,
+            },
+        })
+    return config
 
 
 def _save_run_checkpoint(
@@ -282,18 +332,22 @@ def _save_run_checkpoint(
 
 def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
     # W&B config must not receive manifests or local path-heavy provenance.
-    return _safe({key: config[key] for key in (
+    keys = (
         "arm", "method_version", "dataset", "device", "smoke", "seed",
         "batch_size", "total_steps", "warmup_steps", "architecture",
         "main_photo_objective", "main_photo_temperature", "training_main_query",
         "evaluation_query", "evaluation_adapter", "clip_identity",
         "protocol_identity", "source_snapshot_hash", "max_steps", "loss_coefficient_identity",
         "optimizer", "sampling_identity", "official_unseen_used_for_selection",
-    )})
+    )
+    if "sketch_ref_lambda" in config:
+        keys += ("sketch_ref_lambda", "lambda_sketch_ref", "sketch_ref_identity", "official_baseline_seen_before_design", "blind_holdout_claim")
+    return _safe({key: config[key] for key in keys})
 
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
-    routing = _validate_routing(args.dataset)
+    lambda_sketch_ref = getattr(args, "lambda_sketch_ref", None)
+    routing = _validate_routing(args.dataset, lambda_sketch_ref=lambda_sketch_ref)
     dataset_info = DATASETS[args.dataset]
     actual_updates = 2 if args.smoke else int(dataset_info["total_steps"])
     horizon_steps = int(dataset_info["total_steps"])
@@ -369,8 +423,9 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     try:
         if args.wandb_mode != "disabled":
             wandb_run = WandbExperiment(
-                project="spica", entity="a-cctest05187-erd", name=f"{ARM}-{args.dataset}",
-                group=METHOD_VERSION, job_type="train", config=_wandb_config(config),
+                project="spica", entity="a-cctest05187-erd",
+                name=f"{config['arm']}-{args.dataset}", group=config["method_version"],
+                job_type="train", config=_wandb_config(config),
                 mode=args.wandb_mode, directory=output,
             )
             _json(output / "wandb_runtime.json", {"run_id": wandb_run.run_id, "run_url": wandb_run.run_url})
@@ -392,6 +447,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 batch["positive_indices"], batch["negative_indices"], batch["labels"],
                 batch["photo_labels"], batch["photo_ids"], lambda_sig=0.0, sigreg=None,
                 main_photo_objective=MAIN_OBJECTIVE,
+                lambda_sketch_ref=lambda_sketch_ref,
             )
             if not bool(torch.isfinite(losses["total"]).item()):
                 raise FloatingPointError(f"nonfinite total loss at step {step}")
@@ -457,8 +513,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if frozen_after != frozen_before:
             raise RuntimeError("frozen original CLIP state changed")
         result = {
-            "status": "COMPLETE", "campaign": METHOD_VERSION, "method_version": METHOD_VERSION,
-            "arm": ARM, "dataset": args.dataset, "step": actual_updates,
+            "status": "COMPLETE", "campaign": config["method_version"], "method_version": config["method_version"],
+            "arm": config["arm"], "dataset": args.dataset, "step": actual_updates,
             "completed_steps": actual_updates, "steps_executed": actual_updates,
             "max_steps": actual_updates, "horizon_steps": horizon_steps,
             "source_snapshot_hash": source_hash, "clip_identity": clip_identity,
@@ -503,7 +559,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
 
 
 def train(args: argparse.Namespace) -> dict[str, Any]:
-    _validate_routing(args.dataset)
+    _validate_routing(args.dataset, lambda_sketch_ref=getattr(args, "lambda_sketch_ref", None))
     output = Path(args.output_dir).expanduser()
     if output.exists():
         raise FileExistsError(f"refusing to overwrite existing output directory: {output}")
@@ -511,7 +567,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
     try:
         return _train_impl(args, output)
     except Exception:
-        _json(output / "run_result.json", {"status": "FAIL", "method_version": METHOD_VERSION, "arm": ARM, "dataset": args.dataset, "traceback": traceback.format_exc()})
+        lambda_sketch_ref = getattr(args, "lambda_sketch_ref", None)
+        route = _validate_routing(args.dataset, lambda_sketch_ref=lambda_sketch_ref)
+        _json(output / "run_result.json", {"status": "FAIL", "method_version": route["method_version"], "arm": route["arm"], "dataset": args.dataset, "traceback": traceback.format_exc()})
         raise
 
 
@@ -523,6 +581,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--wandb-mode", choices=("online", "offline", "disabled"), default="online")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--lambda-sketch-ref", type=float, default=argparse.SUPPRESS)
     return parser
 
 
