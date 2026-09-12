@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final-only TU-Berlin/QuickDraw evaluator for F2_MP_Q_OFFICIAL.
+"""Final-only Sketchy/TU-Berlin/QuickDraw evaluator for F2_MP_Q_OFFICIAL.
 
 The default route performs all provenance/checkpoint gates before constructing an
 official test loader.  ``--train-probe`` is an actual pretrained CUDA smoke-2
@@ -44,13 +44,14 @@ from spica.models.checkpoint import load_trainable_state  # noqa: E402
 from spica.models.clip import load_frozen_clip  # noqa: E402
 from spica.models.coupled_predictive import CoupledPredictiveModel  # noqa: E402
 from spica.provenance import source_snapshot  # noqa: E402
+from spica.train_coupled_benchmark import DATASETS, _seed  # noqa: E402
 
 METHOD = "coupled_predictive_mp_official_v1"
 ARM = "F2_MP_Q_OFFICIAL"
 SREF_ARM = "F2_MP_Q_SREF_OFFICIAL"
 SREF_METHOD = "coupled_predictive_mp_sketch_ref_official_v1"
 ARCHITECTURE = "predictive_fusion_v2"
-EXPECTED_STEPS = {"tuberlin_220_30": 1189, "quickdraw_80_30": 18229}
+EXPECTED_STEPS = {name: data["total_steps"] for name, data in DATASETS.items()}
 
 
 def _json(path: Path) -> Any:
@@ -100,7 +101,7 @@ def _config(result: Mapping[str, Any], run_dir: Path) -> dict[str, Any]:
 def _benchmark_name(config: Mapping[str, Any]) -> str:
     value = config.get("dataset")
     if not isinstance(value, str) or value not in EXPECTED_STEPS:
-        raise ValueError("config.dataset must explicitly be tuberlin_220_30 or quickdraw_80_30")
+        raise ValueError(f"config.dataset must explicitly be one of {tuple(EXPECTED_STEPS)}")
     return value
 
 
@@ -332,6 +333,9 @@ def _build_model(
     if _sha256(clip_path) != clip["sha256"]:
         raise ValueError("frozen CLIP cache SHA256 mismatch")
     model_name = str(config.get("model_name", "ViT-B-32-quickgelu"))
+    if checkpoint.get("state_format") == "trainable_only_v1":
+        # Recreate the omitted, randomly initialized frozen sketch prompt as in training.
+        _seed(int(config["seed"]))
     bundle = load_frozen_clip(model_name=model_name, pretrained=str(clip_path), device=device)
     kwargs = {
         key: int(config[key])

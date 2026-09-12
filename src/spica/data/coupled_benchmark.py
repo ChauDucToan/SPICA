@@ -1,4 +1,4 @@
-"""Independent official TU-Berlin/QuickDraw benchmark data boundary.
+"""Independent official Sketchy/TU-Berlin/QuickDraw benchmark data boundary.
 
 This adapter is intentionally separate from :mod:`coupled_training`: it does
 not compose the Sketchy protocol, load a pairing manifest, or infer pairs.
@@ -8,6 +8,11 @@ query's class by ``MultiPositiveRetrievalTrainDataset``.
 The adapter validates manifests and class maps before exposing immutable
 protocol objects.  Validation stats files, but never opens image content;
 image decoding happens only when a caller iterates a loader.
+
+Class IDs are checked against each split's expected sorted IDs and passed
+through unchanged.  This boundary does not remap split-local IDs into a
+shared global taxonomy; a caller that requires one contiguous class bank must
+make that policy explicit outside the adapter.
 """
 from __future__ import annotations
 
@@ -77,6 +82,26 @@ _EXPECTED: dict[str, dict[str, Any]] = {
             "test_class_map": "8cdc391d46e1ce4321d6151bb40aa5da001a0f440cdf1b909d3880763cd5ee18",
         },
     },
+    "sketchy_104_21": {
+        "config_sha256": "5b7a9f4eaf9f7a76974267e7d7547a68f9125fac4dce6a05ee448d966da51042",
+        "root_name": "Sketchy",
+        "counts": {
+            "train": {"sketch": 57587, "photo": 72949, "classes": 104},
+            "test": {"sketch": 12694, "photo": 12553, "classes": 21},
+        },
+        "class_ids": {
+            "train": tuple(range(104)),
+            "test": tuple(range(21)),
+        },
+        "file_sha256": {
+            "train_sketch_manifest": "01ebe753128f9cdae649bf39466502e22cc1c9a988293beb1d32676308230f19",
+            "train_photo_manifest": "b479991e3808981c2be70fd53ba0408634f61030d3903ef5f45113f3b1a5d2ef",
+            "train_class_map": "57e5b84496d5f994f042cda55c0208bf63208e339b844f2ad34404b1c07efbe1",
+            "test_sketch_manifest": "33c5d21093e3a7a1eb389a4cef47164d6738ee5d1cf79a10498b1c3c9395f8ae",
+            "test_photo_manifest": "edf7b28c0911fdaf02a35c9cb611266229d3a0205b1135de00d388bbc57ce0e9",
+            "test_class_map": "3c47e06d8aec04731b75151a1a6c5c1d187a1e1c77fade39939c2a7cc5fc6d25",
+        },
+    },
 }
 # Keep the public identity read-only without making callers depend on the
 # private validation table.
@@ -137,6 +162,8 @@ def _resolve_config(config: str | Path) -> Path:
         "tuberlin_220_30": "configs/data/tuberlin_220_30.yaml",
         "quickdraw": "configs/data/quickdraw_80_30.yaml",
         "quickdraw_80_30": "configs/data/quickdraw_80_30.yaml",
+        "sketchy": "configs/data/sketchy_104_21.yaml",
+        "sketchy_104_21": "configs/data/sketchy_104_21.yaml",
     }
     raw = aliases.get(str(config).lower(), str(config))
     path = Path(raw).expanduser()
@@ -263,8 +290,11 @@ def _load_split(
     }
     if actual_counts != expected_counts:
         raise ValueError(f"{data.name} {split} counts mismatch: {actual_counts} != {expected_counts}")
-    if tuple(sorted(class_names)) != expected_ids:
-        raise ValueError(f"{data.name} {split} class IDs mismatch")
+    actual_ids = tuple(sorted(class_names))
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"{data.name} {split} class IDs mismatch: {actual_ids} != {expected_ids}"
+        )
     for name, entries in (("sketch", sketch_entries), ("photo", photo_entries)):
         if not entries:
             raise ValueError(f"{data.name} {split} {name} manifest is empty")

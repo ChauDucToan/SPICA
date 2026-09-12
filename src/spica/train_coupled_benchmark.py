@@ -1,4 +1,4 @@
-"""Standalone official TU-Berlin/QuickDraw F2 MP-Q trainer.
+"""Standalone official Sketchy/TU-Berlin/QuickDraw F2 MP-Q trainer.
 
 This module owns training only.  Official test data is deliberately left to the
 parent evaluator. A fixed seen-train probe monitors progress, never selects a
@@ -55,6 +55,11 @@ MAIN_OBJECTIVE = "multi_positive_supervised_contrastive"
 TEMPERATURE = 0.07
 SEED = 42
 DATASETS: dict[str, dict[str, Any]] = {
+    "sketchy_104_21": {
+        "config": "configs/data/sketchy_104_21.yaml",
+        "total_steps": 4446,
+        "warmup_steps": 222,
+    },
     "tuberlin_220_30": {
         "config": "configs/data/tuberlin_220_30.yaml",
         "total_steps": 1189,

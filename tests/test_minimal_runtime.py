@@ -33,6 +33,23 @@ import spica.train_coupled_benchmark as trainer  # noqa: E402
 import spica.tracking.wandb as wandb_tracking  # noqa: E402
 
 
+def test_compact_restore_seeds_before_backbone_construction(tmp_path, monkeypatch):
+    import evaluate_coupled_benchmark as evaluator
+    cache = tmp_path / "synthetic-cache"
+    cache.write_bytes(b"not a model")
+    trainer._seed(42)
+    expected = torch.randn(3, 8)
+    trainer._seed(999)
+    def boundary(**kwargs):
+        assert torch.equal(torch.randn(3, 8), expected)
+        raise RuntimeError("seed checked before synthetic backbone boundary")
+    monkeypatch.setattr(evaluator, "load_frozen_clip", boundary)
+    with pytest.raises(RuntimeError, match="seed checked"):
+        evaluator._build_model(
+            {"seed": 42, "clip_identity": {"path": str(cache), "sha256": hashlib.sha256(cache.read_bytes()).hexdigest()}},
+            {"state_format": "trainable_only_v1"}, torch.device("cpu"), {0: "x"}, expected_original_hash="unused")
+
+
 def _synthetic_batch() -> tuple[torch.Tensor, ...]:
     base = synthetic_args()
     return (
@@ -239,6 +256,15 @@ def test_tiny_cpu_runtime_updates_probe_tracking_and_exact_rolling_checkpoint(
     }
     assert result["checkpoints"][-1]["sha256"] == checkpoint_sha
     assert not (tmp_path / "embeddings").exists()
+    import run_coupled_benchmarks as runner
+    monkeypatch.setattr(runner, "DATASETS", trainer.DATASETS)
+    monkeypatch.setattr(runner, "RUNTIME", args.runtime)
+    smoke = tmp_path / "synthetic_smoke_control"
+    smoke.mkdir()
+    (smoke / "resolved_config.json").write_bytes((tmp_path / "resolved_config.json").read_bytes())
+    for name, count in [("observation_trace.jsonl", 64), ("mask_metadata.jsonl", 64), ("lr_history_every_step.jsonl", 3)]:
+        (smoke / name).write_text(''.join((tmp_path / name).read_text().splitlines(keepends=True)[:count]))
+    assert runner.check_finished_train(tmp_path, smoke, "tuberlin_220_30", result["source_snapshot_hash"]) == result
 
     exact = check_exact_checkpoint(checkpoint)
     assert exact == {
