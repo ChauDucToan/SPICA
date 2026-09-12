@@ -40,7 +40,7 @@ def test_periodic_official_test_boundary_is_post_checkpoint_and_final_once(monke
     args = SimpleNamespace(
         dataset="tuberlin_220_30", output_dir=str(tmp_path), campaign_root=str(tmp_path),
         device="cpu", wandb_mode="disabled", smoke=False, periodic_test=True,
-        runtime={"test_every": 5, "checkpoint_every": 4},
+        runtime={"test_every_percent": 20, "checkpoint_every": 4},
     )
     saved: list[int] = []
     original_save = trainer._save_run_checkpoint
@@ -52,12 +52,15 @@ def test_periodic_official_test_boundary_is_post_checkpoint_and_final_once(monke
     monkeypatch.setattr(trainer, "_save_run_checkpoint", save)
     result = trainer._train_impl(args, tmp_path)
 
-    assert [row[0] for row in calls] == [5, 10, 12]
-    assert [row[2] for row in calls] == [False, False, True]
+    assert [row[0] for row in calls] == [3, 5, 8, 10, 12]
+    assert [row[2] for row in calls] == [False, False, False, False, True]
     assert all(row[3] and row[4] for row in calls)
-    assert saved == [4, 5, 8, 10, 12]
-    assert [row["step"] for row in result["official_test_evaluations"]] == [5, 10, 12]
+    assert saved == [3, 4, 5, 8, 10, 12]
+    assert [row["step"] for row in result["official_test_evaluations"]] == [3, 5, 8, 10, 12]
     assert not (tmp_path / "probe_metrics.jsonl").exists()
-    assert [json.loads(line)["step_train"] for line in (tmp_path / "test_metrics.jsonl").read_text().splitlines()] == [5, 10, 12]
+    assert [json.loads(line)["step_train"] for line in (tmp_path / "test_metrics.jsonl").read_text().splitlines()] == [3, 5, 8, 10, 12]
     assert result["selections"]["latest"]["step"] == 12
-    assert json.loads((tmp_path / "resolved_config.json").read_text())["tracking_policy"] == "official_test_v1"
+    resolved = json.loads((tmp_path / "resolved_config.json").read_text())
+    assert resolved["tracking_policy"] == "official_test_v1"
+    assert resolved["test_steps"] == [3, 5, 8, 10, 12]
+    assert resolved["runtime"] == {"test_every_percent": 20, "checkpoint_every": 4}

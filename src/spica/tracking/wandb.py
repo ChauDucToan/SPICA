@@ -100,7 +100,7 @@ class WandbExperiment:
         for name, value in logged.items():
             self._validate_scalar(name, value)
         if logged.keys() - {"step_train"}:
-            self._run.log(logged, step=step)
+            self._run.log(logged, step=step, commit=True)
 
     def define_metric(
         self,
@@ -166,7 +166,7 @@ class WandbExperiment:
             if not name.startswith(("text/", "train/")):
                 raise ValueError("probe diagnostics must use text/ or train/ namespaces")
             self._validate_scalar(name, value)
-        self._run.log(logged, step=step)
+        self._run.log(logged, step=step, commit=True)
 
     @staticmethod
     def _prefixed_metrics(prefix: str, metrics: Mapping[str, Any]) -> dict[str, Scalar]:

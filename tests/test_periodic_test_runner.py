@@ -66,6 +66,7 @@ def _periodic_fixture(tmp_path, monkeypatch, horizon: int = 2000):
     cfg = {
         **common,
         "runtime": runner.OFFICIAL_RUNTIME,
+        "test_steps": runner.official_test_steps(horizon),
         "tracking_policy": "official_test_v1",
         "selection_policy": "none;final_only",
         "probe_scope": "disabled_official_periodic_test",
@@ -85,9 +86,7 @@ def _periodic_fixture(tmp_path, monkeypatch, horizon: int = 2000):
     _stream_files(smoke, salt="same-stream")
 
     clean = {"full_mAP": 0.1, "mAP@200_min_relevant_k": 0.2, "P@200": 0.3}
-    expected_steps = list(range(1000, horizon + 1, 1000))
-    if not expected_steps or expected_steps[-1] != horizon:
-        expected_steps.append(horizon)
+    expected_steps = runner.official_test_steps(horizon)
     records = []
     metric_rows = []
     state_by_step = {}

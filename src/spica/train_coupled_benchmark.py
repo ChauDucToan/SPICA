@@ -1,7 +1,7 @@
 """Standalone official Sketchy/TU-Berlin/QuickDraw F2 MP-Q trainer.
 
 Legacy mode uses a seen-train probe and a separate final evaluator. Explicit
---periodic-test pauses training for full official test every1000/final, without
+--periodic-test pauses training for full official test at five 20% boundaries, without
 checkpoint selection or changing the model, objective, or training stream.
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from .coupled_predictive_losses import coupled_region_loss
 from .data import coupled_benchmark as benchmark_data
 from .evaluation.periodic_test import evaluate_periodic_test
 from .evaluation.training_probe import TrainingProbe
-from .runtime import runtime_policy
+from .runtime import official_test_steps, runtime_policy
 from .models.clip import load_frozen_clip
 from .models.coupled_predictive import CoupledPredictiveModel
 from .provenance import capture_provenance, capture_rng_state
@@ -360,7 +360,7 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
     values = _safe({key: config[key] for key in keys if key in config})
     if config.get("tracking_policy") == "official_test_v1":
         values.update({key: config[key] for key in (
-            "tracking_policy", "probe_scope", "official_unseen_evaluation",
+            "tracking_policy", "probe_scope", "official_unseen_evaluation", "test_steps",
         )})
     return values
 
@@ -414,16 +414,17 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     periodic_test = bool(getattr(args, "periodic_test", False))
     runtime_overrides = getattr(args, "runtime", None)
     if periodic_test:
-        policy = runtime_policy({"test_every": 1000, **dict(runtime_overrides or {})})
+        policy = runtime_policy({"test_every_percent": 20, **dict(runtime_overrides or {})})
     else:
         policy = runtime_policy(runtime_overrides)
-        if "test_every" in policy:
+        if "test_every_percent" in policy:
             raise ValueError("--periodic-test is required for official test cadence")
     routing = _validate_routing(args.dataset, lambda_sketch_ref=lambda_sketch_ref)
     dataset_info = DATASETS[args.dataset]
     actual_updates = 2 if args.smoke else int(dataset_info["total_steps"])
     horizon_steps = int(dataset_info["total_steps"])
     warmup_steps = int(dataset_info["warmup_steps"])
+    test_steps = official_test_steps(horizon_steps) if periodic_test else []
 
     # Validate manifests and data identity before touching the requested device.
     protocol = benchmark_data.load_benchmark_protocol(dataset_info["config"], split="train")
@@ -449,6 +450,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     config["warmup_steps"] = warmup_steps
     config.update(routing)
     config["runtime"] = policy
+    config["test_steps"] = test_steps
     config["tracking_policy"] = "official_test_v1" if periodic_test else "minimal_v1"
     config["checkpoint_policy"] = "step0_and_final_only" if args.smoke else "rolling_latest"
     config["probe_scope"] = (
@@ -600,10 +602,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 not args.smoke and step % policy["checkpoint_every"] == 0
                 and step < actual_updates
             )
-            test_due = (
-                periodic_test and not args.smoke
-                and (step % policy["test_every"] == 0 or step == actual_updates)
-            )
+            test_due = periodic_test and not args.smoke and step in test_steps
             checkpoint = None
             if checkpoint_due or test_due:
                 checkpoint = _save_run_checkpoint(

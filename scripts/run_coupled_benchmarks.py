@@ -22,12 +22,12 @@ from run_coupled_campaign import _copy_source_archive, _json_atomic, _now, _star
 from run_fusion_campaign import _read, _sha
 from spica.provenance import capture_provenance
 from spica.data.coupled_benchmark import OFFICIAL_IDENTITIES, _plain
-from spica.runtime import runtime_policy
+from spica.runtime import official_test_steps, runtime_policy
 from spica.train_coupled_benchmark import ARM, DATASETS, METHOD_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = {"probe_every": 5, "checkpoint_every": 100}
-OFFICIAL_RUNTIME = {"test_every": 1000, "checkpoint_every": 100}
+OFFICIAL_RUNTIME = {"test_every_percent": 20, "checkpoint_every": 100}
 PERIODIC_STATUS = "TRAIN_AND_PERIODIC_OFFICIAL_EVAL_FINISHED_UNVERIFIED"
 EXPECTED_IDENTITIES = _plain(OFFICIAL_IDENTITIES)
 COMPONENTS = tuple(
@@ -205,9 +205,9 @@ def gate_check(path: Path, periodic_test: bool = False):
         )
     expected_runtime = OFFICIAL_RUNTIME if periodic_test else RUNTIME
     if periodic_test:
-        if gate.get("evaluation_policy") != "official_every1000_and_final_no_selection":
-            raise ValueError("periodic gate requires official_every1000_and_final_no_selection")
-    elif gate.get("evaluation_policy") == "official_every1000_and_final_no_selection":
+        if gate.get("evaluation_policy") != "official_every20percent_and_final_no_selection":
+            raise ValueError("periodic gate requires official_every20percent_and_final_no_selection")
+    elif gate.get("evaluation_policy") == "official_every20percent_and_final_no_selection":
         raise ValueError("periodic gate cannot be used by the legacy runner")
     if (
         gate.get("runtime_policy", gate.get("runtime")) != expected_runtime
@@ -342,9 +342,9 @@ def _check_periodic_train(run: Path, result: dict, cfg: dict, dataset: str, sour
         raise ValueError(f"periodic official runtime/config mismatch: {dataset}")
     if any((run / name).exists() for name in ("probe_manifest.json", "probe_metrics.jsonl")):
         raise ValueError(f"periodic run contains stale train-probe artifacts: {dataset}")
-    expected_steps = list(range(1000, horizon + 1, 1000))
-    if not expected_steps or expected_steps[-1] != horizon:
-        expected_steps.append(horizon)
+    expected_steps = official_test_steps(horizon)
+    if cfg.get("test_steps") != expected_steps:
+        raise ValueError(f"resolved 20-percent schedule mismatch: {dataset}")
     if not isinstance(result.get("wandb_run_id"), str) or not result["wandb_run_id"]:
         raise ValueError(f"periodic W&B run identity is missing: {dataset}")
     records = result.get("official_test_evaluations")
@@ -566,7 +566,8 @@ def launch(args):
         or output == ROOT / "outputs"
     ):
         raise ValueError("fresh child of outputs/ required")
-    minimum_free = 16 * 1024**3 if periodic_test else 24 * 1024**3
+    # Measured prior outputs: ~7GiB final runs +1GiB rolling temp +3GiB reserve.
+    minimum_free = 11 * 1024**3 if periodic_test else 24 * 1024**3
     if shutil.disk_usage(ROOT).free < minimum_free:
         raise RuntimeError(
             f"at least {minimum_free // (1024**3)}GiB free required; no artifact cleanup permitted"
@@ -580,11 +581,11 @@ def launch(args):
         "runtime_policy": OFFICIAL_RUNTIME if periodic_test else RUNTIME,
         "order": list(DATASETS),
         "evaluation": (
-            "official_every1000_and_final_no_selection"
+            "official_every20percent_and_final_no_selection"
             if periodic_test else "final_only_clean_plus_9_masks"
         ),
         "evaluation_policy": (
-            "official_every1000_and_final_no_selection"
+            "official_every20percent_and_final_no_selection"
             if periodic_test else "final_only_clean_plus_9_masks"
         ),
         "official_unseen_used_for_selection": False,
@@ -730,7 +731,7 @@ def main():
     parser.add_argument("--output")
     parser.add_argument("--gate")
     parser.add_argument("--launch", action="store_true")
-    parser.add_argument("--periodic-test", action="store_true", help="run official test every 1000 updates and once at final")
+    parser.add_argument("--periodic-test", action="store_true", help="run official test at 20/40/60/80/100 percent of updates")
     args = parser.parse_args()
     if not args.launch:
         print(

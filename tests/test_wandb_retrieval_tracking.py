@@ -25,7 +25,7 @@ class FakeRun:
         self.artifacts: list[tuple[object, list[str]]] = []
         self.finished: list[int] = []
 
-    def log(self, values: dict[str, object], *, step: int | None = None) -> None:
+    def log(self, values: dict[str, object], *, step: int | None = None, commit: bool | None = None) -> None:
         self.logs.append((values, step))
 
     def define_metric(
