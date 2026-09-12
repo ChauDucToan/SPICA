@@ -19,8 +19,11 @@ def main(config: DictConfig) -> None:
     output = Path(HydraConfig.get().runtime.output_dir)
     args = argparse.Namespace(**OmegaConf.to_container(config, resolve=True),
                               output_dir=str(output / "train"), campaign_root=str(output))
+    # Selecting the explicit official_test runtime is itself an opt-in; the
+    # default minimal runtime keeps the historical train-then-evaluate flow.
+    args.periodic_test = bool(args.periodic_test or "test_every" in args.runtime)
     result = train(args)
-    if not args.smoke:
+    if not args.smoke and not args.periodic_test:
         gc.collect()
         evaluate(["--run-dir", args.output_dir, "--output-dir", str(output / "evaluation"),
                   "--device", args.device, "--arm", result["arm"]])

@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import sys
 import traceback
+from typing import Any
 
 from run_coupled_campaign import _copy_source_archive, _json_atomic, _now, _start_child
 from run_fusion_campaign import _read, _sha
@@ -26,6 +27,8 @@ from spica.train_coupled_benchmark import ARM, DATASETS, METHOD_VERSION
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = {"probe_every": 5, "checkpoint_every": 100}
+OFFICIAL_RUNTIME = {"test_every": 1000, "checkpoint_every": 100}
+PERIODIC_STATUS = "TRAIN_AND_PERIODIC_OFFICIAL_EVAL_FINISHED_UNVERIFIED"
 EXPECTED_IDENTITIES = _plain(OFFICIAL_IDENTITIES)
 COMPONENTS = tuple(
     sorted(
@@ -49,6 +52,7 @@ COMPONENTS = tuple(
                 "src/spica/data/masking.py",
                 "src/spica/evaluation/coupled_predictive.py",
                 "src/spica/evaluation/metrics.py",
+                "src/spica/evaluation/periodic_test.py",
                 "src/spica/evaluation/masked_view.py",
                 "src/spica/provenance.py",
                 "src/spica/runtime.py",
@@ -66,6 +70,7 @@ COMPONENTS = tuple(
                 "scripts/run_coupled_campaign.py",
                 "scripts/run_fusion_campaign.py",
                 "configs/runtime/minimal.yaml",
+                "configs/runtime/official_test.yaml",
                 "configs/data/sketchy_104_21.yaml",
                 "configs/data/tuberlin_220_30.yaml",
                 "configs/data/quickdraw_80_30.yaml",
@@ -116,7 +121,7 @@ def _evidence_path(path, gate_path):
     return p
 
 
-def _required_evidence(gate_path, gate):
+def _required_evidence(gate_path, gate, periodic_test=False):
     records = _records(gate)
     required = gate.get("required_evidence")
     if not isinstance(required, dict) or set(required) != set(EVIDENCE_NAMES):
@@ -154,26 +159,36 @@ def _required_evidence(gate_path, gate):
                 True,
             ):
                 raise ValueError(f"smoke receipt is not smoke-2: {dataset}")
-            if receipt.get("runtime_policy") != RUNTIME:
+            expected_runtime = OFFICIAL_RUNTIME if periodic_test else RUNTIME
+            if receipt.get("runtime_policy") != expected_runtime:
                 raise ValueError(f"smoke runtime policy mismatch: {dataset}")
             expected = {
                 "optimizer_states": 179,
                 "moment_tensors": 358,
                 "restore_exact": True,
-                "probe_rows": 320,
                 "official_images_opened": 0,
-                "scope": "CPU_SAVED_SMOKE_RESTORE_AND_RUNTIME_PROBE",
+                "scope": (
+                    "CPU_SAVED_SMOKE_RESTORE_AND_PERIODIC_TEST"
+                    if periodic_test else "CPU_SAVED_SMOKE_RESTORE_AND_RUNTIME_PROBE"
+                ),
             }
+            expected["test_rows" if periodic_test else "probe_rows"] = 2560 if periodic_test else 320
+            if periodic_test:
+                expected.update({
+                    "test_boundary_resume_exact": True,
+                    "no_update_after_step1_evaluation": True,
+                    "step2_parity_baseline": True,
+                })
             if not receipt.get("compact_whole_model_cuda_restore_exact"):
                 raise ValueError(f"missing actual compact CUDA restore: {dataset}")
             if receipt.get("evaluator_sha256") != gate['component_sha256'].get('scripts/evaluate_coupled_benchmark.py'):
                 raise ValueError(f"stale evaluator restore gate: {dataset}")
             if any(receipt.get(key) != value for key, value in expected.items()):
-                raise ValueError(f"incomplete saved restore/probe evidence: {dataset}")
+                raise ValueError(f"incomplete saved restore evidence: {dataset}")
     return {name: required[name] for name in EVIDENCE_NAMES}
 
 
-def gate_check(path: Path):
+def gate_check(path: Path, periodic_test: bool = False):
     gate = _read(path)
     if (
         gate.get("status") != "PASS"
@@ -188,11 +203,17 @@ def gate_check(path: Path):
         raise ValueError(
             "official dataset identities/order do not match the locked protocol"
         )
+    expected_runtime = OFFICIAL_RUNTIME if periodic_test else RUNTIME
+    if periodic_test:
+        if gate.get("evaluation_policy") != "official_every1000_and_final_no_selection":
+            raise ValueError("periodic gate requires official_every1000_and_final_no_selection")
+    elif gate.get("evaluation_policy") == "official_every1000_and_final_no_selection":
+        raise ValueError("periodic gate cannot be used by the legacy runner")
     if (
-        gate.get("runtime_policy", gate.get("runtime")) != RUNTIME
-        or runtime_policy() != RUNTIME
+        gate.get("runtime_policy", gate.get("runtime")) != expected_runtime
+        or runtime_policy(expected_runtime) != expected_runtime
     ):
-        raise ValueError("minimal runtime policy must be probe=5/checkpoint=100")
+        raise ValueError("runtime policy does not match the selected runner")
     components = gate.get("component_sha256")
     if not isinstance(components, dict) or set(components) != set(COMPONENTS):
         raise ValueError(
@@ -201,7 +222,7 @@ def gate_check(path: Path):
     for name, digest in components.items():
         if _sha(ROOT / name) != digest:
             raise ValueError(f"gate source changed: {name}")
-    _required_evidence(path, gate)
+    _required_evidence(path, gate, periodic_test=periodic_test)
     cpu_record = gate['required_evidence']['cpu_test_receipt']
     cpu_path = cpu_record if isinstance(cpu_record, str) else cpu_record['path']
     cpu = _read(_evidence_path(cpu_path, path))
@@ -227,7 +248,7 @@ def gate_check(path: Path):
         if (
             cfg.get("actual_updates") != 2
             or cfg.get("total_steps") != DATASETS[dataset]["total_steps"]
-            or cfg.get("runtime") != RUNTIME
+            or cfg.get("runtime") != expected_runtime
         ):
             raise ValueError(f"smoke schedule/runtime mismatch: {dataset}")
         if (
@@ -308,7 +329,96 @@ def _finite_probe(run, horizon):
             raise ValueError("probe row is not six finite retrieval scalars")
 
 
-def check_finished_train(run: Path, smoke: Path, dataset: str, source_hash: str):
+def _check_periodic_train(run: Path, result: dict, cfg: dict, dataset: str, source_hash: str):
+    horizon = DATASETS[dataset]["total_steps"]
+    if (
+        cfg.get("smoke")
+        or cfg.get("runtime") != OFFICIAL_RUNTIME
+        or cfg.get("tracking_policy") != "official_test_v1"
+        or cfg.get("selection_policy") != "none;final_only"
+        or cfg.get("probe_scope") != "disabled_official_periodic_test"
+        or cfg.get("official_unseen_evaluation") != "periodic_monitoring_no_selection"
+    ):
+        raise ValueError(f"periodic official runtime/config mismatch: {dataset}")
+    if any((run / name).exists() for name in ("probe_manifest.json", "probe_metrics.jsonl")):
+        raise ValueError(f"periodic run contains stale train-probe artifacts: {dataset}")
+    expected_steps = list(range(1000, horizon + 1, 1000))
+    if not expected_steps or expected_steps[-1] != horizon:
+        expected_steps.append(horizon)
+    if not isinstance(result.get("wandb_run_id"), str) or not result["wandb_run_id"]:
+        raise ValueError(f"periodic W&B run identity is missing: {dataset}")
+    records = result.get("official_test_evaluations")
+    if not isinstance(records, list) or len({row.get("step") for row in records if isinstance(row, dict)}) != len(records) or [row.get("step") for row in records] != expected_steps:
+        raise ValueError(f"periodic test cadence/history mismatch: {dataset}")
+    wandb_runtime = _read(run / "wandb_runtime.json")
+    if wandb_runtime.get("run_id") != result.get("wandb_run_id"):
+        raise ValueError(f"periodic W&B runtime identity mismatch: {dataset}")
+    evaluation_rows = [json.loads(line) for line in (run / "test_evaluations.jsonl").read_text().splitlines()]
+    if evaluation_rows != records:
+        raise ValueError(f"periodic evaluation records are not bound to run result: {dataset}")
+    metrics_rows = [json.loads(line) for line in (run / "test_metrics.jsonl").read_text().splitlines()]
+    metric_names = tuple(
+        f"test/{scope}/{metric}"
+        for scope in ("cleaned", "masked")
+        for metric in ("mAP@200", "mAP@all", "P@200")
+    )
+    if [row.get("step_train") for row in metrics_rows] != expected_steps or any(
+        set(row) != {"step_train", *metric_names}
+        or any(isinstance(row[name], bool) or not math.isfinite(float(row[name])) for name in metric_names)
+        for row in metrics_rows
+    ):
+        raise ValueError(f"periodic test metric history is invalid: {dataset}")
+    counts = EXPECTED_IDENTITIES[dataset]["counts"]["test"]
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or record.get("step") != expected_steps[index]:
+            raise ValueError(f"periodic test record is invalid: {dataset}")
+        summary_path = run / str(record.get("path")) / "summary.json"
+        if (
+            record.get("summary") != str(summary_path.relative_to(run))
+            or record.get("summary_sha256") != _sha(summary_path)
+            or not isinstance(record.get("checkpoint_sha256"), str)
+            or record.get("final") != (index == len(records) - 1)
+        ):
+            raise ValueError(f"periodic checkpoint/summary binding mismatch: {dataset}/{record.get('step')}")
+        summary = _read(summary_path)
+        if (
+            summary.get("status") != "COMPLETE"
+            or summary.get("step") != record["step"]
+            or summary.get("source_snapshot_hash") != source_hash
+            or summary.get("predictor_forwards") != 0
+            or summary.get("official_test_evaluated") is not True
+            or summary.get("model_state_before") != summary.get("model_state_after")
+            or summary.get("model_state_before") != summary.get("checkpoint_selection", {}).get("model_state_hash")
+            or (record["final"] and (record["checkpoint_sha256"] != result["selections"]["latest"]["sha256"]
+                                    or summary.get("model_state_after") != result["model_state_hash_after_updates"]))
+            or len(summary.get("conditions", ())) != 10
+            or summary.get("query_count") != counts["sketch"]
+            or summary.get("gallery_count") != counts["photo"]
+            or summary.get("official_unseen_used_for_selection") is not False
+            or summary.get("official_unseen_used_for_training") is not False
+            or summary.get("evaluation_scope") != (
+                "official_unseen_final" if record["final"]
+                else "official_unseen_periodic_monitoring_no_selection"
+            )
+            or summary.get("checkpoint_selections", {}).get("latest", {}).get("sha256") != record["checkpoint_sha256"]
+            or summary.get("checkpoint_selection", {}).get("sha256", record["checkpoint_sha256"]) != record["checkpoint_sha256"]
+        ):
+            raise ValueError(f"periodic summary identity/count/state mismatch: {dataset}/{record.get('step')}")
+        values = {"cleaned": "clean", "masked": "masked_macro"}
+        for scope, source in values.items():
+            for metric, key in (("mAP@200", "mAP@200_min_relevant_k"), ("mAP@all", "full_mAP"), ("P@200", "P@200")):
+                if metrics_rows[index][f"test/{scope}/{metric}"] != summary[source][key]:
+                    raise ValueError(f"periodic metric/summary mismatch: {dataset}/{record['step']}")
+        files = [path for path in summary_path.parent.iterdir() if path.name != "summary.json"]
+        if record["final"]:
+            if summary.get("artifact_policy") != "full" or not (summary_path.parent / "gallery_embeddings.npy").is_file():
+                raise ValueError(f"periodic final artifacts are incomplete: {dataset}")
+        elif summary.get("artifact_policy") != "metrics_only" or any(path.suffix in {".npy", ".npz", ".jsonl"} for path in files):
+            raise ValueError(f"periodic non-final artifacts are not metrics-only: {dataset}")
+    return result
+
+
+def check_finished_train(run: Path, smoke: Path, dataset: str, source_hash: str, periodic_test: bool = False):
     result, cfg, control = (
         _read(run / "run_result.json"),
         _read(run / "resolved_config.json"),
@@ -325,9 +435,9 @@ def check_finished_train(run: Path, smoke: Path, dataset: str, source_hash: str)
         raise ValueError(f"production result identity mismatch: {dataset}")
     if (
         cfg.get("smoke")
-        or cfg.get("runtime") != RUNTIME
+        or cfg.get("runtime") != (OFFICIAL_RUNTIME if periodic_test else RUNTIME)
         or cfg.get("checkpoint_policy") != "rolling_latest"
-        or cfg.get("tracking_policy") != "minimal_v1"
+        or cfg.get("tracking_policy") != ("official_test_v1" if periodic_test else "minimal_v1")
         or cfg.get("selection_policy") != "none;final_only"
     ):
         raise ValueError(f"production minimal runtime/config mismatch: {dataset}")
@@ -379,8 +489,24 @@ def check_finished_train(run: Path, smoke: Path, dataset: str, source_hash: str)
         raise ValueError("frozen original state changed during training")
     if any(run.glob("checkpoint_step*.pt")):
         raise ValueError(f"production retained non-rolling checkpoints: {dataset}")
+    if periodic_test:
+        return _check_periodic_train(run, result, cfg, dataset, source_hash)
     _finite_probe(run, horizon)
     return result
+
+
+def _periodic_final_result(run: Path, train: dict[str, Any], dataset: str) -> dict[str, Any]:
+    records = train["official_test_evaluations"]
+    summary = _read(run / records[-1]["path"] / "summary.json")
+    return {
+        "step": train["step"],
+        "checkpoint_sha256": records[-1]["checkpoint_sha256"],
+        "wandb_url": train.get("wandb_url"),
+        "clean": summary["clean"],
+        "masked_macro": summary["masked_macro"],
+        "masked_by_fraction": summary["masked_by_fraction"],
+        "evaluation_summary_sha256": _sha(run / records[-1]["path"] / "summary.json"),
+    }
 
 
 def _check_evaluation(evaluation, train, dataset, source_hash):
@@ -433,25 +559,34 @@ def _check_evaluation(evaluation, train, dataset, source_hash):
 
 def launch(args):
     output = Path(args.output).resolve()
+    periodic_test = bool(args.periodic_test)
     if (
         output.exists()
         or not output.is_relative_to(ROOT / "outputs")
         or output == ROOT / "outputs"
     ):
         raise ValueError("fresh child of outputs/ required")
-    if shutil.disk_usage(ROOT).free < 24 * 1024**3:
+    minimum_free = 16 * 1024**3 if periodic_test else 24 * 1024**3
+    if shutil.disk_usage(ROOT).free < minimum_free:
         raise RuntimeError(
-            "at least 24GiB free required; no artifact cleanup permitted"
+            f"at least {minimum_free // (1024**3)}GiB free required; no artifact cleanup permitted"
         )
-    gate = gate_check(Path(args.gate))
+    gate = gate_check(Path(args.gate), periodic_test=periodic_test)
     config = {
         "method": METHOD_VERSION,
         "arm": ARM,
         "datasets": DATASETS,
         "dataset_identities": EXPECTED_IDENTITIES,
-        "runtime_policy": RUNTIME,
+        "runtime_policy": OFFICIAL_RUNTIME if periodic_test else RUNTIME,
         "order": list(DATASETS),
-        "evaluation": "final_only_clean_plus_9_masks",
+        "evaluation": (
+            "official_every1000_and_final_no_selection"
+            if periodic_test else "final_only_clean_plus_9_masks"
+        ),
+        "evaluation_policy": (
+            "official_every1000_and_final_no_selection"
+            if periodic_test else "final_only_clean_plus_9_masks"
+        ),
         "official_unseen_used_for_selection": False,
         "no_retry_or_resume": True,
         "gate_sha256": _sha(Path(args.gate)),
@@ -503,7 +638,7 @@ def launch(args):
                     "cuda",
                     "--wandb-mode",
                     "online",
-                ],
+                ] + (["--periodic-test"] if periodic_test else []),
                 "evaluate": [
                     sys.executable,
                     "scripts/evaluate_coupled_benchmark.py",
@@ -515,7 +650,9 @@ def launch(args):
                     "cuda",
                 ],
             }
-            for phase, command in commands.items():
+            phases = ("train",) if periodic_test else tuple(commands)
+            for phase in phases:
+                command = commands[phase]
                 if capture_provenance(ROOT)["source_snapshot"]["sha256"] != source_hash:
                     raise RuntimeError("source changed before child")
                 runtime.update(
@@ -542,7 +679,8 @@ def launch(args):
                     raise RuntimeError("source changed during child")
                 if phase == "train":
                     train = check_finished_train(
-                        run, ROOT / gate["smoke_roots"][dataset], dataset, source_hash
+                        run, ROOT / gate["smoke_roots"][dataset], dataset, source_hash,
+                        periodic_test=periodic_test,
                     )
                     _json_atomic(
                         run / "parent_final_gate.json",
@@ -555,22 +693,25 @@ def launch(args):
                             ],
                         },
                     )
-                else:
+                elif not periodic_test:
                     results[dataset] = _check_evaluation(
                         evaluation, train, dataset, source_hash
                     )
+            if periodic_test:
+                results[dataset] = _periodic_final_result(run, train, dataset)
             runtime["completed"].append(dataset)
             _json_atomic(output / "runtime.json", runtime)
         _json_atomic(
             output / "results.json",
             {
-                "status": "LOCAL_RESULTS_PENDING_INDEPENDENT_REVIEW",
+                "status": (PERIODIC_STATUS if periodic_test else "LOCAL_RESULTS_PENDING_INDEPENDENT_REVIEW"),
+                "evaluation_policy": config["evaluation_policy"],
                 "source_snapshot_hash": source_hash,
                 "datasets": results,
             },
         )
         runtime.update(
-            status="TRAIN_AND_OFFICIAL_EVAL_FINISHED_UNVERIFIED", finished_at=_now()
+            status=(PERIODIC_STATUS if periodic_test else "TRAIN_AND_OFFICIAL_EVAL_FINISHED_UNVERIFIED"), finished_at=_now()
         )
         _json_atomic(output / "runtime.json", runtime)
         return 0
@@ -589,6 +730,7 @@ def main():
     parser.add_argument("--output")
     parser.add_argument("--gate")
     parser.add_argument("--launch", action="store_true")
+    parser.add_argument("--periodic-test", action="store_true", help="run official test every 1000 updates and once at final")
     args = parser.parse_args()
     if not args.launch:
         print(
@@ -597,7 +739,7 @@ def main():
                     "status": "INERT",
                     "would_launch": False,
                     "datasets": DATASETS,
-                    "runtime_policy": RUNTIME,
+                    "runtime_policy": OFFICIAL_RUNTIME if args.periodic_test else RUNTIME,
                 }
             )
         )

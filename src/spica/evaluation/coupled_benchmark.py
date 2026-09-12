@@ -9,7 +9,7 @@ bounded-memory evaluator and a CPU-only synthetic self-check.
 from __future__ import annotations
 
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import hashlib
 import json
 from pathlib import Path
@@ -167,17 +167,25 @@ def _encode_loader(
     *,
     device: torch.device,
     gallery: bool,
-    metadata_path: Path,
+    metadata_path: Path | None = None,
     require_mask_metadata: bool = False,
+    status_counts: Counter[str] | None = None,
 ) -> EncodedRetrievalSet:
     """Encode one loader; only embeddings are retained and score chunks stay bounded."""
     embeddings: list[Tensor] = []
     labels: list[Tensor] = []
     paths: list[str] = []
-    temporary = metadata_path.with_name(f".{metadata_path.name}.tmp")
+    temporary = (
+        metadata_path.with_name(f".{metadata_path.name}.tmp")
+        if metadata_path is not None else None
+    )
     count = 0
     try:
-        with temporary.open("w", encoding="utf-8") as metadata_file:
+        metadata_context = (
+            temporary.open("w", encoding="utf-8")
+            if temporary is not None else nullcontext(None)
+        )
+        with metadata_context as metadata_file:
             with torch.inference_mode():
                 for batch in loader:
                     if not isinstance(batch, Mapping):
@@ -207,18 +215,26 @@ def _encode_loader(
                         for meta in raw_meta:
                             if not isinstance(meta, Mapping) or str(meta.get("status", "")) not in {"ok", "blank_input", "target_unreachable", "zero_fraction"}:
                                 raise ValueError("mask metadata has an unknown status")
-                    for index, (path, label) in enumerate(zip(batch_paths, batch_labels.tolist(), strict=True)):
-                        row: dict[str, Any] = {"index": count + index, "path": path, "label": int(label)}
-                        if raw_meta is not None:
-                            row["mask"] = raw_meta[index]
-                        metadata_file.write(json.dumps(row, sort_keys=True, default=_json_default) + "\n")
+                        if status_counts is not None:
+                            status_counts.update(str(meta["status"]) for meta in raw_meta)
+                    elif status_counts is not None:
+                        status_counts.update(["unmasked"] * len(batch_paths))
+                    if metadata_file is not None:
+                        for index, (path, label) in enumerate(zip(batch_paths, batch_labels.tolist(), strict=True)):
+                            row: dict[str, Any] = {"index": count + index, "path": path, "label": int(label)}
+                            if raw_meta is not None:
+                                row["mask"] = raw_meta[index]
+                            metadata_file.write(json.dumps(row, sort_keys=True, default=_json_default) + "\n")
                     count += len(batch_paths)
-            metadata_file.flush()
+            if metadata_file is not None:
+                metadata_file.flush()
         if not embeddings:
             raise ValueError("cannot encode an empty loader")
-        temporary.replace(metadata_path)
+        if temporary is not None and metadata_path is not None:
+            temporary.replace(metadata_path)
     except Exception:
-        temporary.unlink(missing_ok=True)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
         raise
     return EncodedRetrievalSet(
         embeddings=torch.cat(embeddings, dim=0).float(),
@@ -266,12 +282,15 @@ def _evaluate_condition(
     device: torch.device,
     output_dir: Path,
     condition_name: str,
-    mask_metadata: Path,
+    mask_metadata: Path | None = None,
+    save_details: bool = True,
+    mask_status_counts: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     query_path = output_dir / f"{condition_name}_query_embeddings.npy"
     arrays_path = output_dir / f"{condition_name}_per_query.npz"
-    metadata_hash = _sha256_file(mask_metadata)
-    _write_npy(query_path, queries.embeddings.numpy().astype(np.float32, copy=False))
+    metadata_hash = _sha256_file(mask_metadata) if mask_metadata is not None else None
+    if save_details:
+        _write_npy(query_path, queries.embeddings.numpy().astype(np.float32, copy=False))
     evaluations = evaluate_category_retrieval_all_denominators(
         queries,
         gallery,
@@ -282,24 +301,48 @@ def _evaluate_condition(
         device=device,
     )
     scalar, arrays = _metric_record(evaluations, gallery, queries)
-    _write_npz(arrays_path, **arrays)
-    with mask_metadata.open(encoding='utf-8') as handle:
-        status_counts = dict(sorted(Counter(json.loads(line).get('mask', {}).get('status', 'unmasked') for line in handle).items()))
-    assert sum(status_counts.values()) == len(queries.paths)
-    artifact = output_dir / f"{condition_name}_summary.json"
-    artifact_value = {"condition": condition_name, "metrics": scalar, "query_count": len(queries.paths), "gallery_count": len(gallery.paths), "mask_metadata_sha256": metadata_hash, "query_embeddings_sha256": _sha256_file(query_path), "per_query_sha256": _sha256_file(arrays_path), "mask_status_counts": status_counts}
-    _write_json(artifact, artifact_value)
+    if save_details:
+        _write_npz(arrays_path, **arrays)
+    if mask_status_counts is None and mask_metadata is not None:
+        with mask_metadata.open(encoding="utf-8") as handle:
+            mask_status_counts = Counter(
+                json.loads(line).get("mask", {}).get("status", "unmasked")
+                for line in handle
+            )
+    status_counts = dict(sorted((mask_status_counts or {}).items()))
+    if sum(status_counts.values()) != len(queries.paths):
+        raise AssertionError("mask status counts do not match query count")
+    if save_details:
+        artifact = output_dir / f"{condition_name}_summary.json"
+        artifact_value = {
+            "condition": condition_name,
+            "metrics": scalar,
+            "query_count": len(queries.paths),
+            "gallery_count": len(gallery.paths),
+            "mask_metadata_sha256": metadata_hash,
+            "query_embeddings_sha256": _sha256_file(query_path),
+            "per_query_sha256": _sha256_file(arrays_path),
+            "mask_status_counts": status_counts,
+        }
+        _write_json(artifact, artifact_value)
+        return {
+            "condition": condition_name,
+            "metrics": scalar,
+            "summary_artifact": artifact.name,
+            "summary_artifact_sha256": _sha256_file(artifact),
+            "query_count": len(queries.paths),
+            "gallery_count": len(gallery.paths),
+            "query_embeddings": str(query_path.name),
+            "per_query": str(arrays_path.name),
+            "mask_metadata": str(mask_metadata.name) if mask_metadata is not None else None,
+            "mask_metadata_sha256": metadata_hash,
+            "mask_status_counts": status_counts,
+        }
     return {
         "condition": condition_name,
         "metrics": scalar,
-        "summary_artifact": artifact.name,
-        "summary_artifact_sha256": _sha256_file(artifact),
         "query_count": len(queries.paths),
         "gallery_count": len(gallery.paths),
-        "query_embeddings": str(query_path.name),
-        "per_query": str(arrays_path.name),
-        "mask_metadata": str(mask_metadata.name),
-        "mask_metadata_sha256": metadata_hash,
         "mask_status_counts": status_counts,
     }
 
@@ -319,13 +362,15 @@ def evaluate_coupled_benchmark(
     checkpoint_selection: Mapping[str, Any],
     data_identity: Mapping[str, Any],
     status: str = "COMPLETE",
+    save_details: bool = True,
+    evaluation_scope: str = "official_unseen_final",
+    reset_peak_memory: bool = True,
 ) -> dict[str, Any]:
     """Evaluate clean and the fixed nine masks using an explicit loader API.
 
     ``gallery_loader`` is consumed exactly once.  Each query loader is consumed
-    once, in the fixed condition order.  The returned object is a compact
-    summary; embeddings, per-query arrays, and mask JSONL are files in
-    ``output_dir``.
+    once, in the fixed condition order.  When ``save_details`` is false only
+    the compact summary is written; metric computation remains unchanged.
     """
     output_dir = Path(output_dir).expanduser().resolve()
     if output_dir.exists():
@@ -352,7 +397,7 @@ def evaluate_coupled_benchmark(
     predictor = getattr(model, "predictor", None)
     if isinstance(predictor, nn.Module):
         hook = predictor.register_forward_hook(lambda *_args: predictor_calls.append(1))
-    if actual_device.type == 'cuda':
+    if actual_device.type == 'cuda' and reset_peak_memory:
         torch.cuda.reset_peak_memory_stats(actual_device)
     started = time.perf_counter()
     summary: dict[str, Any] = {
@@ -361,7 +406,8 @@ def evaluate_coupled_benchmark(
         "official_unseen_used_for_training": False,
         "official_test_evaluated": status == "COMPLETE",
         "official_test_loader_opened": status == "COMPLETE",
-        "evaluation_scope": "official_unseen_final" if status == "COMPLETE" else "train_only_preflight",
+        "evaluation_scope": evaluation_scope if status == "COMPLETE" else "train_only_preflight",
+        "artifact_policy": "full" if save_details else "metrics_only",
         "benchmark": benchmark,
         "source_hash": str(source_hash),
         "architecture": "predictive_fusion_v2",
@@ -389,41 +435,48 @@ def evaluate_coupled_benchmark(
         adapter.eval()
         gallery = _encode_loader(
             adapter, gallery_loader, device=actual_device, gallery=True,
-            metadata_path=output_dir / "gallery_metadata.jsonl",
+            metadata_path=output_dir / "gallery_metadata.jsonl" if save_details else None,
         )
         if len(gallery.paths) < TOP_K:
             raise ValueError(f"gallery must contain at least {TOP_K} items")
-        _write_npy(output_dir / "gallery_embeddings.npy", gallery.embeddings.numpy().astype(np.float32, copy=False))
-        _write_npy(output_dir / "gallery_labels.npy", gallery.labels.numpy().astype(np.int64, copy=False))
+        if save_details:
+            _write_npy(output_dir / "gallery_embeddings.npy", gallery.embeddings.numpy().astype(np.float32, copy=False))
+            _write_npy(output_dir / "gallery_labels.npy", gallery.labels.numpy().astype(np.int64, copy=False))
+        clean_status_counts: Counter[str] = Counter()
         clean = _encode_loader(
             adapter, clean_query_loader, device=actual_device, gallery=False,
-            metadata_path=output_dir / "clean_mask_metadata.jsonl",
+            metadata_path=output_dir / "clean_mask_metadata.jsonl" if save_details else None,
+            status_counts=clean_status_counts,
         )
         if len(clean.paths) == 0:
             raise ValueError("clean query loader is empty")
         if not set(clean.labels.tolist()) <= set(gallery.labels.tolist()):
             raise ValueError('every query class must have gallery positives')
-        summary['gallery_embeddings_sha256'] = _sha256_file(output_dir / 'gallery_embeddings.npy')
-        summary['gallery_labels_sha256'] = _sha256_file(output_dir / 'gallery_labels.npy')
-        summary['gallery_metadata_sha256'] = _sha256_file(output_dir / 'gallery_metadata.jsonl')
+        if save_details:
+            summary['gallery_embeddings_sha256'] = _sha256_file(output_dir / 'gallery_embeddings.npy')
+            summary['gallery_labels_sha256'] = _sha256_file(output_dir / 'gallery_labels.npy')
+            summary['gallery_metadata_sha256'] = _sha256_file(output_dir / 'gallery_metadata.jsonl')
         summary["query_count"] = len(clean.paths)
         summary["gallery_count"] = len(gallery.paths)
         summary["conditions"].append(_evaluate_condition(
             adapter, clean, gallery, device=actual_device, output_dir=output_dir,
-            condition_name="clean", mask_metadata=output_dir / "clean_mask_metadata.jsonl",
+            condition_name="clean", mask_metadata=output_dir / "clean_mask_metadata.jsonl" if save_details else None,
+            save_details=save_details, mask_status_counts=clean_status_counts,
         ))
         for fraction, seed in EVAL_CONDITIONS:
+            mask_status_counts: Counter[str] = Counter()
             condition_name = f"mask_f{int(fraction * 100):02d}_s{seed}"
             masked = _encode_loader(
                 adapter, masked_loader_factory(fraction, seed), device=actual_device, gallery=False,
-                metadata_path=output_dir / f"{condition_name}_mask_metadata.jsonl",
-                require_mask_metadata=True,
+                metadata_path=output_dir / f"{condition_name}_mask_metadata.jsonl" if save_details else None,
+                require_mask_metadata=True, status_counts=mask_status_counts,
             )
             _validate_same_order(clean, masked, condition_name)
             summary["conditions"].append(_evaluate_condition(
                 adapter, masked, gallery, device=actual_device, output_dir=output_dir,
                 condition_name=condition_name,
-                mask_metadata=output_dir / f"{condition_name}_mask_metadata.jsonl",
+                mask_metadata=output_dir / f"{condition_name}_mask_metadata.jsonl" if save_details else None,
+                save_details=save_details, mask_status_counts=mask_status_counts,
             ))
         if len(summary["conditions"]) != 10:
             raise AssertionError("wrong number of evaluation conditions")
@@ -450,6 +503,7 @@ def evaluate_coupled_benchmark(
             "model_state_after": after,
             "predictor_forwards": len(predictor_calls),
             "query_order": "clean then fraction-major/seed-major masks",
+            "artifact_policy": "full" if save_details else "metrics_only",
         })
         _write_json(output_dir / "summary.json", summary)
         return summary

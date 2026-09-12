@@ -1,12 +1,13 @@
 """Standalone official Sketchy/TU-Berlin/QuickDraw F2 MP-Q trainer.
 
-This module owns training only.  Official test data is deliberately left to the
-parent evaluator. A fixed seen-train probe monitors progress, never selects a
-checkpoint, and never opens official test images.
+Legacy mode uses a seen-train probe and a separate final evaluator. Explicit
+--periodic-test pauses training for full official test every1000/final, without
+checkpoint selection or changing the model, objective, or training stream.
 """
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import math
@@ -20,6 +21,7 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from .coupled_predictive_losses import coupled_region_loss
 from .data import coupled_benchmark as benchmark_data
+from .evaluation.periodic_test import evaluate_periodic_test
 from .evaluation.training_probe import TrainingProbe
 from .runtime import runtime_policy
 from .models.clip import load_frozen_clip
@@ -54,6 +56,7 @@ SKETCH_REF_METHOD = "coupled_predictive_mp_sketch_ref_official_v1"
 MAIN_OBJECTIVE = "multi_positive_supervised_contrastive"
 TEMPERATURE = 0.07
 SEED = 42
+LOCAL_LOSS_LOG_EVERY = 5
 DATASETS: dict[str, dict[str, Any]] = {
     "sketchy_104_21": {
         "config": "configs/data/sketchy_104_21.yaml",
@@ -354,12 +357,68 @@ def _wandb_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "architecture", "evaluation_query", "source_snapshot_hash", "runtime",
         "lambda_sketch_ref", "official_baseline_seen_before_design", "blind_holdout_claim",
     )
-    return _safe({key: config[key] for key in keys if key in config})
+    values = _safe({key: config[key] for key in keys if key in config})
+    if config.get("tracking_policy") == "official_test_v1":
+        values.update({key: config[key] for key in (
+            "tracking_policy", "probe_scope", "official_unseen_evaluation",
+        )})
+    return values
+
+
+def _test_metrics(report: Mapping[str, Any]) -> dict[str, float]:
+    metrics: dict[str, float] = {}
+    for scope, source in (("cleaned", "clean"), ("masked", "masked_macro")):
+        values = report[source]
+        metrics.update({
+            f"test/{scope}/mAP@200": float(values["mAP@200_min_relevant_k"]),
+            f"test/{scope}/mAP@all": float(values["full_mAP"]),
+            f"test/{scope}/P@200": float(values["P@200"]),
+        })
+    return metrics
+
+
+def _periodic_test(
+    *,
+    model: Any,
+    protocol: Any,
+    transform: Any,
+    output: Path,
+    step: int,
+    checkpoint: Mapping[str, Any],
+    source_hash: str,
+    device: torch.device,
+    final: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    test_path = output / "test" / f"step_{step}"
+    test_path.parent.mkdir(parents=True, exist_ok=True)
+    report = evaluate_periodic_test(
+        model, protocol, transform, test_path, device=device,
+        source_hash=source_hash, checkpoint_selection=checkpoint, final=final,
+    )
+    summary_path = test_path / "summary.json"
+    summary_sha = _sha256_file(summary_path)
+    record = {
+        "step": step,
+        "path": str(test_path.relative_to(output)),
+        "summary": str(summary_path.relative_to(output)),
+        "summary_sha256": summary_sha,
+        "checkpoint_sha256": str(checkpoint["sha256"]),
+        "final": final,
+        "evaluation_scope": report.get("evaluation_scope", "official_test_periodic_monitoring_no_selection"),
+    }
+    return report, record
 
 
 def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     lambda_sketch_ref = getattr(args, "lambda_sketch_ref", None)
-    policy = runtime_policy(getattr(args, "runtime", None))
+    periodic_test = bool(getattr(args, "periodic_test", False))
+    runtime_overrides = getattr(args, "runtime", None)
+    if periodic_test:
+        policy = runtime_policy({"test_every": 1000, **dict(runtime_overrides or {})})
+    else:
+        policy = runtime_policy(runtime_overrides)
+        if "test_every" in policy:
+            raise ValueError("--periodic-test is required for official test cadence")
     routing = _validate_routing(args.dataset, lambda_sketch_ref=lambda_sketch_ref)
     dataset_info = DATASETS[args.dataset]
     actual_updates = 2 if args.smoke else int(dataset_info["total_steps"])
@@ -390,9 +449,16 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     config["warmup_steps"] = warmup_steps
     config.update(routing)
     config["runtime"] = policy
-    config["tracking_policy"] = "minimal_v1"
+    config["tracking_policy"] = "official_test_v1" if periodic_test else "minimal_v1"
     config["checkpoint_policy"] = "step0_and_final_only" if args.smoke else "rolling_latest"
-    config["probe_scope"] = "disabled_smoke" if args.smoke else "seen_train_probe_not_validation"
+    config["probe_scope"] = (
+        "disabled_official_periodic_test" if periodic_test
+        else "disabled_smoke" if args.smoke else "seen_train_probe_not_validation"
+    )
+    config["official_unseen_evaluation"] = (
+        "periodic_monitoring_no_selection" if periodic_test
+        else "final_only_separate_evaluator"
+    )
 
     source = capture_provenance(ROOT, resolved_config=config)
     source_hash = _verify_source(source, Path(args.campaign_root).expanduser())
@@ -411,9 +477,12 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     )
     if loader.generator is None:
         raise RuntimeError("official loader must expose its seeded generator")
-    probe = None if args.smoke else TrainingProbe.from_protocol(protocol, bundle.transform)
+    probe = None if args.smoke or periodic_test else TrainingProbe.from_protocol(protocol, bundle.transform)
     if probe is not None:
         _json(output / "probe_manifest.json", probe.summary)
+    test_evaluations: list[dict[str, Any]] = []
+    test_metrics_path = output / "test_metrics.jsonl"
+    test_evaluations_path = output / "test_evaluations.jsonl"
     batches = _loader_cycle(loader)
     data_identity = _safe(protocol.identity)
     checkpoints = [_save_run_checkpoint(
@@ -429,6 +498,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
     lr_history = lr_path.open("w", encoding="utf-8")
     trace_handle = trace_path.open("w", encoding="utf-8")
     mask_handle = mask_path.open("w", encoding="utf-8")
+    test_metrics_handle = test_metrics_path.open("w", encoding="utf-8") if periodic_test and not args.smoke else None
+    test_evaluations_handle = test_evaluations_path.open("w", encoding="utf-8") if periodic_test and not args.smoke else None
     wandb_run: WandbExperiment | None = None
     last_losses: dict[str, float] = {}
     last_actual_lr: dict[str, float] = {}
@@ -451,8 +522,19 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             _json(output / "wandb_runtime.json", {"run_id": wandb_run.run_id, "run_url": wandb_run.run_url})
         if wandb_run is not None:
             wandb_run.define_metric("step_train")
-            wandb_run.define_metric("cleaned/*", step_metric="step_train")
-            wandb_run.define_metric("masked/*", step_metric="step_train")
+            prefix = "test/" if periodic_test else ""
+            for scope in ("cleaned", "masked"):
+                wandb_run.define_metric(f"{prefix}{scope}/*", step_metric="step_train")
+            if periodic_test and not args.smoke:
+                photos = Counter(entry.label for entry in protocol.test.photo_entries)
+                p_all = sum(photos[entry.label] for entry in protocol.test.sketch_entries) / (len(protocol.test.sketch_entries) * len(protocol.test.photo_entries))
+                wandb_run.set_summary({
+                    "test/scope": "official_unseen_periodic_monitoring_no_selection",
+                    "test/cleaned/P@all": p_all, "test/masked/P@all": p_all,
+                    "test/mAP@200_definition": "sum(P(k)*relevance(k), k<=200)/min(R,200)",
+                    "test/query_count": len(protocol.test.sketch_entries),
+                    "test/gallery_count": len(protocol.test.photo_entries),
+                })
             if probe is not None:
                 wandb_run.set_summary({
                     "probe/scope": config["probe_scope"], "probe/query_count": 32,
@@ -479,7 +561,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             if not bool(torch.isfinite(losses["total"]).item()):
                 raise FloatingPointError(f"nonfinite total loss at step {step}")
             losses["total"].backward()
-            log_step = step % policy["probe_every"] == 0 or step == actual_updates
+            loss_log_every = policy["probe_every"] if not periodic_test else LOCAL_LOSS_LOG_EVERY
+            log_step = step % loss_log_every == 0 or step == actual_updates
             gradient_norms = _gradient_diagnostics(model, optimizer)
             if not all(math.isfinite(value) for value in gradient_norms.values()):
                 raise FloatingPointError(f"nonfinite gradient at step {step}")
@@ -512,18 +595,47 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                     _append_jsonl(handle, {"step_train": step, **metrics})
                 if wandb_run is not None:
                     wandb_run.log_metrics({"step_train": step, **metrics}, step=step)
-            if not args.smoke and step % policy["checkpoint_every"] == 0 and step < actual_updates:
-                _save_run_checkpoint(
+
+            checkpoint_due = (
+                not args.smoke and step % policy["checkpoint_every"] == 0
+                and step < actual_updates
+            )
+            test_due = (
+                periodic_test and not args.smoke
+                and (step % policy["test_every"] == 0 or step == actual_updates)
+            )
+            checkpoint = None
+            if checkpoint_due or test_due:
+                checkpoint = _save_run_checkpoint(
                     output, step=step, model=model, optimizer=optimizer, scheduler=scheduler,
                     config=config, source_hash=source_hash, clip_identity=clip_identity,
                     data_identity=data_identity, loader=loader, initialization=initialization,
                 )
+            if test_due:
+                # All train metadata is materialized before releasing the graph/batch.
+                del losses, batch, raw
+                report, record = _periodic_test(
+                    model=model, protocol=protocol, transform=bundle.transform, output=output,
+                    step=step, checkpoint=checkpoint, source_hash=source_hash,
+                    device=device, final=step == actual_updates,
+                )
+                test_evaluations.append(record)
+                _append_jsonl(test_metrics_handle, {"step_train": step, **_test_metrics(report)})
+                _append_jsonl(test_evaluations_handle, record)
+                test_metrics_handle.flush()
+                test_evaluations_handle.flush()
+                if wandb_run is not None:
+                    wandb_run.log_test_retrieval(step, report)
+            if checkpoint is not None and not test_due:
+                del checkpoint
 
-        final = _save_run_checkpoint(
-            output, step=actual_updates, model=model, optimizer=optimizer, scheduler=scheduler,
-            config=config, source_hash=source_hash, clip_identity=clip_identity,
-            data_identity=data_identity, loader=loader, initialization=initialization,
-        )
+        final = checkpoint if periodic_test and not args.smoke and test_evaluations and test_evaluations[-1]["step"] == actual_updates else None
+        if final is None:
+            final = _save_run_checkpoint(
+                output, step=actual_updates, model=model, optimizer=optimizer, scheduler=scheduler,
+                config=config, source_hash=source_hash, clip_identity=clip_identity,
+                data_identity=data_identity, loader=loader, initialization=initialization,
+            )
         checkpoints.append(final)
         expected_rows = actual_updates * BATCH_SIZE
         if trace_count != expected_rows or mask_count != expected_rows:
@@ -570,7 +682,8 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
             "memory": {"baseline": memory_baseline, "peak_allocated": int(torch.cuda.max_memory_allocated(device)), "peak_reserved": int(torch.cuda.max_memory_reserved(device))} if device.type == "cuda" else {},
             "official_unseen_used_for_training": False,
             "official_unseen_used_for_selection": False,
-            "official_unseen_evaluation": "separate_evaluator;not_run_here",
+            "official_unseen_evaluation": config["official_unseen_evaluation"],
+            "official_test_evaluations": test_evaluations,
             "wandb_run_id": None if wandb_run is None else wandb_run.run_id,
             "wandb_url": None if wandb_run is None else wandb_run.run_url,
         }
@@ -578,7 +691,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if wandb_run is not None:
             wandb_run.finish()
         return result
-    except Exception:
+    except BaseException:
         if wandb_run is not None:
             wandb_run.finish(exit_code=1)
         raise
@@ -587,6 +700,10 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         lr_history.close()
         trace_handle.close()
         mask_handle.close()
+        if test_metrics_handle is not None:
+            test_metrics_handle.close()
+        if test_evaluations_handle is not None:
+            test_evaluations_handle.close()
 
 
 
@@ -613,6 +730,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--wandb-mode", choices=("online", "offline", "disabled"), default="online")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument("--periodic-test", action="store_true", default=False)
     parser.add_argument("--lambda-sketch-ref", type=float, default=argparse.SUPPRESS)
     return parser
 

@@ -22,8 +22,12 @@ _ALLOWED_LOG_METRICS = frozenset({
     "step_train",
     "cleaned/mAP@200", "cleaned/mAP@all", "cleaned/P@200",
     "masked/mAP@200", "masked/mAP@all", "masked/P@200",
+    "test/cleaned/mAP@200", "test/cleaned/mAP@all", "test/cleaned/P@200",
+    "test/masked/mAP@200", "test/masked/mAP@all", "test/masked/P@200",
 })
-_ALLOWED_METRIC_SCOPES = frozenset({"step_train", "cleaned/*", "masked/*"})
+_ALLOWED_METRIC_SCOPES = frozenset({
+    "step_train", "cleaned/*", "masked/*", "test/cleaned/*", "test/masked/*",
+})
 
 
 class WandbExperiment:
@@ -83,7 +87,10 @@ class WandbExperiment:
         step: int | None = None,
     ) -> None:
         self._ensure_active()
-        unknown = {name for name in metrics if name.startswith(("cleaned/", "masked/"))} - _ALLOWED_LOG_METRICS
+        unknown = {
+            name for name in metrics
+            if name.startswith(("cleaned/", "masked/", "test/"))
+        } - _ALLOWED_LOG_METRICS
         if unknown:
             raise ValueError(f"unknown minimal retrieval metrics: {sorted(unknown)}")
         logged = {
@@ -110,6 +117,23 @@ class WandbExperiment:
     def set_summary(self, values: Mapping[str, Any]) -> None:
         self._ensure_active()
         self._run.summary.update(dict(values))
+
+    def log_test_retrieval(self, step: int, report: Mapping[str, Any]) -> None:
+        self._ensure_active()
+        self._validate_scalar("step_train", step)
+        if not {"clean", "masked_macro"} <= set(report):
+            raise ValueError("periodic test report must contain clean and masked_macro")
+        logged = {"step_train": step}
+        for scope, source in (("test/cleaned", "clean"), ("test/masked", "masked_macro")):
+            metrics = report[source]
+            if not isinstance(metrics, Mapping):
+                raise TypeError(f"{source} metrics must be a mapping")
+            allowed = _RETRIEVAL_METRICS
+            unknown = set(metrics) - allowed
+            if unknown or set(metrics) != allowed:
+                raise ValueError(f"periodic {source} metrics must be the standard five metrics")
+            logged.update(self._prefixed_metrics(scope, metrics))
+        self.log_metrics(logged, step=step)
 
     def log_retrieval_probe(
         self,
