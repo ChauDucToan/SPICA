@@ -560,6 +560,9 @@ def _check_evaluation(evaluation, train, dataset, source_hash):
 def launch(args):
     output = Path(args.output).resolve()
     periodic_test = bool(args.periodic_test)
+    order = getattr(args, "datasets", None) or list(DATASETS)
+    if len(set(order)) != len(order) or any(d not in DATASETS for d in order):
+        raise ValueError("datasets must be a nonduplicated subset of official datasets")
     if (
         output.exists()
         or not output.is_relative_to(ROOT / "outputs")
@@ -579,7 +582,7 @@ def launch(args):
         "datasets": DATASETS,
         "dataset_identities": EXPECTED_IDENTITIES,
         "runtime_policy": OFFICIAL_RUNTIME if periodic_test else RUNTIME,
-        "order": list(DATASETS),
+        "order": order,
         "evaluation": (
             "official_every20percent_and_final_no_selection"
             if periodic_test else "final_only_clean_plus_9_masks"
@@ -622,7 +625,7 @@ def launch(args):
     }
     results = {}
     try:
-        for dataset in DATASETS:
+        for dataset in order:
             run, evaluation = output / "runs" / dataset, output / "evaluation" / dataset
             commands = {
                 "train": [
@@ -730,6 +733,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output")
     parser.add_argument("--gate")
+    parser.add_argument("--datasets", nargs="+", choices=list(DATASETS), help="fresh runs for only these datasets, in the given order")
     parser.add_argument("--launch", action="store_true")
     parser.add_argument("--periodic-test", action="store_true", help="run official test at 20/40/60/80/100 percent of updates")
     args = parser.parse_args()
@@ -740,6 +744,7 @@ def main():
                     "status": "INERT",
                     "would_launch": False,
                     "datasets": DATASETS,
+                    "order": args.datasets or list(DATASETS),
                     "runtime_policy": OFFICIAL_RUNTIME if args.periodic_test else RUNTIME,
                 }
             )
