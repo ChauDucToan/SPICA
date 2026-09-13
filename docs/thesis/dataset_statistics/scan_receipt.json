@@ -1,0 +1,64 @@
+{
+  "blank_counts": {
+    "quickdraw_80_30|test|sketch": 0,
+    "quickdraw_80_30|train|sketch": 0,
+    "sketchy_104_21|test|sketch": 0,
+    "sketchy_104_21|train|sketch": 0,
+    "tuberlin_220_30|test|sketch": 0,
+    "tuberlin_220_30|train|sketch": 0
+  },
+  "chunk_size": 512,
+  "datasets": {
+    "quickdraw_80_30": {
+      "config": "configs/data/quickdraw_80_30.yaml",
+      "config_sha256": "75613a99dacd71a0e41ea8b64b1f73ecabe6d1598aa6fc13950ead04ef7977bb",
+      "counts": {
+        "test|photo": 54151,
+        "test|sketch": 92291,
+        "train|photo": 149428,
+        "train|sketch": 236080
+      },
+      "protocol_identity_sha256": "84e01888c4b0b891e08e3df28095a91432fd4faf3875a5b9402112bb3437c037"
+    },
+    "sketchy_104_21": {
+      "config": "configs/data/sketchy_104_21.yaml",
+      "config_sha256": "5b7a9f4eaf9f7a76974267e7d7547a68f9125fac4dce6a05ee448d966da51042",
+      "counts": {
+        "test|photo": 12553,
+        "test|sketch": 12694,
+        "train|photo": 72949,
+        "train|sketch": 57587
+      },
+      "protocol_identity_sha256": "54487000578597b78d608dd837994c2605f006d0a32bd9bacc6a0be3f26909e3"
+    },
+    "tuberlin_220_30": {
+      "config": "configs/data/tuberlin_220_30.yaml",
+      "config_sha256": "f384563c7fb4387f397a22415f844e4bcfbfb5a5610cf9d4d2e5fe28a234cfe2",
+      "counts": {
+        "test|photo": 27989,
+        "test|sketch": 2400,
+        "train|photo": 176081,
+        "train|sketch": 15400
+      },
+      "protocol_identity_sha256": "da231c0161cb9e963be6e2782da489b4167c61d1f9893cb8f12e86e7cf7b9077"
+    }
+  },
+  "expected_image_rows": 416452,
+  "geometry_source_sha256": "c184ea70445164ade0c265cb1b62dd4605e6cd6942478564de604e8c2b5c1d84",
+  "image_decode_scope": "sketch only; photo counts from manifests",
+  "per_image_csv_sha256": "f84314103ffd4e6cc0e7da95180b26c6a27b625f1785488b9025b296d6120b30",
+  "protocol_scope": "all official train and test manifest entries; manifest metadata/path validation delegated to load_benchmark_protocol",
+  "script_sha256": "83e9c1b7a016668b17da3afa7ed399ac7c4fea03b5cda2787925f9ce55a35215",
+  "software": {
+    "numpy": "2.5.1",
+    "opencv": "5.0.0"
+  },
+  "status": "PASS_FULL",
+  "threshold": {
+    "definition": "mean RGB / 255 < 0.9",
+    "integer_sum_cutoff": 688.5
+  },
+  "transform": "spica.data.transforms.build_clip_eval_transform(224).transforms[:2]",
+  "workers": 8,
+  "written_image_rows": 416452
+}

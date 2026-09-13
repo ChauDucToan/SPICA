@@ -1,0 +1,10 @@
+{
+  "status": "SCOPED_PARENT_PASS",
+  "rows": 416452,
+  "independent_stdlib_statistics_max_error": 2.2737367544323206e-13,
+  "all12_category_manifests_counted_independently": true,
+  "all12_top10_bottom5_and_sort_checked": true,
+  "real_transform_mask_replays": 12,
+  "thickness_scope": "saved per-image EDT proxy aggregation verified; synthetic checks in producer; no independent all-image EDT computation",
+  "scope": "CPU dataset-only; no GPU/models/network"
+}

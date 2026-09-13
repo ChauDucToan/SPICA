@@ -1,0 +1,164 @@
+{
+  "quickdraw_80_30|test|sketch": {
+    "blank_count": 0,
+    "dataset": "quickdraw_80_30",
+    "image_count": 92291,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 92291,
+        "mean": 3.3640195045150554,
+        "median": 3.077168367346939,
+        "population_std": 1.633431550655562
+      },
+      "ink_pixels": {
+        "count": 92291,
+        "mean": 1687.9304265854742,
+        "median": 1544.0,
+        "population_std": 819.5906148569347
+      },
+      "raster_line_width_estimate_px": {
+        "count": 92291,
+        "mean": 2.047156638911881,
+        "median": 2.0366947650909424,
+        "population_std": 0.05998917622956549
+      }
+    },
+    "modality": "sketch",
+    "split": "test"
+  },
+  "quickdraw_80_30|train|sketch": {
+    "blank_count": 0,
+    "dataset": "quickdraw_80_30",
+    "image_count": 236080,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 236080,
+        "mean": 3.302430991875052,
+        "median": 3.0592315051020407,
+        "population_std": 1.5454922981468233
+      },
+      "ink_pixels": {
+        "count": 236080,
+        "mean": 1657.027774483226,
+        "median": 1535.0,
+        "population_std": 775.4662155181501
+      },
+      "raster_line_width_estimate_px": {
+        "count": 236080,
+        "mean": 2.0448440889975292,
+        "median": 2.0358026027679443,
+        "population_std": 0.05164922491325289
+      }
+    },
+    "modality": "sketch",
+    "split": "train"
+  },
+  "sketchy_104_21|test|sketch": {
+    "blank_count": 0,
+    "dataset": "sketchy_104_21",
+    "image_count": 12694,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 12694,
+        "mean": 5.240150385155047,
+        "median": 4.5659279336734695,
+        "population_std": 3.0154699366562534
+      },
+      "ink_pixels": {
+        "count": 12694,
+        "mean": 2629.297857255396,
+        "median": 2291.0,
+        "population_std": 1513.042195416642
+      },
+      "raster_line_width_estimate_px": {
+        "count": 12694,
+        "mean": 4.056314597096765,
+        "median": 4.010601282119751,
+        "population_std": 0.2834251150180929
+      }
+    },
+    "modality": "sketch",
+    "split": "test"
+  },
+  "sketchy_104_21|train|sketch": {
+    "blank_count": 0,
+    "dataset": "sketchy_104_21",
+    "image_count": 57587,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 57587,
+        "mean": 5.243378028979579,
+        "median": 4.6875,
+        "population_std": 2.8443462329819638
+      },
+      "ink_pixels": {
+        "count": 57587,
+        "mean": 2630.917359820793,
+        "median": 2352.0,
+        "population_std": 1427.1791658610302
+      },
+      "raster_line_width_estimate_px": {
+        "count": 57587,
+        "mean": 4.0671565353001995,
+        "median": 4.001873970031738,
+        "population_std": 0.3163159500863941
+      }
+    },
+    "modality": "sketch",
+    "split": "train"
+  },
+  "tuberlin_220_30|test|sketch": {
+    "blank_count": 0,
+    "dataset": "tuberlin_220_30",
+    "image_count": 2400,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 2400,
+        "mean": 2.297943738042092,
+        "median": 2.104591836734694,
+        "population_std": 0.9465406913408048
+      },
+      "ink_pixels": {
+        "count": 2400,
+        "mean": 1153.01625,
+        "median": 1056.0,
+        "population_std": 474.9362572871622
+      },
+      "raster_line_width_estimate_px": {
+        "count": 2400,
+        "mean": 2.0099404852588973,
+        "median": 2.0040719509124756,
+        "population_std": 0.029328300961486538
+      }
+    },
+    "modality": "sketch",
+    "split": "test"
+  },
+  "tuberlin_220_30|train|sketch": {
+    "blank_count": 0,
+    "dataset": "tuberlin_220_30",
+    "image_count": 15400,
+    "metrics": {
+      "ink_fraction_percent": {
+        "count": 15400,
+        "mean": 2.3361743287006362,
+        "median": 2.1584024234693877,
+        "population_std": 0.9974738854119339
+      },
+      "ink_pixels": {
+        "count": 15400,
+        "mean": 1172.1988311688312,
+        "median": 1083.0,
+        "population_std": 500.492496744292
+      },
+      "raster_line_width_estimate_px": {
+        "count": 15400,
+        "mean": 2.0100932862387073,
+        "median": 2.00446355342865,
+        "population_std": 0.021388345433653165
+      }
+    },
+    "modality": "sketch",
+    "split": "train"
+  }
+}

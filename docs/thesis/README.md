@@ -10,6 +10,7 @@
 4. [Thực nghiệm bổ sung và hạn chế](04_discussion.md): diễn giải đúng bằng chứng, lịch sử ablation và điểm cần tránh.
 5. [Tái lập và bàn giao](05_reproducibility.md): artifacts, kiểm tra, caveats, checklist trước nộp.
 6. [Tài liệu tham khảo](06_references.md) + [BibTeX](references.bib): ba nguồn nền tảng đã đối chiếu metadata nguồn chính.
+7. [Thống kê dataset](dataset_statistics/README.md):3bảng mật độ mực/độ dày proxy raster từ416.452sketch,12biểu đồ category top10/bottom5 theo log-scale, tách train/test và sketch/photo. [Phương pháp và giới hạn phép đo](dataset_statistics_method.md).
 
 ## Tài sản dùng ngay
 
