@@ -19,14 +19,14 @@ _LOGGED_RETRIEVAL_METRICS = {
     "P@200": "P@200",
 }
 _ALLOWED_LOG_METRICS = frozenset({
-    "step_train",
+    "step_train", "progress_percent",
     "cleaned/mAP@200", "cleaned/mAP@all", "cleaned/P@200",
     "masked/mAP@200", "masked/mAP@all", "masked/P@200",
     "test/cleaned/mAP@200", "test/cleaned/mAP@all", "test/cleaned/P@200",
     "test/masked/mAP@200", "test/masked/mAP@all", "test/masked/P@200",
 })
 _ALLOWED_METRIC_SCOPES = frozenset({
-    "step_train", "cleaned/*", "masked/*", "test/cleaned/*", "test/masked/*",
+    "step_train", "progress_percent", "cleaned/*", "masked/*", "test/cleaned/*", "test/masked/*",
 })
 
 
@@ -99,7 +99,7 @@ class WandbExperiment:
         }
         for name, value in logged.items():
             self._validate_scalar(name, value)
-        if logged.keys() - {"step_train"}:
+        if logged.keys() - {"step_train", "progress_percent"}:
             self._run.log(logged, step=step, commit=True)
 
     def define_metric(
@@ -118,12 +118,18 @@ class WandbExperiment:
         self._ensure_active()
         self._run.summary.update(dict(values))
 
-    def log_test_retrieval(self, step: int, report: Mapping[str, Any]) -> None:
+    def log_test_retrieval(
+        self, step: int, report: Mapping[str, Any], *, total_steps: int | None = None,
+    ) -> None:
         self._ensure_active()
         self._validate_scalar("step_train", step)
         if not {"clean", "masked_macro"} <= set(report):
             raise ValueError("periodic test report must contain clean and masked_macro")
         logged = {"step_train": step}
+        if total_steps is not None:
+            if type(total_steps) is not int or total_steps <= 0 or not 0 <= step <= total_steps:
+                raise ValueError("progress requires total_steps > 0 and 0 <= step <= total_steps")
+            logged["progress_percent"] = 100.0 * step / total_steps
         for scope, source in (("test/cleaned", "clean"), ("test/masked", "masked_macro")):
             metrics = report[source]
             if not isinstance(metrics, Mapping):

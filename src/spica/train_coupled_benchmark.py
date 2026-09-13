@@ -525,8 +525,11 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
         if wandb_run is not None:
             wandb_run.define_metric("step_train")
             prefix = "test/" if periodic_test else ""
+            axis = "progress_percent" if periodic_test else "step_train"
+            if periodic_test:
+                wandb_run.define_metric(axis)
             for scope in ("cleaned", "masked"):
-                wandb_run.define_metric(f"{prefix}{scope}/*", step_metric="step_train")
+                wandb_run.define_metric(f"{prefix}{scope}/*", step_metric=axis)
             if periodic_test and not args.smoke:
                 photos = Counter(entry.label for entry in protocol.test.photo_entries)
                 p_all = sum(photos[entry.label] for entry in protocol.test.sketch_entries) / (len(protocol.test.sketch_entries) * len(protocol.test.photo_entries))
@@ -624,7 +627,7 @@ def _train_impl(args: argparse.Namespace, output: Path) -> dict[str, Any]:
                 test_metrics_handle.flush()
                 test_evaluations_handle.flush()
                 if wandb_run is not None:
-                    wandb_run.log_test_retrieval(step, report)
+                    wandb_run.log_test_retrieval(step, report, total_steps=config["total_steps"])
             if checkpoint is not None and not test_due:
                 del checkpoint
 

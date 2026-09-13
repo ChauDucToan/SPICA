@@ -95,6 +95,28 @@ def _experiment(
     return experiment, run, fake_wandb
 
 
+def test_periodic_progress_axis(monkeypatch: pytest.MonkeyPatch) -> None:
+    experiment, run, _ = _experiment(monkeypatch)
+    metrics = {name: 0.25 for name in tracking._RETRIEVAL_METRICS}
+    report = {"clean": metrics, "masked_macro": metrics}
+    experiment.define_metric("progress_percent")
+    experiment.define_metric("test/cleaned/*", step_metric="progress_percent")
+    for step in (238, 1189):
+        experiment.log_test_retrieval(step, report, total_steps=1189)
+        values, logged_step = run.logs[-1]
+        assert logged_step == step and values["step_train"] == step
+        assert values["progress_percent"] == 100 * step / 1189
+        assert len(values) == 8
+        assert values["test/cleaned/mAP@all"] == 0.25
+    assert run.logs[-1][0]["progress_percent"] == 100
+    assert run.defined[-1] == ("test/cleaned/*", "progress_percent", None)
+    for total in (0, -1, True, float("inf"), 100):
+        with pytest.raises(ValueError):
+            experiment.log_test_retrieval(238, report, total_steps=total)
+    experiment.log_test_retrieval(238, report)
+    assert "progress_percent" not in run.logs[-1][0]
+
+
 def test_retrieval_probe_uses_one_explicit_training_step(monkeypatch: pytest.MonkeyPatch) -> None:
     experiment, run, fake_wandb = _experiment(monkeypatch)
 
