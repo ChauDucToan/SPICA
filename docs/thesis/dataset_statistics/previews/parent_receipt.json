@@ -1,0 +1,9 @@
+{
+  "status": "SCOPED_PREVIEW_PARENT_PASS",
+  "scope": "independent raw-manifest class extremes and sorted path selection; all60sourceSHA and renderedtileSHA match",
+  "classes": 6,
+  "sketches": 12,
+  "photos": 48,
+  "semantic_labels_independently_validated": false,
+  "model_or_retrieval": false
+}

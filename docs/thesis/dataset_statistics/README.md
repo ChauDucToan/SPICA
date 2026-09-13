@@ -29,6 +29,10 @@ Nếu bằng count, thứ tự tên category quyết định lựa chọn. Botto
 
 Mỗi hình có bản SVG cùng tên trong `figures/` để dùng vector trong đồ án.
 
+## Preview ảnh
+
+**[Xem 3 preview](previews/README.md)**: official test, mỗi bộ chọn class nhiều/ít photo nhất, mỗi class2sketch +8photo. Counts, đường dẫn và SHA từng ảnh được lưu; đây không phải kết quả retrieval hay cặp instance.
+
 ## Kiểm tra và phạm vi
 
 - Counts/SHA manifest được loader official kiểm tra trước scan.

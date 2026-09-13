@@ -1,0 +1,15 @@
+{
+  "status": "PASS_PREVIEW_ONLY",
+  "images_decoded": 60,
+  "sketches": 12,
+  "photos": 48,
+  "selection": "official test class max/min photo counts; ties by class name; first lexicographic paths",
+  "geometry": "production RGB bicubic short-side resize and center-crop224",
+  "no_model_or_retrieval_or_source_image_changes": true,
+  "script_sha256": "94de08ec66123ba0c9aae4984c3e93e1c686b1537d1e0ba3c805e0a570aa1e64",
+  "figures_sha256": {
+    "sketchy_104_21": "7cbb17d89b00059efb6f776ef2665e0a1d3d05af5bc1bd4077a307a3f05943d3",
+    "tuberlin_220_30": "6fbb8fe301a15a49fce17b3ca2327e51a6bac8be834f401f953c32ad78809be1",
+    "quickdraw_80_30": "3095cbf0344c5ac346ce1f4bbb37ab8c783652908896ef06fee157ad71f53d48"
+  }
+}
