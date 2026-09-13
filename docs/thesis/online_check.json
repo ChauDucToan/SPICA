@@ -1,0 +1,51 @@
+{
+  "checked_at_utc": "2026-09-13T01:10:35.358825+00:00",
+  "scope": "READ_ONLY_FINAL_ONLINE_HISTORY; no artifact download, no remote writes",
+  "checks": [
+    {
+      "dataset": "sketchy_104_21",
+      "wandb_url": "https://wandb.ai/a-cctest05187-erd/spica/runs/d1d32lfm",
+      "state": "failed",
+      "history_rows": 5,
+      "steps": [
+        890,
+        1779,
+        2668,
+        3557,
+        4446
+      ],
+      "scalar_comparisons": 30,
+      "exact_within_1e_12": true
+    },
+    {
+      "dataset": "tuberlin_220_30",
+      "wandb_url": "https://wandb.ai/a-cctest05187-erd/spica/runs/yifk5qi3",
+      "state": "finished",
+      "history_rows": 5,
+      "steps": [
+        238,
+        476,
+        714,
+        952,
+        1189
+      ],
+      "scalar_comparisons": 30,
+      "exact_within_1e_12": true
+    },
+    {
+      "dataset": "quickdraw_80_30",
+      "wandb_url": "https://wandb.ai/a-cctest05187-erd/spica/runs/aevluutb",
+      "state": "finished",
+      "history_rows": 5,
+      "steps": [
+        3646,
+        7292,
+        10938,
+        14584,
+        18229
+      ],
+      "scalar_comparisons": 30,
+      "exact_within_1e_12": true
+    }
+  ]
+}

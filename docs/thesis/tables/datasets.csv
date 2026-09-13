@@ -1,0 +1,4 @@
+dataset,train_classes,train_photo,train_sketch,test_classes,test_photo,test_sketch,updates,warmup,batch_size,seed,passes
+sketchy_104_21,104,72949,57587,21,12553,12694,4446,222,32,42,"{'clean': 1, 'corrupted': 1, 'mask_rows_expected': 142272, 'rows_per_update': 32, 'trace_rows_expected': 142272}"
+tuberlin_220_30,220,176081,15400,30,27989,2400,1189,59,32,42,"{'clean': 1, 'corrupted': 1, 'mask_rows_expected': 38048, 'rows_per_update': 32, 'trace_rows_expected': 38048}"
+quickdraw_80_30,80,149428,236080,30,54151,92291,18229,911,32,42,"{'clean': 1, 'corrupted': 1, 'mask_rows_expected': 583328, 'rows_per_update': 32, 'trace_rows_expected': 583328}"

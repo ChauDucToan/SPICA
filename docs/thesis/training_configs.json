@@ -1,0 +1,269 @@
+{
+  "sketchy_104_21": {
+    "architecture": "predictive_fusion_v2",
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "groups": [
+        {
+          "lr": 1e-05,
+          "name": "student_visual",
+          "parameter_count": 87332352,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 1e-05,
+          "name": "student_visual_no_decay",
+          "parameter_count": 122112,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor",
+          "parameter_count": 1441792,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor_no_decay",
+          "parameter_count": 5632,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head",
+          "parameter_count": 393216,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head_no_decay",
+          "parameter_count": 512,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "prompts",
+          "parameter_count": 4352,
+          "weight_decay": 0.0001
+        }
+      ],
+      "name": "AdamW"
+    },
+    "loss_coefficient_identity": {
+      "align_i": 0.05,
+      "align_t": 0.05,
+      "anchor_i": 0.5,
+      "anchor_t": 0.5,
+      "ce_i": 1.0,
+      "ce_pool": 0.25,
+      "ce_t_aux": 0.25,
+      "rank_i": 1.0,
+      "rank_pool": 0.25,
+      "sigreg": 0.0
+    },
+    "sampling_identity": {
+      "canonical_pairing": "not_loaded;not_used",
+      "negative_rule": "uniform_photo_from_other_train_class",
+      "photo_pool": "all_official_train_photos",
+      "positive_rule": "uniform_photo_within_query_class"
+    },
+    "runtime": {
+      "checkpoint_every": 100,
+      "test_every_percent": 20
+    },
+    "test_steps": [
+      890,
+      1779,
+      2668,
+      3557,
+      4446
+    ],
+    "seed": 42,
+    "batch_size": 32,
+    "total_steps": 4446,
+    "warmup_steps": 222,
+    "source_snapshot_hash": "155d94e4f4b4207cd5cbb8075a8cbf5f88aed9279c3fb9c39a8e425474ac65e3"
+  },
+  "tuberlin_220_30": {
+    "architecture": "predictive_fusion_v2",
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "groups": [
+        {
+          "lr": 1e-05,
+          "name": "student_visual",
+          "parameter_count": 87332352,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 1e-05,
+          "name": "student_visual_no_decay",
+          "parameter_count": 122112,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor",
+          "parameter_count": 1441792,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor_no_decay",
+          "parameter_count": 5632,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head",
+          "parameter_count": 393216,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head_no_decay",
+          "parameter_count": 512,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "prompts",
+          "parameter_count": 4352,
+          "weight_decay": 0.0001
+        }
+      ],
+      "name": "AdamW"
+    },
+    "loss_coefficient_identity": {
+      "align_i": 0.05,
+      "align_t": 0.05,
+      "anchor_i": 0.5,
+      "anchor_t": 0.5,
+      "ce_i": 1.0,
+      "ce_pool": 0.25,
+      "ce_t_aux": 0.25,
+      "rank_i": 1.0,
+      "rank_pool": 0.25,
+      "sigreg": 0.0
+    },
+    "sampling_identity": {
+      "canonical_pairing": "not_loaded;not_used",
+      "negative_rule": "uniform_photo_from_other_train_class",
+      "photo_pool": "all_official_train_photos",
+      "positive_rule": "uniform_photo_within_query_class"
+    },
+    "runtime": {
+      "checkpoint_every": 100,
+      "test_every_percent": 20
+    },
+    "test_steps": [
+      238,
+      476,
+      714,
+      952,
+      1189
+    ],
+    "seed": 42,
+    "batch_size": 32,
+    "total_steps": 1189,
+    "warmup_steps": 59,
+    "source_snapshot_hash": "b0f4f7fa1a3eae07bb93863eef447e19a93c105b7336d7af90d15d9d402cd730"
+  },
+  "quickdraw_80_30": {
+    "architecture": "predictive_fusion_v2",
+    "optimizer": {
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "groups": [
+        {
+          "lr": 1e-05,
+          "name": "student_visual",
+          "parameter_count": 87332352,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 1e-05,
+          "name": "student_visual_no_decay",
+          "parameter_count": 122112,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor",
+          "parameter_count": 1441792,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "predictor_no_decay",
+          "parameter_count": 5632,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head",
+          "parameter_count": 393216,
+          "weight_decay": 0.01
+        },
+        {
+          "lr": 0.0001,
+          "name": "pooled_head_no_decay",
+          "parameter_count": 512,
+          "weight_decay": 0.0
+        },
+        {
+          "lr": 0.0001,
+          "name": "prompts",
+          "parameter_count": 4352,
+          "weight_decay": 0.0001
+        }
+      ],
+      "name": "AdamW"
+    },
+    "loss_coefficient_identity": {
+      "align_i": 0.05,
+      "align_t": 0.05,
+      "anchor_i": 0.5,
+      "anchor_t": 0.5,
+      "ce_i": 1.0,
+      "ce_pool": 0.25,
+      "ce_t_aux": 0.25,
+      "rank_i": 1.0,
+      "rank_pool": 0.25,
+      "sigreg": 0.0
+    },
+    "sampling_identity": {
+      "canonical_pairing": "not_loaded;not_used",
+      "negative_rule": "uniform_photo_from_other_train_class",
+      "photo_pool": "all_official_train_photos",
+      "positive_rule": "uniform_photo_within_query_class"
+    },
+    "runtime": {
+      "checkpoint_every": 100,
+      "test_every_percent": 20
+    },
+    "test_steps": [
+      3646,
+      7292,
+      10938,
+      14584,
+      18229
+    ],
+    "seed": 42,
+    "batch_size": 32,
+    "total_steps": 18229,
+    "warmup_steps": 911,
+    "source_snapshot_hash": "b0f4f7fa1a3eae07bb93863eef447e19a93c105b7336d7af90d15d9d402cd730"
+  }
+}

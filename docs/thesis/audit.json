@@ -1,0 +1,34 @@
+{
+  "status": "SCOPED_SAVED_ARTIFACT_CHECKS_PASS",
+  "checks": [
+    {
+      "dataset": "sketchy_104_21",
+      "archive_files": 617,
+      "query_condition_rows": 126940,
+      "max_saved_mean_delta": 1.226684043231785e-08,
+      "checkpoint_and_summary_and_npz_hashes_checked": true,
+      "scope": "saved per-query metric means only; no encoder replay, no independent ranking or AP formula recomputation"
+    },
+    {
+      "dataset": "tuberlin_220_30",
+      "archive_files": 619,
+      "query_condition_rows": 24000,
+      "max_saved_mean_delta": 1.2738164523184992e-08,
+      "checkpoint_and_summary_and_npz_hashes_checked": true,
+      "scope": "saved per-query metric means only; no encoder replay, no independent ranking or AP formula recomputation"
+    },
+    {
+      "dataset": "quickdraw_80_30",
+      "archive_files": 619,
+      "query_condition_rows": 922910,
+      "max_saved_mean_delta": 3.491579220193941e-09,
+      "checkpoint_and_summary_and_npz_hashes_checked": true,
+      "scope": "saved per-query metric means only; no encoder replay, no independent ranking or AP formula recomputation"
+    }
+  ],
+  "builder_did_not_write_raw_status": true,
+  "encoder_replay_performed": false,
+  "full_sort_performed": false,
+  "ap_formula_recomputed": false,
+  "online_verification": "separate online_check.json if present"
+}
