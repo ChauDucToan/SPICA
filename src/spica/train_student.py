@@ -176,6 +176,9 @@ def train(args):
     if visual_prompt and not joint:
         raise ValueError("--visual-prompt requires --lora-teacher")
     mask_white = getattr(args, "mask_white_patches", False)
+    deep_prompt = getattr(args, "deep_visual_prompt", False)
+    if deep_prompt and (not joint or not visual_prompt or not mask_white):
+        raise ValueError("Deep prompts require LoRA teacher, visual prompts and white mask")
     if mask_white and not joint:
         raise ValueError("--mask-white-patches requires --lora-teacher")
     calibration_path = getattr(args, "kd_calibration", None)
@@ -296,7 +299,7 @@ def train(args):
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
         if mask_white:
-            config["method"] = "cnn_mamba_lora_vpt_white_patch_mask_teacher_v1"
+            config["method"] = "cnn_mamba_lora_vpt_deep_white_mask_teacher_v1" if deep_prompt else "cnn_mamba_lora_vpt_white_patch_mask_teacher_v1"
             config["sketch_teacher"]["white_patch_mask"] = {
                 "rule": "all_RGB_values_exactly_1_after_resize_crop_before_normalization",
                 "patch_size": 32, "scope": "sketch_teacher_keys_all12layers",
@@ -304,6 +307,14 @@ def train(args):
                 "photo_and_student": "unchanged", "train_and_eval": True,
                 "compute": "dense_mask_no_speedup_claim",
             }
+            if deep_prompt:
+                config["sketch_teacher"]["visual_prompt"] = {
+                    "tokens_per_layer": 4, "layers": 12,
+                    "type": "independent_shallow_tokens_replaced_each_layer",
+                    "position": "after_CLS_before_49_original_patches",
+                    "readout": "native_CLS", "init": "normal_std0.02",
+                    "lr": 1e-4, "weight_decay": 0.01,
+                }
         if fixed_lambda is not None:
             config["sketch_teacher"]["lambda_source"] = "explicit_user_choice_not_calibrated"
         if calibration is not None:
@@ -312,7 +323,7 @@ def train(args):
                 "rule": calibration["rule"], "batches": 4,
                 "scope": "initialization_gradient_norm_only_not_optimal_or_Adam_update_ratio",
             }
-        if visual_prompt:
+        if visual_prompt and not deep_prompt:
             config["sketch_teacher"]["visual_prompt"] = {
                 "tokens": 4, "type": "shallow_after_CLS_before_preLN",
                 "original_positional_embeddings": "unchanged_no_prompt_positions",
@@ -340,6 +351,7 @@ def train(args):
             sketch_teacher = SketchTeacher(
                 teacher.model.visual, normalize.mean, normalize.std,
                 visual_prompt=visual_prompt, mask_white_patches=mask_white,
+                deep_visual_prompt=deep_prompt,
             ).to("cuda").eval()
             adapter_parameters = [p for p in sketch_teacher.parameters() if p.requires_grad]
             config["sketch_teacher"]["trainable_parameters"] = sum(
@@ -397,7 +409,8 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name=(f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if mask_white else
+                name=(f"CNN-Mamba-LoRA-DeepVPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if deep_prompt else
+                      f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if mask_white else
                       (f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs")
                       if fixed_lambda is not None else
                       "CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
@@ -627,6 +640,8 @@ def main():
                         help="Reviewed initialization-gradient receipt; absent keeps KD=1")
     parser.add_argument("--mask-white-patches", action="store_true",
                         help="Mask exactly-white sketch patch keys in every teacher attention layer")
+    parser.add_argument("--deep-visual-prompt", action="store_true",
+                        help="Replace shallow prompt with four independent tokens at each teacher layer")
     parser.add_argument("--lambda-kd", type=float,
                         help="Explicit positive KD weight; mutually exclusive with calibration")
     parser.add_argument(

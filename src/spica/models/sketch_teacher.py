@@ -41,10 +41,14 @@ class VisualPrompt(nn.Module):
 
 
 class SketchTeacher(nn.Module):
-    def __init__(self, visual, mean, std, *, visual_prompt=False, mask_white_patches=False):
+    def __init__(self, visual, mean, std, *, visual_prompt=False, mask_white_patches=False,
+                 deep_visual_prompt=False):
         super().__init__()
+        if deep_visual_prompt and not visual_prompt:
+            raise ValueError("Deep prompts require visual prompts")
         self.mask_white_patches = mask_white_patches
-        self.prompt_count = 4 if visual_prompt else 0
+        self.deep_visual_prompt = deep_visual_prompt
+        self.prompt_count = 4 if visual_prompt and not deep_visual_prompt else 0
         self.visual = deepcopy(visual).requires_grad_(False)
         # Isolate adapter initialization from the Student/data RNG stream.
         with torch.random.fork_rng(devices=[]):
@@ -53,7 +57,12 @@ class SketchTeacher(nn.Module):
                     block.attn, "in_proj_weight",
                     QVLoRA(block.attn.embed_dim).to(block.attn.in_proj_weight.device),
                 )
-            if visual_prompt:
+            if deep_visual_prompt:
+                self.deep_prompts = nn.ModuleList(
+                    VisualPrompt(self.visual.conv1.out_channels)
+                    for _ in self.visual.transformer.resblocks
+                ).to(self.visual.conv1.weight.device)
+            elif visual_prompt:
                 prompt = VisualPrompt(self.visual.conv1.out_channels)
                 self.visual.ln_pre = nn.Sequential(
                     prompt.to(self.visual.conv1.weight.device), self.visual.ln_pre
@@ -74,17 +83,32 @@ class SketchTeacher(nn.Module):
 
     def forward(self, sketches):
         normalized = (sketches - self.mean) / self.std
-        if not self.mask_white_patches:
+        if not self.mask_white_patches and not self.deep_visual_prompt:
             return F.normalize(self.visual(normalized), dim=-1)
         tokens = self.visual._embeds(normalized)
-        blocked = self.white_patch_mask(sketches)
-        batch, length = blocked.shape
-        heads = self.visual.transformer.resblocks[0].attn.num_heads
-        # OpenCLIP casts attn_mask to the input dtype: use additive -inf, not bool.
-        mask = tokens.new_zeros(batch, 1, 1, length).masked_fill(
-            blocked[:, None, None, :], float("-inf")
-        ).expand(batch, heads, length, length).reshape(batch * heads, length, length)
-        tokens = self.visual.transformer(tokens, attn_mask=mask)
+        mask = None
+        if self.mask_white_patches:
+            blocked = self.white_patch_mask(sketches)
+            batch, length = blocked.shape
+            if self.deep_visual_prompt:
+                blocked = torch.cat((blocked[:, :1], blocked.new_zeros(batch, 4),
+                                     blocked[:, 1:]), dim=1)
+                length += 4
+            heads = self.visual.transformer.resblocks[0].attn.num_heads
+            # OpenCLIP casts attn_mask to the input dtype: use additive -inf, not bool.
+            mask = tokens.new_zeros(batch, 1, 1, length).masked_fill(
+                blocked[:, None, None, :], float("-inf")
+            ).expand(batch, heads, length, length).reshape(batch * heads, length, length)
+        if self.deep_visual_prompt:
+            for block, prompt in zip(self.visual.transformer.resblocks, self.deep_prompts):
+                # Native pre-LN remains applied to original CLS/patch tokens exactly once.
+                learned = self.visual.ln_pre(prompt.tokens).to(tokens.dtype)
+                augmented = torch.cat((tokens[:, :1], learned.unsqueeze(0).expand(
+                    tokens.shape[0], -1, -1), tokens[:, 1:]), dim=1)
+                tokens = block(augmented, attn_mask=mask)
+                tokens = torch.cat((tokens[:, :1], tokens[:, 5:]), dim=1)
+        else:
+            tokens = self.visual.transformer(tokens, attn_mask=mask)
         pooled, _ = self.visual._pool(tokens)
         if self.visual.proj is not None:
             pooled = pooled @ self.visual.proj
