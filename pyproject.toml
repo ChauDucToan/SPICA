@@ -30,6 +30,10 @@ rocm = [
     "torchvision==0.24.1",
     "pytorch-triton-rocm==3.5.1",
 ]
+student = [
+    "apache-tvm-ffi==0.1.9",
+    "mamba-ssm",
+]
 
 [project.scripts]
 spica-eval-clip = "spica.evaluate_clip:main"
@@ -60,6 +64,7 @@ torchvision = [
 pytorch-triton-rocm = [
     { index = "pytorch-rocm64", extra = "rocm" },
 ]
+mamba-ssm = { git = "https://github.com/state-spaces/mamba.git", rev = "e9594ce1c732d97440f0332fdc43170a2294dbfa" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

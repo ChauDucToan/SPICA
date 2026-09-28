@@ -2,9 +2,18 @@
 
 ## Agent-Specific Instructions
 
-Agents must not create or delete project files, modify non-Markdown project files, or execute commands that change repository state. Only inspect the repository, analyze issues, edit existing Markdown files, and provide proposed changes for the user to implement.
+## CNN–Mamba Student branch — user-authorized implementation (2026-09-28)
 
-Treat this file as the durable record of repository conventions, current architectural decisions, and implementation order.
+This worktree is `feature/cnn-mamba-student`, branched directly from `main` at `b21154e`, NOT from `experiments`. The user explicitly authorized implementation here, superseding the historical read-only restriction and historical Mo-vMF implementation order below for this branch only. Never edit/check out the sibling `spica/` worktree: its existing campaign/source freeze and unrelated dirty files must remain intact.
+
+- Student: `src/spica/models/sketch_student.py`, 2,251,782 randomly initialized parameters. CNN, two shared-weight four-direction Mamba-2 hybrid blocks, residual gates, foreground pooling, normalized512-D output. No custom validators or tests inside the model, no custom production selective-scan kernel. This is not an exact VMamba implementation.
+- User approved official `mamba-ssm` in an isolated `.venv`; pinned Git source and compatible `apache-tvm-ffi==0.1.9` in `pyproject.toml`/`uv.lock`. Existing main dependency versions, including Torch2.13/CUDA13, unchanged. Do not alter the sibling environment. No subagent used for this implementation; do not misreport it as cx/gpt-6-luna work.
+- `src/spica/train_student.py`: 10 full officialTU220/30 epochs, seed42/B32/drop_last=False, frozen CLIP photo targets, multi-positive contrastive only; no text KD, sketch-teacher loss, masking or consistency. 15400sketches/482batches per epoch →4820updates/154000observations. Final clean evaluation only, no validation/checkpoint selection/retry/resume.
+- User-selected primary control: official MP-Q1189 clean fullmAP `.4396614905633032`. Supplied summary SHA `afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42`; all six train/test manifest/class-map SHAs checked against control. Different photo branch, loss package and budget: not a matched backbone-only ablation, not significance, not a blind holdout.
+- Minimal standalone check `scripts/check_student.py` is outside the model, not a test suite. CPU full224 forward/backward/scan layout/loss/weights round-trip passed using FP64 reference SSD with stable chunk carry; initial upstream reference tail/overflow failures retained under `outputs/implementation_20260928/`. This does NOT certify production CUDA kernels. No pretrained/data encoding or optimizer updates in this check.
+- Implementation only so far: **no Student CUDA smoke, official evaluation, or 10-epoch training launched**. Do not overlap GPU work with the sibling triplet campaign or claim training results. README has explicit setup/check/train commands. Fresh GPU compatibility check and user-confirmed launch remain needed.
+
+Treat this file as the durable record of repository conventions, current architectural decisions, and implementation order. Sections below describe the historical main branch unless explicitly retained above.
 
 ## Primary Research Protocol and Architecture
 
