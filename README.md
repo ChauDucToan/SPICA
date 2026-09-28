@@ -73,6 +73,13 @@ The supplied control summary must have SHA256 `afb927f7142aafe98bf57c742a034d847
 
 The current `src/spica/train_student.py` uses `EPOCHS=100`: 48,200 updates, 1,540,000 sketch observations, same architecture/seed/B32/loss/data as the 10-epoch run. Schedule has 5% warmup across the **new full horizon**, not a continuation of the 10-epoch LR schedule. Fresh initialization; no resume. One rolling checkpoint per epoch; **only** epoch-100 official clean test and W&B project `sbir` metrics, no checkpoint selection. The official test was previously observed, so this is an exploratory follow-up, not a blind holdout or proof of significance. Planned output root `outputs/student_tu_100epochs_20260928/`; its runtime and adjacent launch receipt are authoritative. Freeze all source/config/docs during production and preserve the 10-epoch outputs unchanged.
 
+## Joint CLIP–LoRA teacher + Student, fresh 10 epochs
+
+User-approved follow-up after Student100 fullmAP 0.2607088325 (raw UNVERIFIED).
+Use **`--lora-teacher`** to select a fresh10epoch/4820update run; default Student-only100 remains unchanged. `src/spica/models/sketch_teacher.py` copies the frozen CLIP visual backbone and trains only Q/V LoRA across12blocks, rank8/alpha8/dropout0,294912 adapter parameters, LR1e-4. Student remains random-init2251782 parameters/LR3e-4; photoCLIP frozen. Both receive multi-positive photo retrieval; Student also receives cosine KD from detached teacher, **λKD=1 fixed, not calibrated**. Teacher targets are from the same pre-update state; teacher backward precedes Student forward to release activations, one optimizer step updates both. Shared5%warmup/cosine, wd.01, gradclip1 separately, same seed42/B32/data geometry. No teacher-only warmup, EMA, text or augmentation. Photo and teacher see CLIP-normalized pixels; Student sees rawRGB. LoRA initializes as exact zero perturbation and its initialization preserves the Student/data RNG stream.
+
+Only finalepoch10 tests: primary Student under `test/cleaned/*`, teacher diagnostic under `teacher/cleaned/*`, W&B `sbir`. No checkpoint selection; official test already observed. One rolling checkpoint contains Student, LoRA adapters, joint optimizer/scheduler/RNG, config/baseCLIP SHA; original CLIP weights stay external. No resume/exact DataLoader-stream guarantee. Local losses separate teacher retrieval, Student retrieval, KD. Planned root **`outputs/student_lora_teacher_10epochs_20260928/`**, gates `outputs/student_lora_gate_20260928/`. Preserve previous runs; freeze source/config/docs while active. Run standalone CPU check `PYTHONPATH=src .venv/bin/python scripts/check_sketch_teacher.py` before real CUDA gate.
+
 ## Explicit launch command
 
 Make the existing TU data available via the ignored path `datasets/TUBerlin` (a local symlink is sufficient). The local worktree already has this link; no images/manifests were edited.
@@ -86,5 +93,7 @@ PYTHONPATH=src HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   --output outputs/student_tu_100epochs_RUN_ID \
   --wandb-mode online
 ```
+
+For the authorized joint10 run, add `--lora-teacher` and use the fresh output `outputs/student_lora_teacher_10epochs_20260928` instead. Do not launch twice; inspect its receipt/runtime and live PIDs first.
 
 Output must not exist. It contains source/config/manifest hashes, a source archive, local epoch history, the rolling checkpoint, final query/gallery embeddings and per-query metrics, and the fixed-control comparison. Final status is `FINISHED_UNVERIFIED`, not independent encoder-replay certification. Do not modify source/data while a run is active.

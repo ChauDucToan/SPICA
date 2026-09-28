@@ -1,4 +1,4 @@
-"""Train the random-init student for 100 complete TU-Berlin epochs, then evaluate.
+"""Train Student-only for 100 epochs, or joint LoRA teacher/Student for 10.
 
 No validation loop, checkpoint selection, resume, or automatic retry. The final
 clean retrieval comparison is against a supplied, fixed-step MP-Q summary.
@@ -28,6 +28,7 @@ from .evaluation.embeddings import encode_retrieval_loader, save_encoded_retriev
 from .evaluation.metrics import evaluate_category_retrieval
 from .models.clip import load_frozen_clip
 from .models.sketch_student import SketchStudent
+from .models.sketch_teacher import SketchTeacher, cosine_distillation
 
 ROOT = Path(__file__).resolve().parents[2]
 EPOCHS = 100
@@ -127,9 +128,11 @@ def train(args):
     output = args.output.resolve()
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
+    joint = args.lora_teacher
+    epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
-        raise ValueError("This first 10-epoch experiment is official TU-Berlin only")
+        raise ValueError("This experiment is official TU-Berlin only")
     seen = read_class_map(data.train.class_map)
     unseen = read_class_map(data.test.class_map)
     if (
@@ -174,9 +177,9 @@ def train(args):
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
     config = {
-        "method": "cnn_fourway_mamba2_student_v1",
+        "method": "cnn_mamba_lora_teacher_v1" if joint else "cnn_fourway_mamba2_student_v1",
         "dataset": data.name,
-        "epochs": EPOCHS,
+        "epochs": epochs,
         "seed": SEED,
         "batch_size": BATCH_SIZE,
         "lr": LEARNING_RATE,
@@ -194,7 +197,7 @@ def train(args):
         "photo_encoder": "frozen_openai_CLIP_ViT-B-32-quickgelu",
         "loss": "average_per_positive_contrastive;all_same_class_bank_entries_positive",
         "photo_bank": "B_sampled_positive+B_sampled_negative;duplicate_samples_retained",
-        "selection": "none;final_epoch100_only",
+        "selection": f"none;final_epoch{epochs}_only",
         "precision": "fp32",
         "wandb_project": "sbir",
         "primary_metric": "clean/full_mAP",
@@ -206,6 +209,15 @@ def train(args):
         "mpq_clean": baseline["clean"],
         "official_test_previously_observed": True,
     }
+    if joint:
+        config["sketch_teacher"] = {
+            "base": "CLIP_ViT-B-32-quickgelu_frozen",
+            "lora": "Q,V_all12blocks", "rank": 8, "alpha": 8, "dropout": 0,
+            "lr": 1e-4, "lambda_kd": 1.0, "kd": "cosine_teacher_detached",
+            "lambda_calibrated": False, "start": "first_batch_no_teacher_warmup",
+            "teacher_objective": "multi_positive_retrieval_only",
+            "gradient_clip": "1_each_student_and_teacher_separately",
+        }
     write_json(output / "config.json", config)
     write_json(output / "runtime.json", {"status": "INITIALIZING"})
     run = None
@@ -217,6 +229,21 @@ def train(args):
         )
         teacher = bundle.encoder
         student = SketchStudent().to("cuda")
+        sketch_teacher = None
+        adapter_parameters = []
+        if joint:
+            normalize = bundle.transform.transforms[-1]
+            if not isinstance(normalize, transforms.Normalize):
+                raise TypeError("Expected pinned CLIP Normalize as final transform")
+            config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
+            config["sketch_teacher"]["normalize_std"] = list(normalize.std)
+            sketch_teacher = SketchTeacher(
+                teacher.model.visual, normalize.mean, normalize.std
+            ).to("cuda").eval()
+            adapter_parameters = [p for p in sketch_teacher.parameters() if p.requires_grad]
+            config["sketch_teacher"]["trainable_parameters"] = sum(
+                p.numel() for p in adapter_parameters
+            )
         # Same deterministic geometry as CLIP, without its final normalization.
         sketch_transform = transforms.Compose(
             build_clip_eval_transform().transforms[:-1]
@@ -231,7 +258,7 @@ def train(args):
             drop_last=False,
         )
         steps_per_epoch = len(loader)
-        total_steps = EPOCHS * steps_per_epoch
+        total_steps = epochs * steps_per_epoch
         config.update(
             {
                 "train_sketches": len(loader.dataset),
@@ -251,11 +278,10 @@ def train(args):
                 else decay
             )
             target.append(parameter)
-        optimizer = torch.optim.AdamW(
-            [{"params": decay}, {"params": no_decay, "weight_decay": 0.0}],
-            lr=LEARNING_RATE,
-            weight_decay=WEIGHT_DECAY,
-        )
+        groups = [{"params": decay}, {"params": no_decay, "weight_decay": 0.0}]
+        if joint:
+            groups.append({"params": adapter_parameters, "lr": 1e-4})
+        optimizer = torch.optim.AdamW(groups, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
         scheduler = LambdaLR(
             optimizer, lambda step: learning_rate_factor(step, total_steps)
         )
@@ -265,7 +291,7 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name="CNN-Mamba-TU-100epochs",
+                name="CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs",
                 config=config,
                 dir=str(output),
                 mode="online",
@@ -285,9 +311,10 @@ def train(args):
             output / "runtime.json", {"status": "TRAINING", "epoch": 0, "step": 0}
         )
         with (output / "training.jsonl").open("x") as history:
-            for epoch in range(1, EPOCHS + 1):
+            for epoch in range(1, epochs + 1):
                 student.train()
                 loss_sum = 0.0
+                teacher_sum = retrieval_sum = kd_sum = 0.0
                 for batch in loader:
                     sketches = batch["sketch"].to("cuda", non_blocking=True)
                     labels = batch["label"].to("cuda", non_blocking=True)
@@ -300,21 +327,42 @@ def train(args):
                     with torch.no_grad():
                         targets = teacher(photos)
                     optimizer.zero_grad(set_to_none=True)
-                    loss = multi_positive_loss(
-                        student(sketches), targets, labels, photo_labels
-                    )
+                    if joint:
+                        teacher_query = sketch_teacher(sketches)
+                        teacher_loss = multi_positive_loss(
+                            teacher_query, targets, labels, photo_labels
+                        )
+                        if not torch.isfinite(teacher_loss):
+                            raise FloatingPointError(f"Nonfinite teacher loss at step {step + 1}")
+                        # Free teacher activations before Student forward; targets are pre-update.
+                        teacher_loss.backward()
+                        teacher_query = teacher_query.detach()
+                    query = student(sketches)
+                    retrieval_loss = multi_positive_loss(query, targets, labels, photo_labels)
+                    loss = retrieval_loss
+                    if joint:
+                        kd_loss = cosine_distillation(query, teacher_query)
+                        loss = loss + kd_loss  # fixed lambda_KD=1, not calibrated
                     if not torch.isfinite(loss):
                         raise FloatingPointError(f"Nonfinite loss at step {step + 1}")
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(
                         student.parameters(), 1.0, error_if_nonfinite=True
                     )
+                    if joint:
+                        torch.nn.utils.clip_grad_norm_(
+                            adapter_parameters, 1.0, error_if_nonfinite=True
+                        )
                     optimizer.step()
                     scheduler.step()
                     step += 1
                     count = len(labels)
                     examples_seen += count
                     loss_sum += loss.item() * count
+                    if joint:
+                        teacher_sum += teacher_loss.item() * count
+                        retrieval_sum += retrieval_loss.item() * count
+                        kd_sum += kd_loss.item() * count
                     if step == 1 or step % 50 == 0:
                         write_json(
                             output / "runtime.json",
@@ -333,6 +381,12 @@ def train(args):
                     "examples_seen": examples_seen,
                     "loss": epoch_loss,
                 }
+                if joint:
+                    row.update(
+                        teacher_loss=teacher_sum / len(loader.dataset),
+                        student_retrieval_loss=retrieval_sum / len(loader.dataset),
+                        kd_loss=kd_sum / len(loader.dataset),
+                    )
                 history.write(json.dumps(row) + "\n")
                 history.flush()
                 print(json.dumps(row), flush=True)
@@ -340,6 +394,7 @@ def train(args):
                 torch.save(
                     {
                         "model": student.state_dict(),
+                        **({"teacher_adapter": sketch_teacher.adapter_state_dict()} if joint else {}),
                         "optimizer": optimizer.state_dict(),
                         "scheduler": scheduler.state_dict(),
                         "epoch": epoch,
@@ -362,7 +417,7 @@ def train(args):
             )
         write_json(
             output / "runtime.json",
-            {"status": "FINAL_EVALUATION", "epoch": EPOCHS, "step": step},
+            {"status": "FINAL_EVALUATION", "epoch": epochs, "step": step},
         )
         student.eval()
         del loss, sketches, photos, targets, batch
@@ -374,6 +429,13 @@ def train(args):
             or metrics["gallery_count"] != baseline["gallery_count"]
         ):
             raise RuntimeError("Student and MP-Q retrieval counts differ")
+        teacher_metrics = None
+        if joint:
+            teacher_output = output / "teacher"
+            teacher_output.mkdir()
+            teacher_metrics = final_retrieval(
+                sketch_teacher, teacher, data, sketch_transform, bundle.transform, teacher_output
+            )
         delta = {
             key: metrics[key] - baseline["clean"][key]
             for key in ("full_mAP", "P@200", "mAP@200_min_relevant_k")
@@ -384,7 +446,7 @@ def train(args):
             raise RuntimeError("Source/manifests changed during final evaluation")
         result = {
             "status": "FINISHED_UNVERIFIED",
-            "epoch": EPOCHS,
+            "epoch": epochs,
             "step": step,
             "examples_seen": examples_seen,
             "clean": metrics,
@@ -394,6 +456,8 @@ def train(args):
             "config_sha256": sha256(output / "config.json"),
             "scope": "clean_final_only;different_photo_branch_and_training_budget;one_seed;previously_seen_official_test;no_significance_claim",
         }
+        if joint:
+            result["teacher_clean"] = teacher_metrics
         write_json(output / "result.json", result)
         if run is not None:
             run.log(
@@ -402,6 +466,11 @@ def train(args):
                     "test/cleaned/mAP@all": metrics["full_mAP"],
                     "test/cleaned/mAP@200": metrics["mAP@200_min_relevant_k"],
                     "test/cleaned/P@200": metrics["P@200"],
+                    **({
+                        "teacher/cleaned/mAP@all": teacher_metrics["full_mAP"],
+                        "teacher/cleaned/mAP@200": teacher_metrics["mAP@200_min_relevant_k"],
+                        "teacher/cleaned/P@200": teacher_metrics["P@200"],
+                    } if joint else {}),
                 },
                 step=step,
                 commit=True,
@@ -409,7 +478,7 @@ def train(args):
             run.finish()
         write_json(
             output / "runtime.json",
-            {"status": result["status"], "epoch": EPOCHS, "step": step},
+            {"status": result["status"], "epoch": epochs, "step": step},
         )
         return result
     except BaseException as error:
@@ -439,6 +508,8 @@ def main():
         help="Final official TU MP-Q step1189 summary.json",
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--lora-teacher", action="store_true",
+                        help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1")
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )
