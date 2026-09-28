@@ -1,4 +1,4 @@
-"""Train the random-init student for 10 complete TU-Berlin epochs, then evaluate.
+"""Train the random-init student for 100 complete TU-Berlin epochs, then evaluate.
 
 No validation loop, checkpoint selection, resume, or automatic retry. The final
 clean retrieval comparison is against a supplied, fixed-step MP-Q summary.
@@ -30,7 +30,7 @@ from .models.clip import load_frozen_clip
 from .models.sketch_student import SketchStudent
 
 ROOT = Path(__file__).resolve().parents[2]
-EPOCHS = 10
+EPOCHS = 100
 SEED = 42
 BATCH_SIZE = 32
 TEMPERATURE = 0.07
@@ -194,7 +194,7 @@ def train(args):
         "photo_encoder": "frozen_openai_CLIP_ViT-B-32-quickgelu",
         "loss": "average_per_positive_contrastive;all_same_class_bank_entries_positive",
         "photo_bank": "B_sampled_positive+B_sampled_negative;duplicate_samples_retained",
-        "selection": "none;final_epoch10_only",
+        "selection": "none;final_epoch100_only",
         "precision": "fp32",
         "wandb_project": "sbir",
         "primary_metric": "clean/full_mAP",
@@ -265,7 +265,7 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name="CNN-Mamba-TU-10epochs",
+                name="CNN-Mamba-TU-100epochs",
                 config=config,
                 dir=str(output),
                 mode="online",
@@ -392,7 +392,7 @@ def train(args):
             "primary_full_map_improved": delta["full_mAP"] > 0,
             "checkpoint_sha256": sha256(output / "student_latest.pt"),
             "config_sha256": sha256(output / "config.json"),
-            "scope": "clean_final_only;different_photo_branch_and_training_budget;one_seed;no_significance_claim",
+            "scope": "clean_final_only;different_photo_branch_and_training_budget;one_seed;previously_seen_official_test;no_significance_claim",
         }
         write_json(output / "result.json", result)
         if run is not None:

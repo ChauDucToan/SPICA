@@ -46,11 +46,11 @@ PYTHONPATH=src .venv/bin/python scripts/check_student.py --device cuda
 
 CPU checks a non-square scan-layout round-trip, full224×224 forward/backward including a blank image, unit-norm output, multi-positive loss oracle, finite gradients and state-dict restoration. CPU uses upstream reference SSD/RMSNorm, with FP64 scan arithmetic and stable recursive inter-chunk state propagation. Those checker-only choices avoid upstream reference tail/overflow issues; they do not change the production model or certify its CUDA numerics. Initial reference failures and the scoped PASS log are retained in `outputs/implementation_20260928/`.
 
-**2026-09-28: user authorized 10-epoch training + final test in W&B project `sbir`.** Actual synthetic CUDA forward/backward/round-trip check passed. On NixOS set `TRITON_LIBCUDA_PATH=/run/opengl-driver/lib`; the initial missing `/sbin/ldconfig` failure is retained. Real-train smoke/restore receipt must pass before launch. The initial `outputs/student_tu_10epochs_20260928/` launch failed before any training update/W&B initialization: resolving a Hugging Face symlink stripped the `.safetensors` suffix and OpenCLIP selected the wrong reader. That failure is retained. The user authorized a fix and fresh launch; the trainer now preserves the filename (no unsafe pickle fallback). The corrected actual-trainer startup gate is separate from the earlier external smoke. **`outputs/student_tu_10epochs_20260928_v2/runtime.json`** and its adjacent launch receipt are authoritative for the new production status; this prelaunch text is not a completion claim.
+**Historical 10-epoch run, completed 2026-09-28 in W&B project `sbir`.** Actual synthetic CUDA forward/backward/round-trip check passed. On NixOS set `TRITON_LIBCUDA_PATH=/run/opengl-driver/lib`; the initial missing `/sbin/ldconfig` failure is retained. Real-train smoke/restore receipt must pass before launch. The initial `outputs/student_tu_10epochs_20260928/` launch failed before any training update/W&B initialization: resolving a Hugging Face symlink stripped the `.safetensors` suffix and OpenCLIP selected the wrong reader. That failure is retained. The user authorized a fix and fresh launch; the trainer now preserves the filename (no unsafe pickle fallback). The corrected actual-trainer startup gate is separate from the earlier external smoke. **`outputs/student_tu_10epochs_20260928_v2/runtime.json`** and its adjacent launch receipt record the historical run; the raw result is `FINISHED_UNVERIFIED`.
 
-## Fixed 10-epoch experiment
+## Completed historical 10-epoch experiment (code at `a09f097`)
 
-`src/spica/train_student.py` trains official TU-Berlin220/30:
+At commit `a09f097`, `src/spica/train_student.py` trained official TU-Berlin220/30:
 
 - 15,400 train sketches, B32, **drop_last=False**: 482 batches/epoch; **4,820 updates and154,000 sketch observations** after10 complete epochs.
 - Seed42; AdamW LR3e-4, weight decay.01; 5% warmup then cosine. SSM no-weight-decay markers respected. FP32 parameters; global gradient clipping at1.
@@ -67,7 +67,11 @@ The user selected **current official MP-Q** as primary reference, not a CNN-only
 |Clean mAP@200, denominator min(R,200)|0.4218314166392649|
 |Clean P@200|0.5028541551022014|
 
-The supplied control summary must have SHA256 `afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42`; its six manifest/class-map hashes bind dataset identity. The final result reports all three deltas, with primary improvement meaning **strictly higher clean full mAP at epoch10**. This compares different systems and budgets, not an isolated Mamba/backbone gain. Only clean retrieval is measured here; no robustness or statistical-significance claim. These official classes/results were previously observed, so this is not a blind holdout.
+The supplied control summary must have SHA256 `afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42`; its six manifest/class-map hashes bind dataset identity. The completed 10-epoch run at `outputs/student_tu_10epochs_20260928_v2/` used 4,820 updates and reported clean mAP@all 0.2553224267 versus MP-Q 0.4396614906, raw `FINISHED_UNVERIFIED`. It took ~10m34s of training plus ~22s final evaluation. This compares different systems and budgets, not an isolated Mamba/backbone gain.
+
+## Fresh 100-epoch experiment (user-authorized after seeing epoch-10 result)
+
+The current `src/spica/train_student.py` uses `EPOCHS=100`: 48,200 updates, 1,540,000 sketch observations, same architecture/seed/B32/loss/data as the 10-epoch run. Schedule has 5% warmup across the **new full horizon**, not a continuation of the 10-epoch LR schedule. Fresh initialization; no resume. One rolling checkpoint per epoch; **only** epoch-100 official clean test and W&B project `sbir` metrics, no checkpoint selection. The official test was previously observed, so this is an exploratory follow-up, not a blind holdout or proof of significance. Planned output root `outputs/student_tu_100epochs_20260928/`; its runtime and adjacent launch receipt are authoritative. Freeze all source/config/docs during production and preserve the 10-epoch outputs unchanged.
 
 ## Explicit launch command
 
@@ -79,7 +83,7 @@ PYTHONPATH=src HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   .venv/bin/python -m spica.train_student \
   --clip-weights /path/to/open_clip_model.safetensors \
   --mpq-summary ../spica/outputs/percent20_remaining_execution_20260912/runs/tuberlin_220_30/test/step_1189/summary.json \
-  --output outputs/student_tu_10epochs_RUN_ID \
+  --output outputs/student_tu_100epochs_RUN_ID \
   --wandb-mode online
 ```
 
