@@ -188,7 +188,7 @@ def train(args):
         "git_head": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
         ).strip(),
-        "clip_weights": str(args.clip_weights.resolve()),
+        "clip_weights": str(args.clip_weights.expanduser().absolute()),
         "clip_sha256": clip_sha,
         "student_initialization": "random",
         "photo_encoder": "frozen_openai_CLIP_ViT-B-32-quickgelu",
@@ -210,8 +210,10 @@ def train(args):
     write_json(output / "runtime.json", {"status": "INITIALIZING"})
     run = None
     try:
+        # Keep the .safetensors suffix: HF cache symlink targets have no suffix,
+        # and OpenCLIP selects its safe reader from the supplied filename.
         bundle = load_frozen_clip(
-            pretrained=str(args.clip_weights.resolve()), device="cuda"
+            pretrained=str(args.clip_weights.expanduser().absolute()), device="cuda"
         )
         teacher = bundle.encoder
         student = SketchStudent().to("cuda")
