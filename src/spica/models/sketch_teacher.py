@@ -41,8 +41,10 @@ class VisualPrompt(nn.Module):
 
 
 class SketchTeacher(nn.Module):
-    def __init__(self, visual, mean, std, *, visual_prompt=False):
+    def __init__(self, visual, mean, std, *, visual_prompt=False, mask_white_patches=False):
         super().__init__()
+        self.mask_white_patches = mask_white_patches
+        self.prompt_count = 4 if visual_prompt else 0
         self.visual = deepcopy(visual).requires_grad_(False)
         # Isolate adapter initialization from the Student/data RNG stream.
         with torch.random.fork_rng(devices=[]):
@@ -63,8 +65,30 @@ class SketchTeacher(nn.Module):
     def device(self):
         return self.mean.device
 
+    def white_patch_mask(self, sketches):
+        ph, pw = self.visual.conv1.kernel_size
+        patches = sketches.unfold(2, ph, ph).unfold(3, pw, pw)
+        blank = patches.eq(1).all(dim=(1, 4, 5)).flatten(1)
+        # CLS and visual prompts are always valid, including all-white sketches.
+        return F.pad(blank, (1 + self.prompt_count, 0), value=False)
+
     def forward(self, sketches):
-        return F.normalize(self.visual((sketches - self.mean) / self.std), dim=-1)
+        normalized = (sketches - self.mean) / self.std
+        if not self.mask_white_patches:
+            return F.normalize(self.visual(normalized), dim=-1)
+        tokens = self.visual._embeds(normalized)
+        blocked = self.white_patch_mask(sketches)
+        batch, length = blocked.shape
+        heads = self.visual.transformer.resblocks[0].attn.num_heads
+        # OpenCLIP casts attn_mask to the input dtype: use additive -inf, not bool.
+        mask = tokens.new_zeros(batch, 1, 1, length).masked_fill(
+            blocked[:, None, None, :], float("-inf")
+        ).expand(batch, heads, length, length).reshape(batch * heads, length, length)
+        tokens = self.visual.transformer(tokens, attn_mask=mask)
+        pooled, _ = self.visual._pool(tokens)
+        if self.visual.proj is not None:
+            pooled = pooled @ self.visual.proj
+        return F.normalize(pooled, dim=-1)
 
     def adapter_state_dict(self):
         trainable = {name for name, p in self.named_parameters() if p.requires_grad}

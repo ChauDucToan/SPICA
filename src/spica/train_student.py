@@ -175,8 +175,11 @@ def train(args):
     visual_prompt = getattr(args, "visual_prompt", False)
     if visual_prompt and not joint:
         raise ValueError("--visual-prompt requires --lora-teacher")
+    mask_white = getattr(args, "mask_white_patches", False)
+    if mask_white and not joint:
+        raise ValueError("--mask-white-patches requires --lora-teacher")
     calibration_path = getattr(args, "kd_calibration", None)
-    if calibration_path is not None and not (joint and visual_prompt):
+    if calibration_path is not None and (mask_white or not (joint and visual_prompt)):
         raise ValueError("--kd-calibration requires --lora-teacher --visual-prompt")
     fixed_lambda = getattr(args, "lambda_kd", None)
     if fixed_lambda is not None:
@@ -184,6 +187,8 @@ def train(args):
             raise ValueError("--lambda-kd requires --lora-teacher and cannot be combined with calibration")
         if not math.isfinite(fixed_lambda) or fixed_lambda <= 0:
             raise ValueError("--lambda-kd must be finite and positive")
+    if mask_white and (not visual_prompt or fixed_lambda != 1.2):
+        raise ValueError("White-patch experiment requires --visual-prompt --lambda-kd 1.2")
     epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
@@ -290,6 +295,15 @@ def train(args):
             "teacher_objective": "multi_positive_retrieval_only",
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
+        if mask_white:
+            config["method"] = "cnn_mamba_lora_vpt_white_patch_mask_teacher_v1"
+            config["sketch_teacher"]["white_patch_mask"] = {
+                "rule": "all_RGB_values_exactly_1_after_resize_crop_before_normalization",
+                "patch_size": 32, "scope": "sketch_teacher_keys_all12layers",
+                "positions": "original_unchanged", "CLS_and_prompts": "always_valid",
+                "photo_and_student": "unchanged", "train_and_eval": True,
+                "compute": "dense_mask_no_speedup_claim",
+            }
         if fixed_lambda is not None:
             config["sketch_teacher"]["lambda_source"] = "explicit_user_choice_not_calibrated"
         if calibration is not None:
@@ -325,7 +339,7 @@ def train(args):
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
             sketch_teacher = SketchTeacher(
                 teacher.model.visual, normalize.mean, normalize.std,
-                visual_prompt=visual_prompt,
+                visual_prompt=visual_prompt, mask_white_patches=mask_white,
             ).to("cuda").eval()
             adapter_parameters = [p for p in sketch_teacher.parameters() if p.requires_grad]
             config["sketch_teacher"]["trainable_parameters"] = sum(
@@ -383,7 +397,8 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name=((f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs")
+                name=(f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if mask_white else
+                      (f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs")
                       if fixed_lambda is not None else
                       "CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
                       "CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
@@ -610,6 +625,8 @@ def main():
                         help="Add four shallow visual tokens to the LoRA sketch teacher")
     parser.add_argument("--kd-calibration", type=Path,
                         help="Reviewed initialization-gradient receipt; absent keeps KD=1")
+    parser.add_argument("--mask-white-patches", action="store_true",
+                        help="Mask exactly-white sketch patch keys in every teacher attention layer")
     parser.add_argument("--lambda-kd", type=float,
                         help="Explicit positive KD weight; mutually exclusive with calibration")
     parser.add_argument(

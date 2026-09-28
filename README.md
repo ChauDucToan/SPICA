@@ -98,6 +98,12 @@ After measuredλ≈.16314 underperformedλ1 (Studentfull .259736746 vs .26378264
 
 Parallel paper research and a synthetic CPU attention-permutation/PAD demonstration live under ignored `outputs/clip_sketch_research_20260928/`. Neither SeCo nor SketchLVM describes white-patch packing. Sorting positionedtokens alone preserves CLS output for native bidirectional attention; masking is a distinct intervention. **No patch modification is included in this training run.**
 
+## Exactly-white sketch patch key masking (fresh10, λKD1.2)
+
+User-authorized follow-up to unmaskedλ1.2 (Studentfull .2662939949, teacher .5672210936, rawUNVERIFIED). Add **`--mask-white-patches`** to `--lora-teacher --visual-prompt --lambda-kd 1.2`. Mask only the sketch teacher, during train and final evaluation; Student/photo remain unchanged. After normal224resize/crop but BEFORE normalization, a32×32patch is blank iff every RGB channel/pixel equals1 exactly. No threshold tuning, faint/antialiased nonwhite pixels remain valid. Keep originalpositions and nativeCLS pooling; **no sorting**. CLS+4prompts always valid, including allwhite input. Use additive−inf mask on blankkeys in ALL12attentionlayers; blankquery outputs cannot influence validtokens in laterlayers because their keys remain blocked. Dense sequences remain54tokens; no FLOP/speedup promise. Defaultfalse is historical behavior; oldcalibration receipt is rejected with maskmode.
+
+Only patchmask changes versus λ1.2 baseline: same initialweights/seed42/B32/loss/schedule/4820updates. Run finalbothreadouts/sbir/no selection/resume/retry. LocalCPUcheck `PYTHONPATH=src .venv/bin/python scripts/check_white_patch_mask.py` uses tinyOpenCLIP plus localarchivedpreviousmode; not realCLIP certification. FreshCUDAgate **`outputs/student_whitepatch_gate_20260928/`**, production **`outputs/student_whitepatch_teacher_10epochs_20260928/`**; inspect receipts/runtime/PIDs before launch, freeze source/docs/config whileactive. Prior test alreadyobserved, notblindholdout. Mask rule and scope recorded in checkpointconfig; restoring requires same maskflag.
+
 ## Explicit launch command
 
 Make the existing TU data available via the ignored path `datasets/TUBerlin` (a local symlink is sufficient). The local worktree already has this link; no images/manifests were edited.
