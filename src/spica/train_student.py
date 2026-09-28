@@ -196,6 +196,7 @@ def train(args):
         "photo_bank": "B_sampled_positive+B_sampled_negative;duplicate_samples_retained",
         "selection": "none;final_epoch10_only",
         "precision": "fp32",
+        "wandb_project": "sbir",
         "primary_metric": "clean/full_mAP",
         "comparison": "different_systems_not_backbone_only_ablation",
         "mpq_summary": str(args.mpq_summary.resolve()),
@@ -260,7 +261,7 @@ def train(args):
             import wandb
 
             run = wandb.init(
-                project="spica",
+                project="sbir",
                 entity="a-cctest05187-erd",
                 name="CNN-Mamba-TU-10epochs",
                 config=config,
@@ -312,6 +313,17 @@ def train(args):
                     count = len(labels)
                     examples_seen += count
                     loss_sum += loss.item() * count
+                    if step == 1 or step % 50 == 0:
+                        write_json(
+                            output / "runtime.json",
+                            {
+                                "status": "TRAINING",
+                                "epoch": epoch,
+                                "step": step,
+                                "total_steps": total_steps,
+                                "examples_seen": examples_seen,
+                            },
+                        )
                 epoch_loss = loss_sum / len(loader.dataset)
                 row = {
                     "epoch": epoch,
@@ -381,10 +393,6 @@ def train(args):
             "scope": "clean_final_only;different_photo_branch_and_training_budget;one_seed;no_significance_claim",
         }
         write_json(output / "result.json", result)
-        write_json(
-            output / "runtime.json",
-            {"status": result["status"], "epoch": EPOCHS, "step": step},
-        )
         if run is not None:
             run.log(
                 {
@@ -397,6 +405,10 @@ def train(args):
                 commit=True,
             )
             run.finish()
+        write_json(
+            output / "runtime.json",
+            {"status": result["status"], "epoch": EPOCHS, "step": step},
+        )
         return result
     except BaseException as error:
         write_json(

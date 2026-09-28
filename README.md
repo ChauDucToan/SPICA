@@ -46,7 +46,7 @@ PYTHONPATH=src .venv/bin/python scripts/check_student.py --device cuda
 
 CPU checks a non-square scan-layout round-trip, full224×224 forward/backward including a blank image, unit-norm output, multi-positive loss oracle, finite gradients and state-dict restoration. CPU uses upstream reference SSD/RMSNorm, with FP64 scan arithmetic and stable recursive inter-chunk state propagation. Those checker-only choices avoid upstream reference tail/overflow issues; they do not change the production model or certify its CUDA numerics. Initial reference failures and the scoped PASS log are retained in `outputs/implementation_20260928/`.
 
-**Current status: CPU-reference check and dependency import passed. Production CUDA check and training have not run.**
+**2026-09-28: user authorized 10-epoch training + final test in W&B project `sbir`.** Actual synthetic CUDA forward/backward/round-trip check passed. On NixOS set `TRITON_LIBCUDA_PATH=/run/opengl-driver/lib`; the initial missing `/sbin/ldconfig` failure is retained. Real-train smoke/restore receipt must pass before launch. `outputs/student_tu_10epochs_20260928/runtime.json` and its adjacent launch receipt are authoritative for production status; this prelaunch text is not a completion claim.
 
 ## Fixed 10-epoch experiment
 
@@ -57,7 +57,7 @@ CPU checks a non-square scan-layout round-trip, full224×224 forward/backward in
 - Frozen OpenAI CLIP ViT-B/32 QuickGELU photo encoder. No photo prompts, text targets, sketch-teacher distillation, image augmentation/masking, or consistency term in this V1.
 - One sampled positive and negative photo/sketch from the existing main loader. Multi-positive contrastive temperature.07, averaged over **all same-class entries in the batch photo bank**. Repeated sampled photos are retained, not deduplicated.
 - No intermediate test/validation or checkpoint selection. One rolling checkpoint after each epoch; final clean official evaluation after epoch10. No resume/automatic retry.
-- Minimal optional W&B: config plus final three clean retrieval scalars; no system/code/model/artifact capture. Default disabled. Training loss and epoch progress are local.
+- Minimal optional W&B project **`sbir`**: config plus final three clean retrieval scalars; no system/code/model/artifact capture. Default disabled. Training loss and epoch progress are local; no retrieval curves before the final test.
 
 The user selected **current official MP-Q** as primary reference, not a CNN-only control:
 
@@ -69,11 +69,12 @@ The user selected **current official MP-Q** as primary reference, not a CNN-only
 
 The supplied control summary must have SHA256 `afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42`; its six manifest/class-map hashes bind dataset identity. The final result reports all three deltas, with primary improvement meaning **strictly higher clean full mAP at epoch10**. This compares different systems and budgets, not an isolated Mamba/backbone gain. Only clean retrieval is measured here; no robustness or statistical-significance claim. These official classes/results were previously observed, so this is not a blind holdout.
 
-## Explicit launch (not executed)
+## Explicit launch command
 
 Make the existing TU data available via the ignored path `datasets/TUBerlin` (a local symlink is sufficient). The local worktree already has this link; no images/manifests were edited.
 
 ```bash
+TRITON_LIBCUDA_PATH=/run/opengl-driver/lib \
 PYTHONPATH=src HF_HUB_OFFLINE=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   .venv/bin/python -m spica.train_student \
   --clip-weights /path/to/open_clip_model.safetensors \
