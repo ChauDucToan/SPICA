@@ -178,6 +178,12 @@ def train(args):
     calibration_path = getattr(args, "kd_calibration", None)
     if calibration_path is not None and not (joint and visual_prompt):
         raise ValueError("--kd-calibration requires --lora-teacher --visual-prompt")
+    fixed_lambda = getattr(args, "lambda_kd", None)
+    if fixed_lambda is not None:
+        if not joint or calibration_path is not None:
+            raise ValueError("--lambda-kd requires --lora-teacher and cannot be combined with calibration")
+        if not math.isfinite(fixed_lambda) or fixed_lambda <= 0:
+            raise ValueError("--lambda-kd must be finite and positive")
     epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
@@ -217,7 +223,7 @@ def train(args):
                 raise ValueError(
                     f"Manifest/class-map differs from MP-Q: {split_name}/{key}"
                 )
-    lambda_kd = 1.0
+    lambda_kd = 1.0 if fixed_lambda is None else float(fixed_lambda)
     calibration = None
     if calibration_path is not None:
         calibration = read_kd_calibration(calibration_path)
@@ -284,6 +290,8 @@ def train(args):
             "teacher_objective": "multi_positive_retrieval_only",
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
+        if fixed_lambda is not None:
+            config["sketch_teacher"]["lambda_source"] = "explicit_user_choice_not_calibrated"
         if calibration is not None:
             config["sketch_teacher"]["kd_calibration"] = {
                 "path": str(calibration_path.absolute()), "sha256": sha256(calibration_path),
@@ -375,7 +383,9 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name=("CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
+                name=((f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs")
+                      if fixed_lambda is not None else
+                      "CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
                       "CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
                       "CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs"),
                 config=config,
@@ -600,6 +610,8 @@ def main():
                         help="Add four shallow visual tokens to the LoRA sketch teacher")
     parser.add_argument("--kd-calibration", type=Path,
                         help="Reviewed initialization-gradient receipt; absent keeps KD=1")
+    parser.add_argument("--lambda-kd", type=float,
+                        help="Explicit positive KD weight; mutually exclusive with calibration")
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )

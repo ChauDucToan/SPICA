@@ -4,13 +4,27 @@ import copy
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
-from spica.train_student import KD_CALIBRATION_RULE, read_kd_calibration, sha256
+from spica.train_student import KD_CALIBRATION_RULE, read_kd_calibration, sha256, train
 
 
 def main():
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
+        # Rejected before data, model/device access, or output creation.
+        for value, joint, calibration in [(0., True, None), (-1., True, None),
+                (float('nan'), True, None), (float('inf'), True, None),
+                (1.2, False, None), (1.2, True, root / 'reviewed.json')]:
+            args = SimpleNamespace(output=root / 'unused', lora_teacher=joint,
+                                   visual_prompt=joint, kd_calibration=calibration, lambda_kd=value)
+            try:
+                train(args)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('invalid fixed lambda accepted')
+            assert not args.output.exists()
         artifacts = {}
         for i in range(4):
             file = root / f'batch_{i}.pt'
@@ -49,7 +63,7 @@ def main():
             pass
         else:
             raise AssertionError('artifact tampering accepted')
-    print('PASS: synthetic calibration contract, lambda formula, artifact tampering')
+    print('PASS: synthetic calibration contract, lambda formula, artifact tampering, fixed-lambda boundary')
 
 
 if __name__ == '__main__':
