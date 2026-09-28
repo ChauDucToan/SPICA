@@ -10,6 +10,7 @@ import json
 import math
 import random
 import shutil
+import statistics
 import subprocess
 from pathlib import Path
 
@@ -37,6 +38,7 @@ BATCH_SIZE = 32
 TEMPERATURE = 0.07
 LEARNING_RATE = 3e-4
 WEIGHT_DECAY = 0.01
+KD_CALIBRATION_RULE = "lambda=0.1/median4(norm(g_KD)/norm(g_retrieval));all_Student_parameters"
 # User-selected official MP-Q control, fixed step1189 (not a selected peak).
 MPQ_SUMMARY_SHA256 = "afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42"
 
@@ -50,6 +52,47 @@ def multi_positive_loss(query, photos, labels, photo_labels):
 def sha256(path):
     with Path(path).open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def state_sha(model):
+    h = hashlib.sha256()
+    for name, value in model.state_dict().items():
+        h.update(name.encode())
+        h.update(value.detach().cpu().contiguous().numpy().tobytes())
+    return h.hexdigest()
+
+
+def read_kd_calibration(path):
+    value = json.loads(path.read_text())
+    if (value["status"] != "SCOPED_GRADIENT_CALIBRATION_PASS"
+            or value["rule"] != KD_CALIBRATION_RULE
+            or value["optimizer_updates"] != 0
+            or value["test_images_opened"] != 0
+            or value["state_before"] != value["state_after"]
+            or len(value["batches"]) != 4):
+        raise ValueError("Invalid KD calibration protocol")
+    ratios = []
+    for index, row in enumerate(value["batches"]):
+        nr, nk = row["retrieval_grad_norm"], row["kd_grad_norm"]
+        if row["batch"] != index or any(not math.isfinite(x) or x <= 0 for x in (nr, nk)):
+            raise ValueError("Invalid KD gradient norms")
+        ratio = nk / nr
+        if not math.isclose(ratio, row["ratio_kd_to_retrieval"], rel_tol=1e-12):
+            raise ValueError("KD ratio disagrees with gradient norms")
+        ratios.append(ratio)
+    coefficient = value["lambda_kd"]
+    if (not math.isfinite(coefficient) or coefficient <= 0
+            or not math.isclose(coefficient, 0.1 / statistics.median(ratios), rel_tol=1e-12)
+            or len(value["weighted_ratios"]) != 4
+            or not all(math.isclose(a, coefficient*b, rel_tol=1e-12)
+                       for a, b in zip(value["weighted_ratios"], ratios))):
+        raise ValueError("KD coefficient does not implement the approved rule")
+    if set(value["artifacts_sha256"]) != {f"batch_{i}.pt" for i in range(4)}:
+        raise ValueError("Expected exactly four KD raw-gradient artifacts")
+    for name, digest in value["artifacts_sha256"].items():
+        if sha256(path.parent / name) != digest:
+            raise ValueError(f"KD artifact changed: {name}")
+    return value
 
 
 def write_json(path, value):
@@ -132,6 +175,9 @@ def train(args):
     visual_prompt = getattr(args, "visual_prompt", False)
     if visual_prompt and not joint:
         raise ValueError("--visual-prompt requires --lora-teacher")
+    calibration_path = getattr(args, "kd_calibration", None)
+    if calibration_path is not None and not (joint and visual_prompt):
+        raise ValueError("--kd-calibration requires --lora-teacher --visual-prompt")
     epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
@@ -171,6 +217,21 @@ def train(args):
                 raise ValueError(
                     f"Manifest/class-map differs from MP-Q: {split_name}/{key}"
                 )
+    lambda_kd = 1.0
+    calibration = None
+    if calibration_path is not None:
+        calibration = read_kd_calibration(calibration_path)
+        if (calibration["source_sha256"] != source
+                or calibration["manifest_sha256"] != manifests
+                or calibration["clip_sha256"] != clip_sha
+                or calibration["data_config_sha256"] != sha256(args.data_config)
+                or calibration["seed"] != SEED
+                or calibration["batch_size"] != BATCH_SIZE
+                or calibration["visual_prompt_tokens"] != 4):
+            raise ValueError("KD calibration does not match this source/data/initialization protocol")
+        lambda_kd = float(calibration["lambda_kd"])
+        if not math.isfinite(lambda_kd) or lambda_kd <= 0:
+            raise ValueError("KD calibration coefficient must be finite and positive")
     output.mkdir(parents=True)
     for name in source:
         archive = output / "source" / name
@@ -218,11 +279,17 @@ def train(args):
         config["sketch_teacher"] = {
             "base": "CLIP_ViT-B-32-quickgelu_frozen",
             "lora": "Q,V_all12blocks", "rank": 8, "alpha": 8, "dropout": 0,
-            "lr": 1e-4, "lambda_kd": 1.0, "kd": "cosine_teacher_detached",
-            "lambda_calibrated": False, "start": "first_batch_no_teacher_warmup",
+            "lr": 1e-4, "lambda_kd": lambda_kd, "kd": "cosine_teacher_detached",
+            "lambda_calibrated": calibration is not None, "start": "first_batch_no_teacher_warmup",
             "teacher_objective": "multi_positive_retrieval_only",
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
+        if calibration is not None:
+            config["sketch_teacher"]["kd_calibration"] = {
+                "path": str(calibration_path.absolute()), "sha256": sha256(calibration_path),
+                "rule": calibration["rule"], "batches": 4,
+                "scope": "initialization_gradient_norm_only_not_optimal_or_Adam_update_ratio",
+            }
         if visual_prompt:
             config["sketch_teacher"]["visual_prompt"] = {
                 "tokens": 4, "type": "shallow_after_CLS_before_preLN",
@@ -256,6 +323,11 @@ def train(args):
             config["sketch_teacher"]["trainable_parameters"] = sum(
                 p.numel() for p in adapter_parameters
             )
+        if calibration is not None:
+            actual = {"student": state_sha(student), "teacher": state_sha(sketch_teacher),
+                      "photo": state_sha(teacher)}
+            if actual != calibration["state_before"]:
+                raise ValueError("KD calibration model initialization differs from actual trainer")
         # Same deterministic geometry as CLIP, without its final normalization.
         sketch_transform = transforms.Compose(
             build_clip_eval_transform().transforms[:-1]
@@ -303,7 +375,8 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name=("CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
+                name=("CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
+                      "CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
                       "CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs"),
                 config=config,
                 dir=str(output),
@@ -355,7 +428,7 @@ def train(args):
                     loss = retrieval_loss
                     if joint:
                         kd_loss = cosine_distillation(query, teacher_query)
-                        loss = loss + kd_loss  # fixed lambda_KD=1, not calibrated
+                        loss = loss + lambda_kd * kd_loss
                     if not torch.isfinite(loss):
                         raise FloatingPointError(f"Nonfinite loss at step {step + 1}")
                     loss.backward()
@@ -525,6 +598,8 @@ def main():
                         help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1")
     parser.add_argument("--visual-prompt", action="store_true",
                         help="Add four shallow visual tokens to the LoRA sketch teacher")
+    parser.add_argument("--kd-calibration", type=Path,
+                        help="Reviewed initialization-gradient receipt; absent keeps KD=1")
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )
