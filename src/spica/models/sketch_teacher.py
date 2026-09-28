@@ -1,4 +1,4 @@
-"""CLIP visual teacher with Q/V-only LoRA; accepts raw RGB in [0, 1]."""
+"""CLIP Q/V-LoRA teacher with optional shallow visual prompts; raw RGB input."""
 
 import math
 from copy import deepcopy
@@ -27,8 +27,21 @@ class QVLoRA(nn.Module):
         return weight + torch.cat((q, torch.zeros_like(q), v))  # alpha/rank = 1
 
 
+class VisualPrompt(nn.Module):
+    """Four tokens after CLS, before pre-LN; original patch positions stay intact."""
+
+    def __init__(self, width):
+        super().__init__()
+        self.tokens = nn.Parameter(torch.empty(4, width))
+        nn.init.normal_(self.tokens, std=0.02)
+
+    def forward(self, tokens):
+        prompts = self.tokens.to(tokens.dtype).unsqueeze(0).expand(tokens.shape[0], -1, -1)
+        return torch.cat((tokens[:, :1], prompts, tokens[:, 1:]), dim=1)
+
+
 class SketchTeacher(nn.Module):
-    def __init__(self, visual, mean, std):
+    def __init__(self, visual, mean, std, *, visual_prompt=False):
         super().__init__()
         self.visual = deepcopy(visual).requires_grad_(False)
         # Isolate adapter initialization from the Student/data RNG stream.
@@ -37,6 +50,11 @@ class SketchTeacher(nn.Module):
                 parametrize.register_parametrization(
                     block.attn, "in_proj_weight",
                     QVLoRA(block.attn.embed_dim).to(block.attn.in_proj_weight.device),
+                )
+            if visual_prompt:
+                prompt = VisualPrompt(self.visual.conv1.out_channels)
+                self.visual.ln_pre = nn.Sequential(
+                    prompt.to(self.visual.conv1.weight.device), self.visual.ln_pre
                 )
         self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
@@ -49,8 +67,8 @@ class SketchTeacher(nn.Module):
         return F.normalize(self.visual((sketches - self.mean) / self.std), dim=-1)
 
     def adapter_state_dict(self):
-        return {name: value for name, value in self.state_dict().items()
-                if ".parametrizations.in_proj_weight.0." in name}
+        trainable = {name for name, p in self.named_parameters() if p.requires_grad}
+        return {name: value for name, value in self.state_dict().items() if name in trainable}
 
 
 def cosine_distillation(student, teacher):

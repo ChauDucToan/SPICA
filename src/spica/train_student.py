@@ -129,6 +129,9 @@ def train(args):
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
     joint = args.lora_teacher
+    visual_prompt = getattr(args, "visual_prompt", False)
+    if visual_prompt and not joint:
+        raise ValueError("--visual-prompt requires --lora-teacher")
     epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
@@ -209,6 +212,8 @@ def train(args):
         "mpq_clean": baseline["clean"],
         "official_test_previously_observed": True,
     }
+    if visual_prompt:
+        config["method"] = "cnn_mamba_lora_vpt_teacher_v1"
     if joint:
         config["sketch_teacher"] = {
             "base": "CLIP_ViT-B-32-quickgelu_frozen",
@@ -218,6 +223,12 @@ def train(args):
             "teacher_objective": "multi_positive_retrieval_only",
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
+        if visual_prompt:
+            config["sketch_teacher"]["visual_prompt"] = {
+                "tokens": 4, "type": "shallow_after_CLS_before_preLN",
+                "original_positional_embeddings": "unchanged_no_prompt_positions",
+                "init": "normal_std0.02", "lr": 1e-4, "weight_decay": 0.01,
+            }
     write_json(output / "config.json", config)
     write_json(output / "runtime.json", {"status": "INITIALIZING"})
     run = None
@@ -238,7 +249,8 @@ def train(args):
             config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
             sketch_teacher = SketchTeacher(
-                teacher.model.visual, normalize.mean, normalize.std
+                teacher.model.visual, normalize.mean, normalize.std,
+                visual_prompt=visual_prompt,
             ).to("cuda").eval()
             adapter_parameters = [p for p in sketch_teacher.parameters() if p.requires_grad]
             config["sketch_teacher"]["trainable_parameters"] = sum(
@@ -291,7 +303,8 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name="CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs",
+                name=("CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
+                      "CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs"),
                 config=config,
                 dir=str(output),
                 mode="online",
@@ -510,6 +523,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--lora-teacher", action="store_true",
                         help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1")
+    parser.add_argument("--visual-prompt", action="store_true",
+                        help="Add four shallow visual tokens to the LoRA sketch teacher")
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )
