@@ -1,5 +1,7 @@
 # SketchLVM paper-category reimplementation — TU-Berlin raster erasure
 
+**Completed:** [results](sketchlvm_raster_results_2026-09-30.md), 60epochs/14460updates + all4finalconditions exit0. User explicitly accepted retained prelaunch FP64 FAIL before launch; no tolerance change. Raw FINISHED_UNVERIFIED, scoped final saved-statistics review only. The planned operations below are historical, not permission to rerun.
+
 ## User-approved scope
 
 Fresh seed 42, 60 epochs, batch 64, plain Adam learning rate 1e-5 (betas .9/.999, epsilon 1e-8, weight decay 0). No schedule, gradient clipping, augmentation, resume, retry, best-checkpoint selection, or intermediate official test. Official TU-Berlin 220/30: 15,400 training sketches, 241 updates/epoch (last batch 40), 14,460 updates / 924,000 sketch observations. Final test: 2,400 queries and all 27,989 gallery photos.

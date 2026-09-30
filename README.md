@@ -2,6 +2,10 @@
 
 Isolated branch `feature/cnn-mamba-student`, based on **main `b21154e`**. No code imported from the sibling experiments branch. Its datasets and the fixed MP-Q report are read-only inputs.
 
+## SketchLVM paper-category + raster erasure (completed)
+
+[Results and verification limits](docs/sketchlvm_raster_results_2026-09-30.md): fresh60epochs/TU220/30, separate sketch/photo prompts+LayerNorms, final2400→27989 retrieval. Clean fullmAP **51.61%**; raster25/50/75% **33.84% / 16.50% / 5.84%**, 75% retention11.31%. New `src/spica/models/sketchlvm.py`, `train_sketchlvm.py`, separate `evaluate_sketchlvm_raster.py`; existing Student/teacher unchanged. Raw `FINISHED_UNVERIFIED`, one prelaunch FP64 tolerance failure explicitly accepted by user and retained; scoped saved-rank/statistics checks are not full encoder/full-gallery certification. No active run or automatic rerun/push.
+
 ## Model
 
 `src/spica/models/sketch_student.py` contains the complete Student:
