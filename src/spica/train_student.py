@@ -16,6 +16,8 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float, Int
+from torch import Tensor
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -31,6 +33,12 @@ from .models.clip import load_frozen_clip
 from .models.sketch_student import SketchStudent
 from .models.sketch_teacher import SketchTeacher, cosine_distillation
 
+QueryEmbeddings = Float[Tensor, "batch embedding"]
+PhotoEmbeddings = Float[Tensor, "photos embedding"]
+QueryLabels = Int[Tensor, "batch"]
+PhotoLabels = Int[Tensor, "photos"]
+Scalar = Float[Tensor, ""]
+
 ROOT = Path(__file__).resolve().parents[2]
 EPOCHS = 100
 SEED = 42
@@ -38,12 +46,19 @@ BATCH_SIZE = 32
 TEMPERATURE = 0.07
 LEARNING_RATE = 3e-4
 WEIGHT_DECAY = 0.01
-KD_CALIBRATION_RULE = "lambda=0.1/median4(norm(g_KD)/norm(g_retrieval));all_Student_parameters"
+KD_CALIBRATION_RULE = (
+    "lambda=0.1/median4(norm(g_KD)/norm(g_retrieval));all_Student_parameters"
+)
 # User-selected official MP-Q control, fixed step1189 (not a selected peak).
 MPQ_SUMMARY_SHA256 = "afb927f7142aafe98bf57c742a034d8478bdb2586880a53f6a3c5c15b2dfba42"
 
 
-def multi_positive_loss(query, photos, labels, photo_labels):
+def multi_positive_loss(
+    query: QueryEmbeddings,
+    photos: PhotoEmbeddings,
+    labels: QueryLabels,
+    photo_labels: PhotoLabels,
+) -> Scalar:
     log_prob = F.log_softmax(query @ photos.T / TEMPERATURE, dim=-1)
     positive = labels[:, None] == photo_labels[None, :]
     return (-(log_prob * positive).sum(dim=1) / positive.sum(dim=1)).mean()
@@ -64,28 +79,37 @@ def state_sha(model):
 
 def read_kd_calibration(path):
     value = json.loads(path.read_text())
-    if (value["status"] != "SCOPED_GRADIENT_CALIBRATION_PASS"
-            or value["rule"] != KD_CALIBRATION_RULE
-            or value["optimizer_updates"] != 0
-            or value["test_images_opened"] != 0
-            or value["state_before"] != value["state_after"]
-            or len(value["batches"]) != 4):
+    if (
+        value["status"] != "SCOPED_GRADIENT_CALIBRATION_PASS"
+        or value["rule"] != KD_CALIBRATION_RULE
+        or value["optimizer_updates"] != 0
+        or value["test_images_opened"] != 0
+        or value["state_before"] != value["state_after"]
+        or len(value["batches"]) != 4
+    ):
         raise ValueError("Invalid KD calibration protocol")
     ratios = []
     for index, row in enumerate(value["batches"]):
         nr, nk = row["retrieval_grad_norm"], row["kd_grad_norm"]
-        if row["batch"] != index or any(not math.isfinite(x) or x <= 0 for x in (nr, nk)):
+        if row["batch"] != index or any(
+            not math.isfinite(x) or x <= 0 for x in (nr, nk)
+        ):
             raise ValueError("Invalid KD gradient norms")
         ratio = nk / nr
         if not math.isclose(ratio, row["ratio_kd_to_retrieval"], rel_tol=1e-12):
             raise ValueError("KD ratio disagrees with gradient norms")
         ratios.append(ratio)
     coefficient = value["lambda_kd"]
-    if (not math.isfinite(coefficient) or coefficient <= 0
-            or not math.isclose(coefficient, 0.1 / statistics.median(ratios), rel_tol=1e-12)
-            or len(value["weighted_ratios"]) != 4
-            or not all(math.isclose(a, coefficient*b, rel_tol=1e-12)
-                       for a, b in zip(value["weighted_ratios"], ratios))):
+    if (
+        not math.isfinite(coefficient)
+        or coefficient <= 0
+        or not math.isclose(coefficient, 0.1 / statistics.median(ratios), rel_tol=1e-12)
+        or len(value["weighted_ratios"]) != 4
+        or not all(
+            math.isclose(a, coefficient * b, rel_tol=1e-12)
+            for a, b in zip(value["weighted_ratios"], ratios)
+        )
+    ):
         raise ValueError("KD coefficient does not implement the approved rule")
     if set(value["artifacts_sha256"]) != {f"batch_{i}.pt" for i in range(4)}:
         raise ValueError("Expected exactly four KD raw-gradient artifacts")
@@ -178,7 +202,9 @@ def train(args):
     mask_white = getattr(args, "mask_white_patches", False)
     deep_prompt = getattr(args, "deep_visual_prompt", False)
     if deep_prompt and (not joint or not visual_prompt or not mask_white):
-        raise ValueError("Deep prompts require LoRA teacher, visual prompts and white mask")
+        raise ValueError(
+            "Deep prompts require LoRA teacher, visual prompts and white mask"
+        )
     if mask_white and not joint:
         raise ValueError("--mask-white-patches requires --lora-teacher")
     calibration_path = getattr(args, "kd_calibration", None)
@@ -187,11 +213,15 @@ def train(args):
     fixed_lambda = getattr(args, "lambda_kd", None)
     if fixed_lambda is not None:
         if not joint or calibration_path is not None:
-            raise ValueError("--lambda-kd requires --lora-teacher and cannot be combined with calibration")
+            raise ValueError(
+                "--lambda-kd requires --lora-teacher and cannot be combined with calibration"
+            )
         if not math.isfinite(fixed_lambda) or fixed_lambda <= 0:
             raise ValueError("--lambda-kd must be finite and positive")
     if mask_white and (not visual_prompt or fixed_lambda != 1.2):
-        raise ValueError("White-patch experiment requires --visual-prompt --lambda-kd 1.2")
+        raise ValueError(
+            "White-patch experiment requires --visual-prompt --lambda-kd 1.2"
+        )
     epochs = 10 if joint else EPOCHS
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
@@ -235,14 +265,18 @@ def train(args):
     calibration = None
     if calibration_path is not None:
         calibration = read_kd_calibration(calibration_path)
-        if (calibration["source_sha256"] != source
-                or calibration["manifest_sha256"] != manifests
-                or calibration["clip_sha256"] != clip_sha
-                or calibration["data_config_sha256"] != sha256(args.data_config)
-                or calibration["seed"] != SEED
-                or calibration["batch_size"] != BATCH_SIZE
-                or calibration["visual_prompt_tokens"] != 4):
-            raise ValueError("KD calibration does not match this source/data/initialization protocol")
+        if (
+            calibration["source_sha256"] != source
+            or calibration["manifest_sha256"] != manifests
+            or calibration["clip_sha256"] != clip_sha
+            or calibration["data_config_sha256"] != sha256(args.data_config)
+            or calibration["seed"] != SEED
+            or calibration["batch_size"] != BATCH_SIZE
+            or calibration["visual_prompt_tokens"] != 4
+        ):
+            raise ValueError(
+                "KD calibration does not match this source/data/initialization protocol"
+            )
         lambda_kd = float(calibration["lambda_kd"])
         if not math.isfinite(lambda_kd) or lambda_kd <= 0:
             raise ValueError("KD calibration coefficient must be finite and positive")
@@ -255,7 +289,9 @@ def train(args):
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
     config = {
-        "method": "cnn_mamba_lora_teacher_v1" if joint else "cnn_fourway_mamba2_student_v1",
+        "method": "cnn_mamba_lora_teacher_v1"
+        if joint
+        else "cnn_fourway_mamba2_student_v1",
         "dataset": data.name,
         "epochs": epochs,
         "seed": SEED,
@@ -292,42 +328,65 @@ def train(args):
     if joint:
         config["sketch_teacher"] = {
             "base": "CLIP_ViT-B-32-quickgelu_frozen",
-            "lora": "Q,V_all12blocks", "rank": 8, "alpha": 8, "dropout": 0,
-            "lr": 1e-4, "lambda_kd": lambda_kd, "kd": "cosine_teacher_detached",
-            "lambda_calibrated": calibration is not None, "start": "first_batch_no_teacher_warmup",
+            "lora": "Q,V_all12blocks",
+            "rank": 8,
+            "alpha": 8,
+            "dropout": 0,
+            "lr": 1e-4,
+            "lambda_kd": lambda_kd,
+            "kd": "cosine_teacher_detached",
+            "lambda_calibrated": calibration is not None,
+            "start": "first_batch_no_teacher_warmup",
             "teacher_objective": "multi_positive_retrieval_only",
             "gradient_clip": "1_each_student_and_teacher_separately",
         }
         if mask_white:
-            config["method"] = "cnn_mamba_lora_vpt_deep_white_mask_teacher_v1" if deep_prompt else "cnn_mamba_lora_vpt_white_patch_mask_teacher_v1"
+            config["method"] = (
+                "cnn_mamba_lora_vpt_deep_white_mask_teacher_v1"
+                if deep_prompt
+                else "cnn_mamba_lora_vpt_white_patch_mask_teacher_v1"
+            )
             config["sketch_teacher"]["white_patch_mask"] = {
                 "rule": "all_RGB_values_exactly_1_after_resize_crop_before_normalization",
-                "patch_size": 32, "scope": "sketch_teacher_keys_all12layers",
-                "positions": "original_unchanged", "CLS_and_prompts": "always_valid",
-                "photo_and_student": "unchanged", "train_and_eval": True,
+                "patch_size": 32,
+                "scope": "sketch_teacher_keys_all12layers",
+                "positions": "original_unchanged",
+                "CLS_and_prompts": "always_valid",
+                "photo_and_student": "unchanged",
+                "train_and_eval": True,
                 "compute": "dense_mask_no_speedup_claim",
             }
             if deep_prompt:
                 config["sketch_teacher"]["visual_prompt"] = {
-                    "tokens_per_layer": 4, "layers": 12,
+                    "tokens_per_layer": 4,
+                    "layers": 12,
                     "type": "independent_shallow_tokens_replaced_each_layer",
                     "position": "after_CLS_before_49_original_patches",
-                    "readout": "native_CLS", "init": "normal_std0.02",
-                    "lr": 1e-4, "weight_decay": 0.01,
+                    "readout": "native_CLS",
+                    "init": "normal_std0.02",
+                    "lr": 1e-4,
+                    "weight_decay": 0.01,
                 }
         if fixed_lambda is not None:
-            config["sketch_teacher"]["lambda_source"] = "explicit_user_choice_not_calibrated"
+            config["sketch_teacher"]["lambda_source"] = (
+                "explicit_user_choice_not_calibrated"
+            )
         if calibration is not None:
             config["sketch_teacher"]["kd_calibration"] = {
-                "path": str(calibration_path.absolute()), "sha256": sha256(calibration_path),
-                "rule": calibration["rule"], "batches": 4,
+                "path": str(calibration_path.absolute()),
+                "sha256": sha256(calibration_path),
+                "rule": calibration["rule"],
+                "batches": 4,
                 "scope": "initialization_gradient_norm_only_not_optimal_or_Adam_update_ratio",
             }
         if visual_prompt and not deep_prompt:
             config["sketch_teacher"]["visual_prompt"] = {
-                "tokens": 4, "type": "shallow_after_CLS_before_preLN",
+                "tokens": 4,
+                "type": "shallow_after_CLS_before_preLN",
                 "original_positional_embeddings": "unchanged_no_prompt_positions",
-                "init": "normal_std0.02", "lr": 1e-4, "weight_decay": 0.01,
+                "init": "normal_std0.02",
+                "lr": 1e-4,
+                "weight_decay": 0.01,
             }
     write_json(output / "config.json", config)
     write_json(output / "runtime.json", {"status": "INITIALIZING"})
@@ -348,20 +407,34 @@ def train(args):
                 raise TypeError("Expected pinned CLIP Normalize as final transform")
             config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
-            sketch_teacher = SketchTeacher(
-                teacher.model.visual, normalize.mean, normalize.std,
-                visual_prompt=visual_prompt, mask_white_patches=mask_white,
-                deep_visual_prompt=deep_prompt,
-            ).to("cuda").eval()
-            adapter_parameters = [p for p in sketch_teacher.parameters() if p.requires_grad]
+            sketch_teacher = (
+                SketchTeacher(
+                    teacher.model.visual,
+                    normalize.mean,
+                    normalize.std,
+                    visual_prompt=visual_prompt,
+                    mask_white_patches=mask_white,
+                    deep_visual_prompt=deep_prompt,
+                )
+                .to("cuda")
+                .eval()
+            )
+            adapter_parameters = [
+                p for p in sketch_teacher.parameters() if p.requires_grad
+            ]
             config["sketch_teacher"]["trainable_parameters"] = sum(
                 p.numel() for p in adapter_parameters
             )
         if calibration is not None:
-            actual = {"student": state_sha(student), "teacher": state_sha(sketch_teacher),
-                      "photo": state_sha(teacher)}
+            actual = {
+                "student": state_sha(student),
+                "teacher": state_sha(sketch_teacher),
+                "photo": state_sha(teacher),
+            }
             if actual != calibration["state_before"]:
-                raise ValueError("KD calibration model initialization differs from actual trainer")
+                raise ValueError(
+                    "KD calibration model initialization differs from actual trainer"
+                )
         # Same deterministic geometry as CLIP, without its final normalization.
         sketch_transform = transforms.Compose(
             build_clip_eval_transform().transforms[:-1]
@@ -399,7 +472,9 @@ def train(args):
         groups = [{"params": decay}, {"params": no_decay, "weight_decay": 0.0}]
         if joint:
             groups.append({"params": adapter_parameters, "lr": 1e-4})
-        optimizer = torch.optim.AdamW(groups, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+        optimizer = torch.optim.AdamW(
+            groups, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
+        )
         scheduler = LambdaLR(
             optimizer, lambda step: learning_rate_factor(step, total_steps)
         )
@@ -409,13 +484,23 @@ def train(args):
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name=(f"CNN-Mamba-LoRA-DeepVPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if deep_prompt else
-                      f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs" if mask_white else
-                      (f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs")
-                      if fixed_lambda is not None else
-                      "CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs" if calibration is not None else
-                      "CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs" if visual_prompt else
-                      "CNN-Mamba-LoRA-Teacher-TU-10epochs" if joint else "CNN-Mamba-TU-100epochs"),
+                name=(
+                    f"CNN-Mamba-LoRA-DeepVPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs"
+                    if deep_prompt
+                    else f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs"
+                    if mask_white
+                    else (
+                        f"CNN-Mamba-LoRA{'-VPT' if visual_prompt else ''}-KD{lambda_kd:g}-TU-10epochs"
+                    )
+                    if fixed_lambda is not None
+                    else "CNN-Mamba-LoRA-VPT-KDcal-TU-10epochs"
+                    if calibration is not None
+                    else "CNN-Mamba-LoRA-VPT-Teacher-TU-10epochs"
+                    if visual_prompt
+                    else "CNN-Mamba-LoRA-Teacher-TU-10epochs"
+                    if joint
+                    else "CNN-Mamba-TU-100epochs"
+                ),
                 config=config,
                 dir=str(output),
                 mode="online",
@@ -457,12 +542,16 @@ def train(args):
                             teacher_query, targets, labels, photo_labels
                         )
                         if not torch.isfinite(teacher_loss):
-                            raise FloatingPointError(f"Nonfinite teacher loss at step {step + 1}")
+                            raise FloatingPointError(
+                                f"Nonfinite teacher loss at step {step + 1}"
+                            )
                         # Free teacher activations before Student forward; targets are pre-update.
                         teacher_loss.backward()
                         teacher_query = teacher_query.detach()
                     query = student(sketches)
-                    retrieval_loss = multi_positive_loss(query, targets, labels, photo_labels)
+                    retrieval_loss = multi_positive_loss(
+                        query, targets, labels, photo_labels
+                    )
                     loss = retrieval_loss
                     if joint:
                         kd_loss = cosine_distillation(query, teacher_query)
@@ -518,7 +607,11 @@ def train(args):
                 torch.save(
                     {
                         "model": student.state_dict(),
-                        **({"teacher_adapter": sketch_teacher.adapter_state_dict()} if joint else {}),
+                        **(
+                            {"teacher_adapter": sketch_teacher.adapter_state_dict()}
+                            if joint
+                            else {}
+                        ),
                         "optimizer": optimizer.state_dict(),
                         "scheduler": scheduler.state_dict(),
                         "epoch": epoch,
@@ -558,7 +651,12 @@ def train(args):
             teacher_output = output / "teacher"
             teacher_output.mkdir()
             teacher_metrics = final_retrieval(
-                sketch_teacher, teacher, data, sketch_transform, bundle.transform, teacher_output
+                sketch_teacher,
+                teacher,
+                data,
+                sketch_transform,
+                bundle.transform,
+                teacher_output,
             )
         delta = {
             key: metrics[key] - baseline["clean"][key]
@@ -590,11 +688,17 @@ def train(args):
                     "test/cleaned/mAP@all": metrics["full_mAP"],
                     "test/cleaned/mAP@200": metrics["mAP@200_min_relevant_k"],
                     "test/cleaned/P@200": metrics["P@200"],
-                    **({
-                        "teacher/cleaned/mAP@all": teacher_metrics["full_mAP"],
-                        "teacher/cleaned/mAP@200": teacher_metrics["mAP@200_min_relevant_k"],
-                        "teacher/cleaned/P@200": teacher_metrics["P@200"],
-                    } if joint else {}),
+                    **(
+                        {
+                            "teacher/cleaned/mAP@all": teacher_metrics["full_mAP"],
+                            "teacher/cleaned/mAP@200": teacher_metrics[
+                                "mAP@200_min_relevant_k"
+                            ],
+                            "teacher/cleaned/P@200": teacher_metrics["P@200"],
+                        }
+                        if joint
+                        else {}
+                    ),
                 },
                 step=step,
                 commit=True,
@@ -632,18 +736,36 @@ def main():
         help="Final official TU MP-Q step1189 summary.json",
     )
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--lora-teacher", action="store_true",
-                        help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1")
-    parser.add_argument("--visual-prompt", action="store_true",
-                        help="Add four shallow visual tokens to the LoRA sketch teacher")
-    parser.add_argument("--kd-calibration", type=Path,
-                        help="Reviewed initialization-gradient receipt; absent keeps KD=1")
-    parser.add_argument("--mask-white-patches", action="store_true",
-                        help="Mask exactly-white sketch patch keys in every teacher attention layer")
-    parser.add_argument("--deep-visual-prompt", action="store_true",
-                        help="Replace shallow prompt with four independent tokens at each teacher layer")
-    parser.add_argument("--lambda-kd", type=float,
-                        help="Explicit positive KD weight; mutually exclusive with calibration")
+    parser.add_argument(
+        "--lora-teacher",
+        action="store_true",
+        help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1",
+    )
+    parser.add_argument(
+        "--visual-prompt",
+        action="store_true",
+        help="Add four shallow visual tokens to the LoRA sketch teacher",
+    )
+    parser.add_argument(
+        "--kd-calibration",
+        type=Path,
+        help="Reviewed initialization-gradient receipt; absent keeps KD=1",
+    )
+    parser.add_argument(
+        "--mask-white-patches",
+        action="store_true",
+        help="Mask exactly-white sketch patch keys in every teacher attention layer",
+    )
+    parser.add_argument(
+        "--deep-visual-prompt",
+        action="store_true",
+        help="Replace shallow prompt with four independent tokens at each teacher layer",
+    )
+    parser.add_argument(
+        "--lambda-kd",
+        type=float,
+        help="Explicit positive KD weight; mutually exclusive with calibration",
+    )
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )

@@ -108,6 +108,19 @@ Only patchmask changes versus λ1.2 baseline: same initialweights/seed42/B32/los
 
 User authorized a fresh10epoch single-arm ablation after whitepatchmaskλ1.2 StudentfullmAP .2688652228 / teacher .5693351723. Use `--lora-teacher --visual-prompt --deep-visual-prompt --mask-white-patches --lambda-kd 1.2`. Replace the4 persistent shallow teacher tokens with **4 independent learned tokens per layer ×12**, trainable36864 prompt params+294912LoRA=331776 teacher params. For each layer, insert afterCLS, before native49patchtokens; apply originalpreLN to learned prompt, preserve original patch positions, drop the four outputprompttokens before the next layer. Same exactwhite-keymask (all12), same nativeCLS readout; no image patch sorting, no text-guided coupling/SeCo reproduction. Student, frozenphoto, λKD1.2, all losses/LRs/seed42/B32/4820updates/official finalonly Student+teacher W&Bsbir unchanged. Source stays clean old modes; defaultno-deep retains historical behavior. CPU standalone check `PYTHONPATH=src .venv/bin/python scripts/check_deep_visual_prompt.py`; real CUDA gate `outputs/student_deepvpt_gate_20260928/` before planned production `outputs/student_deepvpt_teacher_10epochs_20260928/`. No selection, resume, automatic retry, official-test tuning claim or push; final raw UNVERIFIED. Freeze source/docs/config during gates/production.
 
+## Frozen seen-training semantic diagnostic (not a test suite)
+
+`src/spica/diagnose_student_semantics.py` restores the archived deep-prompt checkpoint without updating encoders. User-approved scope: all15400seen-train sketches, localRandom42 split56centroid/14query per220class, up to8randomtrainphotos/class=1756gallery (squirrel has only4; user approved no duplication). Compare normalized nearestsketchcentroid top1 (same-modality class separation) with sketch→photo fullAP/AP200/P200 on the SAME3080queries. Gallery identical for Student/teacher; matchedcosine, scorePearson, top200overlap and stable ordinal rank correlation (ties broken bygalleryorder, not tie-corrected Spearman), perquery/classCSV and feature caches. **Every sketch was already seen during encoder training: this is not a validation holdout, puregeometrytest, or independent generalization claim.** No classifier optimizer/encoderupdates/backward/newofficialtest/W&B. Sampled gallery not comparable to official27989gallery; **P@200 max4% for219classes, 2% for squirrel**; AP denominators use actual positive counts. With14queries/class, query-macro and class-macro AP coincide. AP is more informative than P200 here.
+
+```bash
+TRITON_LIBCUDA_PATH=/run/opengl-driver/lib PYTHONPATH=src HF_HUB_OFFLINE=1 \
+  OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 .venv/bin/python -m spica.diagnose_student_semantics \
+  --run outputs/student_deepvpt_teacher_10epochs_20260928 \
+  --output outputs/student_semantics_diagnostic_20260928 --device cuda
+```
+
+Output must be fresh. SHA-binds checkpoint/config, originalCLIP and archivedencoderfiles, trainmanifest/classmap/split/sourceimages, diagnostic sourcearchive. Safeweights_only restore and exacttrainableteacherkeys; actualdecodeallowlist; fixedprivateDataLoaderRNG, no state/grad changes. Fixedseed does not certify CUDAkernel/near-tie bitreproducibility; savedfeatureaudit is separate from encoderreplay. InspectGPU/PIDs before encode, freeze source/docs/config duringexecution. **jaxtyping0.3.11** installed in isolatedStudent .venv and lock, with Tensor shape hints on models/loss/diagnostic (`Float[Tensor,"batch 512"]`, etc.). No runtimechecker or newtestframework, no numericalmodelchange. Dependencies of existinglock remain unchanged.
+
 ## Explicit launch command
 
 Make the existing TU data available via the ignored path `datasets/TUBerlin` (a local symlink is sufficient). The local worktree already has this link; no images/manifests were edited.

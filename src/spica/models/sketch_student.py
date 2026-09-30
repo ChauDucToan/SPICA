@@ -9,8 +9,13 @@ import math
 
 import torch
 import torch.nn.functional as F
+from jaxtyping import Float
 from mamba_ssm import Mamba2
 from torch import Tensor, nn
+
+GridFeatures = Float[Tensor, "batch channels height width"]
+SketchImages = Float[Tensor, "batch 3 224 224"]
+Embeddings = Float[Tensor, "batch 512"]
 
 
 def conv_block(inputs: int, outputs: int, stride: int = 1) -> nn.Sequential:
@@ -38,7 +43,7 @@ class FourWayMamba(nn.Module):
             use_mem_eff_path=False,
         )
 
-    def forward(self, features: Tensor) -> Tensor:
+    def forward(self, features: GridFeatures) -> GridFeatures:
         batch, channels, height, width = features.shape
         rows = features.flatten(2).transpose(1, 2)
         columns = features.transpose(2, 3).flatten(2).transpose(1, 2)
@@ -69,7 +74,7 @@ class HybridBlock(nn.Module):
         self.global_context = FourWayMamba(channels)
         self.gate = nn.Parameter(torch.tensor(math.log(0.1 / 0.9)))
 
-    def forward(self, features: Tensor) -> Tensor:
+    def forward(self, features: GridFeatures) -> GridFeatures:
         # Both branches return deltas; add the identity exactly once.
         return (
             features
@@ -95,7 +100,7 @@ class SketchStudent(nn.Module):
     def device(self) -> torch.device:
         return self.projection.weight.device
 
-    def forward(self, sketches: Tensor) -> Tensor:
+    def forward(self, sketches: SketchImages) -> Embeddings:
         ink = 1.0 - sketches.mean(dim=1, keepdim=True)
         features = self.blocks(self.stem(ink))
         # Max pooling keeps thin ink represented; retain 10% background context.
