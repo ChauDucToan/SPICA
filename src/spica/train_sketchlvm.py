@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import gc
 import hashlib
 import json
@@ -16,6 +17,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 from jaxtyping import Float
+from PIL import ImageOps
 from torch import Tensor
 from torchvision import transforms
 
@@ -40,6 +42,22 @@ CE_WEIGHT = 0.5
 EXPECTED_CLIP_SHA256 = (
     "e6d1bd7789aa45192b3bf90570a789b478bae1b74ebcce7eddd908e83a2b7c31"
 )
+PAPER_METHOD = "sketchlvm_paper_category_public_inputs_v2"
+PAPER_IMAGE_MEAN = (0.485, 0.456, 0.406)
+PAPER_IMAGE_STD = (0.229, 0.224, 0.225)
+PAPER_PREPROCESSING = {
+    "name": PAPER_METHOD,
+    "raw": "PIL.ImageOps.pad(size=(224, 224), default_color=black)",
+    "resize": "torchvision.transforms.Resize((224, 224))_default_bilinear",
+    "tensor": "torchvision.transforms.ToTensor",
+    "normalization": "SketchLVM_constructor",
+    "upstream": {
+        "repository": "https://github.com/aneeshan95/Sketch_LVM",
+        "commit": "ca33be98cb9f986813f611c997ceaa474b0bc96e",
+        "file": "src/dataset_retrieval.py",
+        "lines": "78-80,94-98",
+    },
+}
 
 EmbeddingBatch = Float[Tensor, "batch embedding"]
 
@@ -53,6 +71,16 @@ def seed_everything(seed: int) -> None:
 
 def _raw_transform() -> transforms.Compose:
     return transforms.Compose(build_clip_eval_transform().transforms[:-1])
+
+
+def _paper_clean_transform() -> transforms.Compose:
+    return transforms.Compose(
+        [
+            transforms.Lambda(functools.partial(ImageOps.pad, size=(224, 224))),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+        ]
+    )
 
 
 def _finite(value: Tensor, name: str) -> None:
@@ -235,10 +263,11 @@ def _guard_inputs(
         raise RuntimeError("CLIP weights changed; refusing evaluation")
 
 
-def _final_evaluate(output: Path) -> dict[str, Any]:
+def _final_evaluate(output: Path, paper_clean: bool = False) -> dict[str, Any]:
     from .evaluate_sketchlvm_raster import evaluate
 
-    return evaluate(run=output, output=output / "raster_test")
+    directory = "clean_test" if paper_clean else "raster_test"
+    return evaluate(run=output, output=output / directory)
 
 
 def train(args: argparse.Namespace) -> dict[str, Any]:
@@ -274,13 +303,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
 
     try:
         bundle = load_frozen_clip(pretrained=str(clip_path), device="cuda")
-        normalize = bundle.transform.transforms[-1]
-        if not isinstance(normalize, transforms.Normalize):
-            raise TypeError("Expected native CLIP Normalize transform")
+        if args.paper_clean:
+            image_mean = PAPER_IMAGE_MEAN
+            image_std = PAPER_IMAGE_STD
+            raw_transform = _paper_clean_transform()
+        else:
+            normalize = bundle.transform.transforms[-1]
+            if not isinstance(normalize, transforms.Normalize):
+                raise TypeError("Expected native CLIP Normalize transform")
+            image_mean = tuple(float(value) for value in normalize.mean)
+            image_std = tuple(float(value) for value in normalize.std)
+            raw_transform = _raw_transform()
         model = SketchLVM(
             bundle.encoder.model.visual,
-            tuple(float(value) for value in normalize.mean),
-            tuple(float(value) for value in normalize.std),
+            image_mean,
+            image_std,
         ).to(bundle.encoder.device)
         trainable = [
             parameter for parameter in model.parameters() if parameter.requires_grad
@@ -297,8 +334,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         )
         loader = build_retrieval_train_loader(
             data,
-            _raw_transform(),
-            _raw_transform(),
+            raw_transform,
+            raw_transform,
             batch_size=BATCH_SIZE,
             num_workers=4,
             pin_memory=True,
@@ -319,7 +356,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
         total_steps = epochs * STEPS_PER_EPOCH
         examples_seen_budget = epochs * TRAIN_SKETCHES
         config: dict[str, Any] = {
-            "method": "sketchlvm_paper_category_v1",
+            "method": PAPER_METHOD
+            if args.paper_clean
+            else "sketchlvm_paper_category_v1",
             "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT)
             .decode()
             .strip(),
@@ -328,8 +367,8 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "clip_weights": str(clip_path),
             "clip_sha256": clip_digest,
             "clip_model": "ViT-B-32-quickgelu",
-            "normalization_mean": list(normalize.mean),
-            "normalization_std": list(normalize.std),
+            "normalization_mean": list(image_mean),
+            "normalization_std": list(image_std),
             "seed": SEED,
             "batch_size": BATCH_SIZE,
             "epochs": epochs,
@@ -377,6 +416,13 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "honesty": "paper-category reimplementation; not exact due sampler, preprocess, schedule, and unspecified initialization details",
             "official_test_previously_observed": True,
         }
+        if args.paper_clean:
+            config["preprocessing"] = PAPER_PREPROCESSING
+            config["evaluation_profile"] = "clean_only"
+            config["public_upstream_scope"] = (
+                "Sketchy dataset_retrieval.py preprocessing provenance only; "
+                "not exact TU-Berlin fidelity"
+            )
         write_json(output / "config.json", config)
         if args.wandb_mode == "online":
             import wandb
@@ -384,7 +430,11 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             run = wandb.init(
                 project="sbir",
                 entity="a-cctest05187-erd",
-                name="SketchLVM-paper-category-TU-60epochs",
+                name=(
+                    "SketchLVM-paper-category-public-inputs-TU-60epochs"
+                    if args.paper_clean
+                    else "SketchLVM-paper-category-TU-60epochs"
+                ),
                 config=config,
                 dir=str(output),
                 settings=wandb.Settings(
@@ -495,9 +545,10 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             output / "runtime.json",
             {"status": "FINAL_EVALUATION", "epoch": EPOCHS, "step": TOTAL_STEPS},
         )
-        raster = _final_evaluate(output)
+        raster = _final_evaluate(output, args.paper_clean)
         _guard_inputs(source, manifests, clip_path, clip_digest)
-        raster_path = output / "raster_test" / "summary.json"
+        evaluation_directory = "clean_test" if args.paper_clean else "raster_test"
+        raster_path = output / evaluation_directory / "summary.json"
         config_path = output / "config.json"
         checkpoint_path = output / "sketchlvm_latest.pt"
         config_on_disk = json.loads(config_path.read_text(encoding="utf-8"))
@@ -512,11 +563,21 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
             "examples_seen": examples_seen,
             "checkpoint_sha256": sha256(checkpoint_path),
             "config_sha256": sha256(config_path),
-            "raster_result_path": str(raster_path),
-            "raster_result_sha256": sha256(raster_path),
             "raster": raster,
-            "scope": "clean_and_raster_final_only;paper_category_reimplementation;previously_seen_official_test;unverified",
+            "scope": (
+                "clean_final_only;paper_category_public_inputs_v2;"
+                "previously_seen_official_test;unverified"
+                if args.paper_clean
+                else "clean_and_raster_final_only;paper_category_reimplementation;"
+                "previously_seen_official_test;unverified"
+            ),
         }
+        if args.paper_clean:
+            result["evaluation_result_path"] = str(raster_path)
+            result["evaluation_result_sha256"] = sha256(raster_path)
+        else:
+            result["raster_result_path"] = str(raster_path)
+            result["raster_result_sha256"] = sha256(raster_path)
         write_json(output / "result.json", result)
         if run is not None:
             run.log(
@@ -527,6 +588,9 @@ def train(args: argparse.Namespace) -> dict[str, Any]:
                         "mAP@200_min_relevant_k"
                     ],
                     "test/clean/P@200": clean["P@200"],
+                    **(
+                        {"test/clean/P@100": clean["P@100"]} if args.paper_clean else {}
+                    ),
                 },
                 step=TOTAL_STEPS,
                 commit=True,
@@ -555,6 +619,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--wandb-mode", choices=("online", "disabled"), default="online"
+    )
+    parser.add_argument(
+        "--paper-clean",
+        action="store_true",
+        help="Use public SketchLVM category preprocessing and clean-only evaluation",
     )
     train(parser.parse_args())
 

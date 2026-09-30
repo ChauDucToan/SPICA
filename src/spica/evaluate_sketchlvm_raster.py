@@ -34,7 +34,14 @@ from .diagnose_student_semantics import (
 from .models.clip import load_frozen_clip
 from .evaluation.embeddings import EncodedRetrievalSet, save_encoded_retrieval_set
 from .train_student import source_files, write_json as _write_json
-from .train_sketchlvm import EXPECTED_CLIP_SHA256
+from .train_sketchlvm import (
+    EXPECTED_CLIP_SHA256,
+    PAPER_IMAGE_MEAN,
+    PAPER_IMAGE_STD,
+    PAPER_METHOD,
+    PAPER_PREPROCESSING,
+    _paper_clean_transform,
+)
 
 SEED = 42
 BATCH_SIZE = 64
@@ -248,7 +255,11 @@ def _validate_config(run: Path) -> tuple[dict[str, Any], Path, str]:
         or config["steps_per_epoch"] != STEPS_PER_EPOCH
         or config["total_steps"] != TOTAL_STEPS
         or payload.get("examples_seen") != 924_000
-        or config.get("method") != "sketchlvm_paper_category_v1"
+        or config.get("method")
+        not in {
+            "sketchlvm_paper_category_v1",
+            PAPER_METHOD,
+        }
         or config["loss"]
         != {
             "triplet": "normalized_cosine_distance_hinge",
@@ -259,6 +270,41 @@ def _validate_config(run: Path) -> tuple[dict[str, Any], Path, str]:
         }
         or config.get("prompt_count") != 3
         or config.get("native_cls_readout") is not True
+        or (
+            config.get("method") == PAPER_METHOD
+            and (
+                config.get("evaluation_profile") != "clean_only"
+                or tuple(config.get("normalization_mean", ())) != PAPER_IMAGE_MEAN
+                or tuple(config.get("normalization_std", ())) != PAPER_IMAGE_STD
+                or config.get("preprocessing") != PAPER_PREPROCESSING
+                or config.get("optimizer")
+                != {
+                    "name": "Adam",
+                    "learning_rate": 1e-5,
+                    "betas": [0.9, 0.999],
+                    "eps": 1e-8,
+                    "weight_decay": 0.0,
+                    "schedule": "constant",
+                    "warmup": False,
+                    "gradient_clipping": "none",
+                }
+                or any(
+                    config.get(key) != value
+                    for key, value in {
+                        "examples_seen_budget": 924_000,
+                        "dtype": "FP32",
+                        "prompt_width": 768,
+                        "prompt_placement": "after_CLS_and_49_patches_after_pos_before_preLN",
+                        "layer_norm": "separate_sketch_photo_native_CLIP_LN_affines",
+                        "photo_encoder": "trained_photo_prompts_and_LN_frozen_CLIP_base",
+                        "frozen_original_text": True,
+                        "learned_logit_scale": False,
+                        "logit_scale_cap": None,
+                        "text_template": "a photo of a {category}",
+                    }.items()
+                )
+            )
+        )
     ):
         raise ValueError("Checkpoint training contract differs")
     adaptation = payload.get("adaptation")
@@ -389,12 +435,16 @@ def _load_model(
     normalize = bundle.transform.transforms[-1]
     native_mean = tuple(float(x) for x in normalize.mean)
     native_std = tuple(float(x) for x in normalize.std)
+    if config.get("method") == PAPER_METHOD:
+        image_mean, image_std = PAPER_IMAGE_MEAN, PAPER_IMAGE_STD
+    else:
+        image_mean, image_std = native_mean, native_std
     if (
-        tuple(config["normalization_mean"]) != native_mean
-        or tuple(config["normalization_std"]) != native_std
+        tuple(config["normalization_mean"]) != image_mean
+        or tuple(config["normalization_std"]) != image_std
     ):
-        raise ValueError("Checkpoint normalization differs from loaded native CLIP")
-    model = archived.SketchLVM(bundle.encoder.model.visual, native_mean, native_std).to(
+        raise ValueError("Checkpoint normalization differs from selected preprocessing")
+    model = archived.SketchLVM(bundle.encoder.model.visual, image_mean, image_std).to(
         device
     )
     model.eval()
@@ -452,7 +502,9 @@ def _metrics(
     gallery: EncodedRetrievalSet,
     device: torch.device,
     output: Path,
-) -> tuple[dict[str, float], Tensor, Tensor, Tensor]:
+    *,
+    include_p100: bool = False,
+) -> tuple[dict[str, float], Tensor, Tensor, Tensor, Tensor | None]:
     _validate_features(queries, QUERY_COUNT, "queries")
     _validate_features(gallery, GALLERY_COUNT, "gallery")
     evaluation, ap200 = retrieval_stats(
@@ -461,10 +513,20 @@ def _metrics(
     top = evaluation.top_indices
     relevant = gallery.labels[top].eq(queries.labels[:, None])
     p200 = relevant[:, : min(200, gallery.labels.numel())].double().mean(dim=1)
+    p100 = (
+        relevant[:, : min(100, gallery.labels.numel())].double().mean(dim=1)
+        if include_p100
+        else None
+    )
     full_ap = evaluation.average_precision_per_query.double()
     ap200 = ap200.double()
     p200 = p200.double()
-    for value, name in ((full_ap, "full AP"), (ap200, "AP200"), (p200, "P200")):
+    for value, name in (
+        (full_ap, "full AP"),
+        (ap200, "AP200"),
+        (p200, "P200"),
+        *([(p100, "P100")] if p100 is not None else []),
+    ):
         if (
             not torch.isfinite(value).all()
             or torch.any(value < 0)
@@ -477,6 +539,7 @@ def _metrics(
         "full_ap": full_ap.cpu(),
         "ap200": ap200.cpu(),
         "p200": p200.cpu(),
+        **({"p100": p100.cpu()} if p100 is not None else {}),
         "top200_indices": top.cpu(),
         "top200_scores": scores.cpu(),
     }
@@ -487,7 +550,10 @@ def _metrics(
     )
     with (output / "per_query.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
-        writer.writerow(("query_index", "path", "label", "full_AP", "AP200", "P200"))
+        writer.writerow(
+            ("query_index", "path", "label", "full_AP", "AP200", "P200")
+            + (("P100",) if include_p100 else ())
+        )
         for index, path in enumerate(queries.paths):
             writer.writerow(
                 (
@@ -497,6 +563,7 @@ def _metrics(
                     float(full_ap[index]),
                     float(ap200[index]),
                     float(p200[index]),
+                    *((float(p100[index]),) if p100 is not None else ()),
                 )
             )
     return (
@@ -504,10 +571,12 @@ def _metrics(
             "full_mAP": full_ap.mean().item(),
             "mAP@200_min_relevant_k": ap200.mean().item(),
             "P@200": p200.mean().item(),
+            **({"P@100": p100.mean().item()} if p100 is not None else {}),
         },
         full_ap,
         ap200,
         p200,
+        p100,
     )
 
 
@@ -516,6 +585,8 @@ def _class_csv(
     conditions: dict[str, dict[str, Tensor]],
     names: dict[int, str],
     labels: Tensor,
+    *,
+    include_p100: bool = False,
 ) -> None:
     clean = conditions["clean"]
     with (output / "per_class.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -529,9 +600,11 @@ def _class_csv(
                 "full_mAP",
                 "mAP@200_min_relevant_k",
                 "P@200",
+                *(("P@100",) if include_p100 else ()),
                 "delta_full_AP",
                 "delta_AP200",
                 "delta_P200",
+                *(("delta_P100",) if include_p100 else ()),
             )
         )
         for condition, values in conditions.items():
@@ -540,6 +613,8 @@ def _class_csv(
                 delta = {
                     key: values[key] - clean[key] for key in ("full", "ap200", "p200")
                 }
+                if include_p100:
+                    delta["p100"] = values["p100"] - clean["p100"]
                 writer.writerow(
                     (
                         condition,
@@ -549,9 +624,19 @@ def _class_csv(
                         float(values["full"][selected].mean()),
                         float(values["ap200"][selected].mean()),
                         float(values["p200"][selected].mean()),
+                        *(
+                            (float(values["p100"][selected].mean()),)
+                            if include_p100
+                            else ()
+                        ),
                         float(delta["full"][selected].mean()),
                         float(delta["ap200"][selected].mean()),
                         float(delta["p200"][selected].mean()),
+                        *(
+                            (float(delta["p100"][selected].mean()),)
+                            if include_p100
+                            else ()
+                        ),
                     )
                 )
 
@@ -588,7 +673,10 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
     model, source_info, bundle, source_digest = _load_model(
         run, config, checkpoint, device
     )
-    raw_transform = _raw_transform(bundle.transform)
+    paper_clean = config.get("method") == PAPER_METHOD
+    raw_transform = (
+        _paper_clean_transform() if paper_clean else _raw_transform(bundle.transform)
+    )
     official_paths = {
         entry.path.resolve() for entry in info["queries"] + info["gallery"]
     }
@@ -611,12 +699,13 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
         save_encoded_retrieval_set(gallery, output / "gallery.pt")
         runtime["stages"]["gallery"] = {"finished": time.time()}
         _write_json(output / "runtime.json", runtime)
+        conditions = ("clean",) if paper_clean else CONDITIONS
         condition_values: dict[str, dict[str, Tensor]] = {}
         result: dict[str, Any] = {}
         trace_rows: dict[str, list[dict[str, Any]]] = {}
         query_reference: EncodedRetrievalSet | None = None
         clean_traces: list[dict[str, Any]] | None = None
-        for condition in CONDITIONS:
+        for condition in conditions:
             fraction = (
                 0.0 if condition == "clean" else int(condition.rsplit("_", 1)[1]) / 100
             )
@@ -636,10 +725,16 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
             condition_dir = output / condition
             condition_dir.mkdir()
             save_encoded_retrieval_set(queries, condition_dir / "queries.pt")
-            metrics, full, ap200, p200 = _metrics(
-                queries, gallery, device, condition_dir
+            metrics, full, ap200, p200, p100 = _metrics(
+                queries,
+                gallery,
+                device,
+                condition_dir,
+                include_p100=paper_clean,
             )
             condition_values[condition] = {"full": full, "ap200": ap200, "p200": p200}
+            if p100 is not None:
+                condition_values[condition]["p100"] = p100
             result[condition] = metrics
             rows = []
             for index, (entry, trace) in enumerate(
@@ -674,7 +769,13 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
             runtime["stages"][condition] = {"finished": time.time()}
             _write_json(output / "runtime.json", runtime)
         labels = query_reference.labels
-        _class_csv(output, condition_values, info["test_names"], labels)
+        _class_csv(
+            output,
+            condition_values,
+            info["test_names"],
+            labels,
+            include_p100=paper_clean,
+        )
         _write_json(output / "mask_trace.json", trace_rows)
         with (output / "mask_trace.csv").open(
             "w", newline="", encoding="utf-8"
@@ -682,10 +783,10 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
             fields = list(trace_rows["clean"][0])
             writer = csv.DictWriter(handle, fieldnames=fields)
             writer.writeheader()
-            for condition in CONDITIONS:
+            for condition in conditions:
                 writer.writerows(trace_rows[condition])
         clean = condition_values["clean"]["full"]
-        for condition in CONDITIONS[1:]:
+        for condition in conditions[1:]:
             paired: dict[str, Any] = {}
             for metric, values in condition_values[condition].items():
                 difference = values - condition_values["clean"][metric]
@@ -749,7 +850,7 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
             "dataset_root": str(data.root),
         },
         "physical_source_file_sha256": physical_hashes,
-        "conditions": list(CONDITIONS),
+        "conditions": list(conditions),
         "model_state_before_after": [before["model"], after["model"]],
         "rng_before_after": [before["rng"], after["rng"]],
     }
@@ -763,7 +864,7 @@ def _run(run: Path, output: Path) -> dict[str, Any]:
     ]
     artifacts += [
         f"{condition}/{name}"
-        for condition in CONDITIONS
+        for condition in conditions
         for name in ("queries.pt", "per_query.pt", "per_query.npz", "per_query.csv")
     ]
     result = {
