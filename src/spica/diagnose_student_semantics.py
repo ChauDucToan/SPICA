@@ -493,8 +493,8 @@ def per_query_rows(
     student_ap200: Tensor,
     teacher_ap200: Tensor,
     cosine: Tensor,
-    overlap: Tensor,
     pearson: Tensor,
+    overlap: Tensor,
     spearman: Tensor,
 ) -> list[dict[str, Any]]:
     rows = []

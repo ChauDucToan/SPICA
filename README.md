@@ -110,6 +110,8 @@ User authorized a fresh10epoch single-arm ablation after whitepatchmaskλ1.2 Stu
 
 ## Frozen seen-training semantic diagnostic (not a test suite)
 
+Completed report: [Student vs teacher](docs/student_seen_semantics_2026-09-28.md). Centroid top1 Student52.69%/teacher79.68%; sampled-galleryfullAP27.87%/58.14%. Use correctedoverlayCSV linked in report (raw perqueryPearson/overlap columns swapped; originalfailure retained), no encoder rerun. Seen-training only, not independentholdout/geometryqualityproof.
+
 `src/spica/diagnose_student_semantics.py` restores the archived deep-prompt checkpoint without updating encoders. User-approved scope: all15400seen-train sketches, localRandom42 split56centroid/14query per220class, up to8randomtrainphotos/class=1756gallery (squirrel has only4; user approved no duplication). Compare normalized nearestsketchcentroid top1 (same-modality class separation) with sketch→photo fullAP/AP200/P200 on the SAME3080queries. Gallery identical for Student/teacher; matchedcosine, scorePearson, top200overlap and stable ordinal rank correlation (ties broken bygalleryorder, not tie-corrected Spearman), perquery/classCSV and feature caches. **Every sketch was already seen during encoder training: this is not a validation holdout, puregeometrytest, or independent generalization claim.** No classifier optimizer/encoderupdates/backward/newofficialtest/W&B. Sampled gallery not comparable to official27989gallery; **P@200 max4% for219classes, 2% for squirrel**; AP denominators use actual positive counts. With14queries/class, query-macro and class-macro AP coincide. AP is more informative than P200 here.
 
 ```bash
