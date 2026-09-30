@@ -5,6 +5,7 @@
 Fresh **60 epochs / 14.460 updates / 924.000 lượt sketch**, seed42/B64; train và final test exit0, CPU báo cáo exit0. Runner 2026-09-30 14:00:36→15:06:34 UTC (train + test + báo cáo, không phải benchmark latency). Không còn tiến trình campaign/GPU compute tại lúc kiểm tra. Không retry, resume, checkpoint selection, seed/arm bổ sung hoặc push.
 
 - Protocol đã duyệt: [SketchLVM raster](sketchlvm_raster_protocol_2026-09-30.md).
+- Bổ sung theo yêu cầu user: [manifest upstream + kiểm tra lại FP64](sketchlvm_manifest_fp64_recheck_2026-09-30.md). Cả6file khớp public ZSE-SBIR release;70/class không phải local subsampling. FAIL1/128 vẫn giữ, tail-swap FP32 scalar khớp nhưng native CUDA tail rank chưa được lưu. User chọn giữ run, không train trùng.
 - Root: `outputs/sketchlvm_tu_60epochs_raster_20260930/`; launch receipt và execution JSON ở cạnh root.
 - Training source HEAD: **`96f161e3cced096d38845cc289de0a356c8a5057`**, archive 51 source/config/docs (bao gồm user-dirty AGENTS.md đã giữ nguyên), không đồng nhất HEAD với clean worktree.
 - Final checkpoint `sketchlvm_latest.pt`: SHA256 **`25f6da5f01ab81daeafb4190000f0c6701615070bd06992de15b4bba5121c48c`**.
