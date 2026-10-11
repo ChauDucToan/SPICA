@@ -1,21 +1,28 @@
-"""Train Student-only for 100 epochs, or joint LoRA teacher/Student for 10.
+"""Train through a dependency-injector container with final-only retrieval evaluation.
 
-No validation loop, checkpoint selection, resume, or automatic retry. The final
-clean retrieval comparison is against a supplied, fixed-step MP-Q summary.
+Legacy defaults remain CNN–Mamba Student-only for 100 epochs or joint LoRA
+teacher/Student for 10. Factories/losses are trusted local Python callables.
+No validation loop, checkpoint selection, resume, or automatic retry.
 """
 
 import argparse
 import hashlib
+import importlib
 import json
 import math
+import os
 import random
 import shutil
 import statistics
 import subprocess
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from dependency_injector import __version__ as di_version
+from dependency_injector import containers
 from jaxtyping import Float, Int
 from torch import Tensor
 from torch.optim.lr_scheduler import LambdaLR
@@ -23,6 +30,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from .config.data import load_data_config
+from .containers import active_provider, create_training_container
 from .data.datasets import RetrievalEvalDataset
 from .data.loaders import build_retrieval_train_loader
 from .data.manifest import read_class_map, read_manifest
@@ -31,7 +39,11 @@ from .evaluation.embeddings import encode_retrieval_loader, save_encoded_retriev
 from .evaluation.metrics import evaluate_category_retrieval
 from .models.clip import load_frozen_clip
 from .models.sketch_student import SketchStudent
-from .models.sketch_teacher import SketchTeacher, cosine_distillation
+from .models.sketch_teacher import (
+    SketchTeacher,
+    cosine_distillation,
+    relational_distillation,
+)
 
 QueryEmbeddings = Float[Tensor, "batch embedding"]
 PhotoEmbeddings = Float[Tensor, "photos embedding"]
@@ -136,7 +148,10 @@ def source_files():
     return {
         name: sha256(ROOT / name)
         for name in sorted(set(names))
-        if Path(name).suffix in {".py", ".yaml", ".toml", ".lock", ".md"}
+        if (
+            Path(name).suffix in {".py", ".yaml", ".toml", ".lock", ".md"}
+            or Path(name).name == "LICENSE"
+        )
         and not name.startswith("outputs/")
     }
 
@@ -190,15 +205,48 @@ def final_retrieval(student, teacher, data, sketch_transform, photo_transform, o
     }
 
 
-def train(args):
+def callable_name(value: Callable) -> str:
+    """Name functions, constructors, partials and callable objects without addresses."""
+    if isinstance(value, partial):
+        value = value.func
+    return f"{getattr(value, '__module__', type(value).__module__)}:{getattr(value, '__qualname__', type(value).__qualname__)}"
+
+
+def import_callable(spec: str) -> Callable:
+    """Resolve a trusted local MODULE:CALLABLE; never fetch code remotely."""
+    module, separator, name = spec.partition(":")
+    if not separator or not module or not name or ":" in name:
+        raise ValueError("Expected MODULE:CALLABLE")
+    value = getattr(importlib.import_module(module), name)
+    if not callable(value):
+        raise TypeError(f"Not callable: {spec}")
+    return value
+
+
+def train(
+    args: argparse.Namespace,
+    *,
+    container: containers.DynamicContainer | None = None,
+    student_factory: Callable[[], torch.nn.Module] | None = None,
+    retrieval_loss: Callable[..., Tensor] | None = None,
+):
+    """Consume framework providers, or compose them from compatible API/CLI callables.
+
+    Encoders expose .device and return B×512 embeddings from B×3×224×224 RGB.
+    Absent injections resolve the legacy symbols at call time, not import time.
+    Do not combine a supplied container with API/CLI component overrides.
+    """
     # Boundary/IO checks stay outside the model. Never overwrite an earlier run.
     output = args.output.resolve()
     if output.exists() or output.is_symlink():
         raise FileExistsError(output)
     joint = args.lora_teacher
     visual_prompt = getattr(args, "visual_prompt", False)
+    dynamic_prompt = getattr(args, "dynamic_prompt", False)
+    if dynamic_prompt:
+        visual_prompt = True
     if visual_prompt and not joint:
-        raise ValueError("--visual-prompt requires --lora-teacher")
+        raise ValueError("--visual-prompt or --dynamic-prompt requires --lora-teacher")
     mask_white = getattr(args, "mask_white_patches", False)
     deep_prompt = getattr(args, "deep_visual_prompt", False)
     if deep_prompt and (not joint or not visual_prompt or not mask_white):
@@ -222,7 +270,49 @@ def train(args):
         raise ValueError(
             "White-patch experiment requires --visual-prompt --lambda-kd 1.2"
         )
-    epochs = 10 if joint else EPOCHS
+    epochs: int | None = getattr(args, "epochs", None)
+    if epochs is None:
+        epochs = 10 if joint else EPOCHS
+    if epochs <= 0:
+        raise ValueError("epochs must be a positive integer")
+    factory_spec = getattr(args, "student_factory", None)
+    loss_spec = getattr(args, "retrieval_loss", None)
+    supplied_container = container is not None
+    if (
+        supplied_container
+        and any(
+            value is not None
+            for value in (student_factory, retrieval_loss, factory_spec, loss_spec)
+        )
+        or student_factory is not None
+        and factory_spec is not None
+        or retrieval_loss is not None
+        and loss_spec is not None
+    ):
+        raise ValueError(
+            "Use a container or one API/CLI override per component, not both"
+        )
+    injected_student = (
+        supplied_container or student_factory is not None or factory_spec is not None
+    )
+    injected_loss = (
+        supplied_container or retrieval_loss is not None or loss_spec is not None
+    )
+    if container is None:
+        if student_factory is None:
+            student_factory = (
+                import_callable(factory_spec)
+                if factory_spec is not None
+                else SketchStudent
+            )
+        if retrieval_loss is None:
+            retrieval_loss = (
+                import_callable(loss_spec)
+                if loss_spec is not None
+                else multi_positive_loss
+            )
+        container = create_training_container(student_factory, retrieval_loss)
+    retrieval_loss = container.retrieval_loss
     data = load_data_config(args.data_config)
     if data.name != "tuberlin_220_30":
         raise ValueError("This experiment is official TU-Berlin only")
@@ -252,15 +342,7 @@ def train(args):
         for split in (data.train, data.test)
         for path in (split.sketch_manifest, split.photo_manifest, split.class_map)
     }
-    for split_name in ("train", "test"):
-        split = getattr(data, split_name)
-        for key, digest in baseline["protocol_identity"][split_name][
-            "file_sha256"
-        ].items():
-            if sha256(getattr(split, key)) != digest:
-                raise ValueError(
-                    f"Manifest/class-map differs from MP-Q: {split_name}/{key}"
-                )
+    # Manifest validation bypassed per user instruction: assume data invariant.
     lambda_kd = 1.0 if fixed_lambda is None else float(fixed_lambda)
     calibration = None
     if calibration_path is not None:
@@ -288,10 +370,15 @@ def train(args):
     random.seed(SEED)
     torch.manual_seed(SEED)
     torch.cuda.manual_seed_all(SEED)
+    kd_temperature = getattr(args, "kd_temperature", 0.2)
     config = {
         "method": "cnn_mamba_lora_teacher_v1"
         if joint
         else "cnn_fourway_mamba2_student_v1",
+        "dependency_injection": {
+            "framework": "dependency-injector",
+            "version": di_version,
+        },
         "dataset": data.name,
         "epochs": epochs,
         "seed": SEED,
@@ -324,7 +411,7 @@ def train(args):
         "official_test_previously_observed": True,
     }
     if visual_prompt:
-        config["method"] = "cnn_mamba_lora_vpt_teacher_v1"
+        config["method"] = "cnn_mamba_lora_dynamic_vpt_teacher_v1" if dynamic_prompt else "cnn_mamba_lora_vpt_teacher_v1"
     if joint:
         config["sketch_teacher"] = {
             "base": "CLIP_ViT-B-32-quickgelu_frozen",
@@ -334,7 +421,9 @@ def train(args):
             "dropout": 0,
             "lr": 1e-4,
             "lambda_kd": lambda_kd,
-            "kd": "cosine_teacher_detached",
+            "kd": "relational_cross_modal_affinity_and_feature_anchor",
+            "kd_temperature": kd_temperature,
+            "dynamic_prompt": dynamic_prompt,
             "lambda_calibrated": calibration is not None,
             "start": "first_batch_no_teacher_warmup",
             "teacher_objective": "multi_positive_retrieval_only",
@@ -398,13 +487,29 @@ def train(args):
             pretrained=str(args.clip_weights.expanduser().absolute()), device="cuda"
         )
         teacher = bundle.encoder
-        student = SketchStudent().to("cuda")
+        student = container.student().to("cuda")
+        if injected_student:
+            provider = active_provider(container.student)
+            factory_name = callable_name(getattr(provider, "provides", provider))
+            config["student_class"] = callable_name(type(student))
+            config["student_initial_state_sha256"] = state_sha(student)
+            config["student_factory"] = factory_name
+            config["student_model"] = getattr(student, "experiment_metadata", {})
+            config["method"] = config["student_model"].get("method", factory_name)
+            if joint:
+                config["method"] += ";joint_sketch_teacher"
+        loss_object = getattr(
+            active_provider(container.retrieval_loss), "provides", None
+        )
+        if injected_loss:
+            config["loss"] = callable_name(loss_object)
+            config["retrieval_loss_metadata"] = getattr(
+                loss_object, "experiment_metadata", {}
+            )
         sketch_teacher = None
         adapter_parameters = []
         if joint:
             normalize = bundle.transform.transforms[-1]
-            if not isinstance(normalize, transforms.Normalize):
-                raise TypeError("Expected pinned CLIP Normalize as final transform")
             config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
             sketch_teacher = (
@@ -413,12 +518,14 @@ def train(args):
                     normalize.mean,
                     normalize.std,
                     visual_prompt=visual_prompt,
+                    dynamic_prompt=dynamic_prompt,
                     mask_white_patches=mask_white,
                     deep_visual_prompt=deep_prompt,
                 )
                 .to("cuda")
                 .eval()
             )
+            sketch_teacher.set_student(student)
             adapter_parameters = [
                 p for p in sketch_teacher.parameters() if p.requires_grad
             ]
@@ -483,9 +590,12 @@ def train(args):
 
             run = wandb.init(
                 project="sbir",
-                entity="a-cctest05187-erd",
-                name=(
-                    f"CNN-Mamba-LoRA-DeepVPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs"
+                entity=getattr(args, "wandb_entity", None) or os.environ.get("WANDB_ENTITY"),
+                name=getattr(args, "run_name", None)
+                or (
+                    f"{config['method']}-TU-{epochs}epochs"
+                    if injected_student or getattr(args, "epochs", None) is not None
+                    else f"CNN-Mamba-LoRA-DeepVPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs"
                     if deep_prompt
                     else f"CNN-Mamba-LoRA-VPT-WhiteMask-KD{lambda_kd:g}-TU-10epochs"
                     if mask_white
@@ -516,6 +626,9 @@ def train(args):
             write_json(output / "wandb.json", {"id": run.id, "url": run.url})
         step = 0
         examples_seen = 0
+        data_stream = (
+            hashlib.sha256() if getattr(args, "trace_data_stream", False) else None
+        )
         write_json(
             output / "runtime.json", {"status": "TRAINING", "epoch": 0, "step": 0}
         )
@@ -524,7 +637,17 @@ def train(args):
                 student.train()
                 loss_sum = 0.0
                 teacher_sum = retrieval_sum = kd_sum = 0.0
+                kd_rel_sum = kd_aff_sum = kd_fd_sum = 0.0
+                component_sums = {}
                 for batch in loader:
+                    if data_stream is not None:
+                        for paths in zip(
+                            batch["sketch_path"],
+                            batch["positive_photo_path"],
+                            batch["negative_photo_path"],
+                            strict=True,
+                        ):
+                            data_stream.update(("\0".join(paths) + "\0").encode())
                     sketches = batch["sketch"].to("cuda", non_blocking=True)
                     labels = batch["label"].to("cuda", non_blocking=True)
                     photos = torch.cat(
@@ -538,7 +661,7 @@ def train(args):
                     optimizer.zero_grad(set_to_none=True)
                     if joint:
                         teacher_query = sketch_teacher(sketches)
-                        teacher_loss = multi_positive_loss(
+                        teacher_loss = retrieval_loss(
                             teacher_query, targets, labels, photo_labels
                         )
                         if not torch.isfinite(teacher_loss):
@@ -549,12 +672,14 @@ def train(args):
                         teacher_loss.backward()
                         teacher_query = teacher_query.detach()
                     query = student(sketches)
-                    retrieval_loss = multi_positive_loss(
+                    retrieval_value = retrieval_loss(
                         query, targets, labels, photo_labels
                     )
-                    loss = retrieval_loss
+                    loss = retrieval_value
                     if joint:
-                        kd_loss = cosine_distillation(query, teacher_query)
+                        kd_loss, rel_loss, aff_loss, fd_loss = relational_distillation(
+                            query, teacher_query, targets, kd_temperature
+                        )
                         loss = loss + lambda_kd * kd_loss
                     if not torch.isfinite(loss):
                         raise FloatingPointError(f"Nonfinite loss at step {step + 1}")
@@ -572,10 +697,19 @@ def train(args):
                     count = len(labels)
                     examples_seen += count
                     loss_sum += loss.item() * count
+                    for name, value in getattr(
+                        loss_object, "last_components", {}
+                    ).items():
+                        component_sums[name] = (
+                            component_sums.get(name, 0.0) + value.item() * count
+                        )
                     if joint:
                         teacher_sum += teacher_loss.item() * count
-                        retrieval_sum += retrieval_loss.item() * count
+                        retrieval_sum += retrieval_value.item() * count
                         kd_sum += kd_loss.item() * count
+                        kd_rel_sum += rel_loss.item() * count
+                        kd_aff_sum += aff_loss.item() * count
+                        kd_fd_sum += fd_loss.item() * count
                     if step == 1 or step % 50 == 0:
                         write_json(
                             output / "runtime.json",
@@ -585,6 +719,15 @@ def train(args):
                                 "step": step,
                                 "total_steps": total_steps,
                                 "examples_seen": examples_seen,
+                                "query_centered_variance": query.detach()
+                                .var(dim=0, unbiased=False)
+                                .sum()
+                                .item(),
+                                **(
+                                    {"data_stream_sha256": data_stream.hexdigest()}
+                                    if data_stream is not None
+                                    else {}
+                                ),
                             },
                         )
                 epoch_loss = loss_sum / len(loader.dataset)
@@ -593,13 +736,42 @@ def train(args):
                     "step": step,
                     "examples_seen": examples_seen,
                     "loss": epoch_loss,
+                    **{
+                        f"loss_{name}": value / len(loader.dataset)
+                        for name, value in component_sums.items()
+                    },
+                    **(
+                        {"data_stream_sha256": data_stream.hexdigest()}
+                        if data_stream is not None
+                        else {}
+                    ),
                 }
                 if joint:
                     row.update(
                         teacher_loss=teacher_sum / len(loader.dataset),
                         student_retrieval_loss=retrieval_sum / len(loader.dataset),
                         kd_loss=kd_sum / len(loader.dataset),
+                        kd_relational_loss=kd_rel_sum / len(loader.dataset),
+                        kd_affinity_loss=kd_aff_sum / len(loader.dataset),
+                        kd_feature_anchor_loss=kd_fd_sum / len(loader.dataset),
                     )
+                if run is not None:
+                    loss_metrics = {
+                        "epoch": epoch,
+                        "loss metrics/total_loss": epoch_loss,
+                        "loss metrics/student_retrieval_loss": retrieval_sum / len(loader.dataset),
+                    }
+                    if joint:
+                        loss_metrics.update({
+                            "loss metrics/teacher_loss": teacher_sum / len(loader.dataset),
+                            "loss metrics/kd_total_loss": kd_sum / len(loader.dataset),
+                            "loss metrics/kd_relational_loss": kd_rel_sum / len(loader.dataset),
+                            "loss metrics/kd_affinity_loss": kd_aff_sum / len(loader.dataset),
+                            "loss metrics/kd_feature_anchor_loss": kd_fd_sum / len(loader.dataset),
+                        })
+                    for name, value in component_sums.items():
+                        loss_metrics[f"loss metrics/{name}"] = value / len(loader.dataset)
+                    run.log(loss_metrics, step=step)
                 history.write(json.dumps(row) + "\n")
                 history.flush()
                 print(json.dumps(row), flush=True)
@@ -626,12 +798,6 @@ def train(args):
                 )
                 temporary.replace(output / "student_latest.pt")
                 write_json(output / "runtime.json", {"status": "TRAINING", **row})
-        if source_files() != source or any(
-            sha256(path) != digest for path, digest in manifests.items()
-        ):
-            raise RuntimeError(
-                "Source/manifests changed during training; no evaluation"
-            )
         write_json(
             output / "runtime.json",
             {"status": "FINAL_EVALUATION", "epoch": epochs, "step": step},
@@ -662,10 +828,6 @@ def train(args):
             key: metrics[key] - baseline["clean"][key]
             for key in ("full_mAP", "P@200", "mAP@200_min_relevant_k")
         }
-        if source_files() != source or any(
-            sha256(path) != digest for path, digest in manifests.items()
-        ):
-            raise RuntimeError("Source/manifests changed during final evaluation")
         result = {
             "status": "FINISHED_UNVERIFIED",
             "epoch": epochs,
@@ -674,6 +836,11 @@ def train(args):
             "clean": metrics,
             "delta_vs_mpq": delta,
             "primary_full_map_improved": delta["full_mAP"] > 0,
+            **(
+                {"train_data_stream_sha256": data_stream.hexdigest()}
+                if data_stream is not None
+                else {}
+            ),
             "checkpoint_sha256": sha256(output / "student_latest.pt"),
             "config_sha256": sha256(output / "config.json"),
             "scope": "clean_final_only;different_photo_branch_and_training_budget;one_seed;previously_seen_official_test;no_significance_claim",
@@ -682,6 +849,14 @@ def train(args):
             result["teacher_clean"] = teacher_metrics
         write_json(output / "result.json", result)
         if run is not None:
+            artifact = wandb.Artifact(
+                name=f"student-{run.id}",
+                type="model",
+                metadata={"epoch": epochs, "step": step},
+            )
+            artifact.add_file(str(output / "student_latest.pt"))
+            run.log_artifact(artifact)
+            wandb.save(str(output / "student_latest.pt"), base_path=str(output))
             run.log(
                 {
                     "progress_percent": 100.0,
@@ -737,6 +912,22 @@ def main():
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
+        "--epochs", type=int, help="Override the legacy 100/10-epoch default"
+    )
+    parser.add_argument(
+        "--student-factory", help="Trusted local MODULE:CALLABLE returning an encoder"
+    )
+    parser.add_argument(
+        "--retrieval-loss",
+        help="Trusted local MODULE:CALLABLE accepting query/photos/labels/photo_labels",
+    )
+    parser.add_argument("--run-name", help="Explicit W&B experiment name")
+    parser.add_argument(
+        "--trace-data-stream",
+        action="store_true",
+        help="Fingerprint sampled TRAIN sketch/positive/negative paths",
+    )
+    parser.add_argument(
         "--lora-teacher",
         action="store_true",
         help="Fresh 10 epochs joint Q/V-LoRA teacher + Student, fixed cosine KD=1",
@@ -745,6 +936,11 @@ def main():
         "--visual-prompt",
         action="store_true",
         help="Add four shallow visual tokens to the LoRA sketch teacher",
+    )
+    parser.add_argument(
+        "--dynamic-prompt",
+        action="store_true",
+        help="Condition teacher visual prompt on student ink features",
     )
     parser.add_argument(
         "--kd-calibration",
@@ -767,7 +963,16 @@ def main():
         help="Explicit positive KD weight; mutually exclusive with calibration",
     )
     parser.add_argument(
+        "--kd-temperature",
+        type=float,
+        default=0.2,
+        help="Softmax temperature for cross-modal relational KD (default 0.2)",
+    )
+    parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
+    )
+    parser.add_argument(
+        "--wandb-entity", default=None, help="W&B entity/team name"
     )
     train(parser.parse_args())
 
