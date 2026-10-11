@@ -21,6 +21,7 @@ from jaxtyping import Float, Int
 from torch import Tensor
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from .config.data import load_data_config
 from .data.datasets import RetrievalEvalDataset
@@ -239,14 +240,17 @@ def train(args: argparse.Namespace):
             groups, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY
         )
 
-        sketch_transform = build_clip_eval_transform()
+        sketch_transform = transforms.Compose(
+            build_clip_eval_transform().transforms[:-1]
+        )
         loader = build_retrieval_train_loader(
-            data_config=data,
+            data,
+            sketch_transform,
+            bundle.transform,
             batch_size=BATCH_SIZE,
-            seed=SEED,
             num_workers=4,
-            sketch_transform=sketch_transform,
-            photo_transform=bundle.transform,
+            pin_memory=True,
+            drop_last=False,
         )
 
         total_steps = epochs * len(loader)
