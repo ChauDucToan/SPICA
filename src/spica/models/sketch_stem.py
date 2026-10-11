@@ -44,17 +44,37 @@ class MambaSketchStem(nn.Module):
 class CLIPWithSketchStem(nn.Module):
     """Wrap frozen CLIP visual transformer with trainable MambaSketchStem."""
 
-    def __init__(self, clip_visual: nn.Module, stem_channels: int = 192) -> None:
+    def __init__(
+        self,
+        clip_visual: nn.Module,
+        mean: tuple[float, float, float] | list[float] = (0.48145466, 0.4578275, 0.40821073),
+        std: tuple[float, float, float] | list[float] = (0.26862954, 0.26130258, 0.27577711),
+        stem_channels: int = 192,
+    ) -> None:
         super().__init__()
         clip_dim = clip_visual.conv1.out_channels
         self.stem = MambaSketchStem(in_channels=stem_channels, clip_dim=clip_dim)
         self.visual = clip_visual.requires_grad_(False).eval()
+        self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
 
     @property
     def device(self) -> torch.device:
         return next(self.stem.parameters()).device
 
-    def forward(self, sketches: SketchImages) -> Embeddings:
+    def target_patch_tokens(self, sketches: SketchImages) -> PatchTokens:
+        """Extract standard patch tokens using frozen CLIP conv1 as anchor."""
+        norm_sketches = (sketches - self.mean) / self.std
+        with torch.no_grad():
+            return (
+                self.visual.conv1(norm_sketches)
+                .reshape(sketches.shape[0], self.visual.conv1.out_channels, -1)
+                .permute(0, 2, 1)
+            )
+
+    def forward(
+        self, sketches: SketchImages, return_patches: bool = False
+    ) -> Embeddings | tuple[Embeddings, PatchTokens]:
         patches = self.stem(sketches)
         batch = patches.shape[0]
 
@@ -72,4 +92,7 @@ class CLIPWithSketchStem(nn.Module):
 
         if self.visual.proj is not None:
             pooled = pooled @ self.visual.proj
-        return F.normalize(pooled, dim=-1)
+        query = F.normalize(pooled, dim=-1)
+        if return_patches:
+            return query, patches
+        return query

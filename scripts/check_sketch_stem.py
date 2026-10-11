@@ -55,9 +55,15 @@ def main():
 
     # 2. Test CLIPWithSketchStem
     model = CLIPWithSketchStem(visual, stem_channels=192).to(device)
-    query = model(sketches)
+    query, stem_patches = model(sketches, return_patches=True)
     assert query.shape == (2, output_dim)
+    assert stem_patches.shape == (2, 49, clip_dim)
     assert torch.allclose(query.norm(dim=-1), torch.ones(2, device=device), atol=1e-5)
+
+    targets = model.target_patch_tokens(sketches)
+    assert targets.shape == (2, 49, clip_dim)
+    patch_mse = F.mse_loss(stem_patches, targets)
+    assert patch_mse.ndim == 0 and torch.isfinite(patch_mse)
 
     # 3. Test Gradient Isolation
     photos = F.normalize(torch.randn(4, output_dim, device=device), dim=-1)

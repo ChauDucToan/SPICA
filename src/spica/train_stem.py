@@ -215,8 +215,12 @@ def train(args: argparse.Namespace):
         photo_encoder = bundle.encoder
 
         # Wrap frozen CLIP ViT body with trainable MambaSketchStem
+        normalize = bundle.transform.transforms[-1]
         model = CLIPWithSketchStem(
-            bundle.encoder.model.visual, stem_channels=stem_channels
+            bundle.encoder.model.visual,
+            mean=normalize.mean,
+            std=normalize.std,
+            stem_channels=stem_channels,
         ).to("cuda")
 
         trainable_params = [p for p in model.stem.parameters() if p.requires_grad]
@@ -258,11 +262,15 @@ def train(args: argparse.Namespace):
             optimizer, lambda step: learning_rate_factor(step, total_steps)
         )
 
+        grad_clip = getattr(args, "grad_clip", 50.0)
+        lambda_patch = getattr(args, "lambda_patch", 1.0)
         config.update(
             {
                 "steps_per_epoch": len(loader),
                 "total_steps": total_steps,
                 "warmup_steps": round(0.05 * total_steps),
+                "grad_clip": grad_clip,
+                "lambda_patch": lambda_patch,
             }
         )
         write_json(output / "config.json", config)
@@ -292,6 +300,7 @@ def train(args: argparse.Namespace):
             for epoch in range(1, epochs + 1):
                 model.train()
                 loss_sum = 0.0
+                retrieval_sum = patch_sum = 0.0
 
                 for batch in loader:
                     sketches = batch["sketch"].to("cuda", non_blocking=True)
@@ -305,17 +314,20 @@ def train(args: argparse.Namespace):
 
                     with torch.no_grad():
                         targets = photo_encoder(photos)
+                        target_tokens = model.target_patch_tokens(sketches)
 
                     optimizer.zero_grad(set_to_none=True)
-                    query = model(sketches)
-                    loss = multi_positive_loss(query, targets, labels, photo_labels)
+                    query, stem_tokens = model(sketches, return_patches=True)
+                    retrieval_loss = multi_positive_loss(query, targets, labels, photo_labels)
+                    patch_loss = F.mse_loss(stem_tokens, target_tokens)
+                    loss = retrieval_loss + lambda_patch * patch_loss
 
                     if not torch.isfinite(loss):
                         raise FloatingPointError(f"Nonfinite loss at step {step + 1}")
 
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(
-                        trainable_params, 1.0, error_if_nonfinite=True
+                        trainable_params, grad_clip, error_if_nonfinite=True
                     )
                     optimizer.step()
                     scheduler.step()
@@ -324,6 +336,8 @@ def train(args: argparse.Namespace):
                     count = len(labels)
                     examples_seen += count
                     loss_sum += loss.item() * count
+                    retrieval_sum += retrieval_loss.item() * count
+                    patch_sum += patch_loss.item() * count
 
                     if step == 1 or step % 50 == 0:
                         write_json(
@@ -343,6 +357,8 @@ def train(args: argparse.Namespace):
                     "step": step,
                     "examples_seen": examples_seen,
                     "loss": epoch_loss,
+                    "loss_retrieval": retrieval_sum / len(loader.dataset),
+                    "loss_patch_tokens": patch_sum / len(loader.dataset),
                 }
 
                 if run is not None:
@@ -350,6 +366,8 @@ def train(args: argparse.Namespace):
                         {
                             "epoch": epoch,
                             "loss metrics/total_loss": epoch_loss,
+                            "loss metrics/retrieval_loss": retrieval_sum / len(loader.dataset),
+                            "loss metrics/patch_token_loss": patch_sum / len(loader.dataset),
                         },
                         step=step,
                     )
@@ -464,6 +482,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=EPOCHS)
     parser.add_argument("--stem-channels", type=int, default=192)
+    parser.add_argument("--grad-clip", type=float, default=50.0)
+    parser.add_argument("--lambda-patch", type=float, default=1.0)
     parser.add_argument(
         "--wandb-mode", choices=("disabled", "online"), default="disabled"
     )
