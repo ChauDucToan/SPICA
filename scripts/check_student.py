@@ -29,7 +29,7 @@ def main():
     scan = FourWayMamba()
     scan.norm = nn.Identity()
     scan.mamba = nn.Identity()
-    grid = torch.arange(192 * 3 * 5).float().reshape(1, 192, 3, 5)
+    grid = torch.arange(scan.channels * 3 * 5).float().reshape(1, scan.channels, 3, 5)
     assert torch.equal(scan(grid), grid)
 
     with ExitStack() as stack:

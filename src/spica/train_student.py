@@ -509,7 +509,9 @@ def train(
             normalize = bundle.transform.transforms[-1]
             config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
-            patch_projector = StudentPatchProjector().to("cuda")
+            patch_projector = StudentPatchProjector(
+                in_channels=getattr(student, "channels", 384)
+            ).to("cuda")
             sketch_teacher = (
                 SketchTeacher(
                     teacher.model.visual,

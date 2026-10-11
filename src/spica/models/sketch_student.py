@@ -29,8 +29,9 @@ def conv_block(inputs: int, outputs: int, stride: int = 1) -> nn.Sequential:
 class FourWayMamba(nn.Module):
     """Scan row-major and column-major grids, forward and backward; restore XY."""
 
-    def __init__(self, channels: int = 192) -> None:
+    def __init__(self, channels: int = 384) -> None:
         super().__init__()
+        self.channels = channels
         self.norm = nn.LayerNorm(channels)
         # Official Triton SSD scan + PyTorch conv; no causal-conv1d extension.
         self.mamba = Mamba2(
@@ -64,7 +65,7 @@ class FourWayMamba(nn.Module):
 
 
 class HybridBlock(nn.Module):
-    def __init__(self, channels: int = 192) -> None:
+    def __init__(self, channels: int = 384) -> None:
         super().__init__()
         self.local = nn.Sequential(
             conv_block(channels, channels),
@@ -84,9 +85,9 @@ class HybridBlock(nn.Module):
 
 
 class StudentPatchProjector(nn.Module):
-    """Project Student 192-dim 28x28 feature grid to 49 768-dim patch tokens matching CLIP ViT."""
+    """Project Student feature grid to 49 768-dim patch tokens matching CLIP ViT."""
 
-    def __init__(self, in_channels: int = 192, out_channels: int = 768) -> None:
+    def __init__(self, in_channels: int = 384, out_channels: int = 768) -> None:
         super().__init__()
         self.proj = nn.Sequential(
             nn.AdaptiveAvgPool2d((7, 7)),
@@ -98,17 +99,18 @@ class StudentPatchProjector(nn.Module):
 
 
 class SketchStudent(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, channels: int = 384) -> None:
         super().__init__()
+        self.channels = channels
         self.stem = nn.Sequential(
-            conv_block(1, 32),  # 224×224: learn edges before downsampling
-            conv_block(32, 64, 2),  # 112×112
-            conv_block(64, 96, 2),  # 56×56
-            conv_block(96, 96),
-            conv_block(96, 192, 2),  # 28×28
+            conv_block(1, 48),  # 224×224: learn edges before downsampling
+            conv_block(48, 96, 2),  # 112×112
+            conv_block(96, 192, 2),  # 56×56
+            conv_block(192, 192),
+            conv_block(192, channels, 2),  # 28×28
         )
-        self.blocks = nn.Sequential(HybridBlock(), HybridBlock())
-        self.projection = nn.Linear(192, 512)
+        self.blocks = nn.Sequential(HybridBlock(channels), HybridBlock(channels))
+        self.projection = nn.Linear(channels, 512)
         self.last_features: GridFeatures | None = None
 
     @property
