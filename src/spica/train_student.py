@@ -38,7 +38,7 @@ from .data.transforms import build_clip_eval_transform
 from .evaluation.embeddings import encode_retrieval_loader, save_encoded_retrieval_set
 from .evaluation.metrics import evaluate_category_retrieval
 from .models.clip import load_frozen_clip
-from .models.sketch_student import SketchStudent
+from .models.sketch_student import SketchStudent, StudentPatchProjector
 from .models.sketch_teacher import (
     SketchTeacher,
     cosine_distillation,
@@ -242,11 +242,8 @@ def train(
         raise FileExistsError(output)
     joint = args.lora_teacher
     visual_prompt = getattr(args, "visual_prompt", False)
-    dynamic_prompt = getattr(args, "dynamic_prompt", False)
-    if dynamic_prompt:
-        visual_prompt = True
     if visual_prompt and not joint:
-        raise ValueError("--visual-prompt or --dynamic-prompt requires --lora-teacher")
+        raise ValueError("--visual-prompt requires --lora-teacher")
     mask_white = getattr(args, "mask_white_patches", False)
     deep_prompt = getattr(args, "deep_visual_prompt", False)
     if deep_prompt and (not joint or not visual_prompt or not mask_white):
@@ -411,7 +408,7 @@ def train(
         "official_test_previously_observed": True,
     }
     if visual_prompt:
-        config["method"] = "cnn_mamba_lora_dynamic_vpt_teacher_v1" if dynamic_prompt else "cnn_mamba_lora_vpt_teacher_v1"
+        config["method"] = "cnn_mamba_lora_vpt_teacher_v1"
     if joint:
         config["sketch_teacher"] = {
             "base": "CLIP_ViT-B-32-quickgelu_frozen",
@@ -423,7 +420,6 @@ def train(
             "lambda_kd": lambda_kd,
             "kd": "relational_cross_modal_affinity_and_feature_anchor",
             "kd_temperature": kd_temperature,
-            "dynamic_prompt": dynamic_prompt,
             "lambda_calibrated": calibration is not None,
             "start": "first_batch_no_teacher_warmup",
             "teacher_objective": "multi_positive_retrieval_only",
@@ -507,25 +503,25 @@ def train(
                 loss_object, "experiment_metadata", {}
             )
         sketch_teacher = None
+        patch_projector = None
         adapter_parameters = []
         if joint:
             normalize = bundle.transform.transforms[-1]
             config["sketch_teacher"]["normalize_mean"] = list(normalize.mean)
             config["sketch_teacher"]["normalize_std"] = list(normalize.std)
+            patch_projector = StudentPatchProjector().to("cuda")
             sketch_teacher = (
                 SketchTeacher(
                     teacher.model.visual,
                     normalize.mean,
                     normalize.std,
                     visual_prompt=visual_prompt,
-                    dynamic_prompt=dynamic_prompt,
                     mask_white_patches=mask_white,
                     deep_visual_prompt=deep_prompt,
                 )
                 .to("cuda")
                 .eval()
             )
-            sketch_teacher.set_student(student)
             adapter_parameters = [
                 p for p in sketch_teacher.parameters() if p.requires_grad
             ]
@@ -576,6 +572,8 @@ def train(
                 else decay
             )
             target.append(parameter)
+        if patch_projector is not None:
+            decay.extend(patch_projector.parameters())
         groups = [{"params": decay}, {"params": no_decay, "weight_decay": 0.0}]
         if joint:
             groups.append({"params": adapter_parameters, "lr": 1e-4})
@@ -635,9 +633,11 @@ def train(
         with (output / "training.jsonl").open("x") as history:
             for epoch in range(1, epochs + 1):
                 student.train()
+                if patch_projector is not None:
+                    patch_projector.train()
                 loss_sum = 0.0
                 teacher_sum = retrieval_sum = kd_sum = 0.0
-                kd_rel_sum = kd_aff_sum = kd_fd_sum = 0.0
+                kd_rel_sum = kd_aff_sum = kd_fd_sum = kd_patch_sum = kd_margin_sum = 0.0
                 component_sums = {}
                 for batch in loader:
                     if data_stream is not None:
@@ -659,8 +659,9 @@ def train(
                     with torch.no_grad():
                         targets = teacher(photos)
                     optimizer.zero_grad(set_to_none=True)
+                    teacher_patches = None
                     if joint:
-                        teacher_query = sketch_teacher(sketches)
+                        teacher_query, teacher_patches = sketch_teacher(sketches, return_patches=True)
                         teacher_loss = retrieval_loss(
                             teacher_query, targets, labels, photo_labels
                         )
@@ -671,14 +672,25 @@ def train(
                         # Free teacher activations before Student forward; targets are pre-update.
                         teacher_loss.backward()
                         teacher_query = teacher_query.detach()
+                        teacher_patches = teacher_patches.detach()
                     query = student(sketches)
+                    student_patches = patch_projector(student.last_features) if joint else None
                     retrieval_value = retrieval_loss(
                         query, targets, labels, photo_labels
                     )
                     loss = retrieval_value
                     if joint:
-                        kd_loss, rel_loss, aff_loss, fd_loss = relational_distillation(
-                            query, teacher_query, targets, kd_temperature
+                        pos_photos = targets[:len(labels)]
+                        neg_photos = targets[len(labels):]
+                        kd_loss, rel_loss, aff_loss, fd_loss, patch_loss, margin_loss = relational_distillation(
+                            query,
+                            teacher_query,
+                            targets,
+                            student_patches=student_patches,
+                            teacher_patches=teacher_patches,
+                            pos_photos=pos_photos,
+                            neg_photos=neg_photos,
+                            temperature=kd_temperature,
                         )
                         loss = loss + lambda_kd * kd_loss
                     if not torch.isfinite(loss):
@@ -688,6 +700,9 @@ def train(
                         student.parameters(), 1.0, error_if_nonfinite=True
                     )
                     if joint:
+                        torch.nn.utils.clip_grad_norm_(
+                            patch_projector.parameters(), 1.0, error_if_nonfinite=True
+                        )
                         torch.nn.utils.clip_grad_norm_(
                             adapter_parameters, 1.0, error_if_nonfinite=True
                         )
@@ -710,6 +725,8 @@ def train(
                         kd_rel_sum += rel_loss.item() * count
                         kd_aff_sum += aff_loss.item() * count
                         kd_fd_sum += fd_loss.item() * count
+                        kd_patch_sum += patch_loss.item() * count
+                        kd_margin_sum += margin_loss.item() * count
                     if step == 1 or step % 50 == 0:
                         write_json(
                             output / "runtime.json",
@@ -754,6 +771,8 @@ def train(
                         kd_relational_loss=kd_rel_sum / len(loader.dataset),
                         kd_affinity_loss=kd_aff_sum / len(loader.dataset),
                         kd_feature_anchor_loss=kd_fd_sum / len(loader.dataset),
+                        kd_patch_loss=kd_patch_sum / len(loader.dataset),
+                        kd_dynamic_margin_loss=kd_margin_sum / len(loader.dataset),
                     )
                 if run is not None:
                     loss_metrics = {
@@ -768,6 +787,8 @@ def train(
                             "loss metrics/kd_relational_loss": kd_rel_sum / len(loader.dataset),
                             "loss metrics/kd_affinity_loss": kd_aff_sum / len(loader.dataset),
                             "loss metrics/kd_feature_anchor_loss": kd_fd_sum / len(loader.dataset),
+                            "loss metrics/kd_patch_loss": kd_patch_sum / len(loader.dataset),
+                            "loss metrics/kd_dynamic_margin_loss": kd_margin_sum / len(loader.dataset),
                         })
                     for name, value in component_sums.items():
                         loss_metrics[f"loss metrics/{name}"] = value / len(loader.dataset)
@@ -780,7 +801,10 @@ def train(
                     {
                         "model": student.state_dict(),
                         **(
-                            {"teacher_adapter": sketch_teacher.adapter_state_dict()}
+                            {
+                                "teacher_adapter": sketch_teacher.adapter_state_dict(),
+                                "patch_projector": patch_projector.state_dict(),
+                            }
                             if joint
                             else {}
                         ),

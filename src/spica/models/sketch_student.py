@@ -83,6 +83,20 @@ class HybridBlock(nn.Module):
         )
 
 
+class StudentPatchProjector(nn.Module):
+    """Project Student 192-dim 28x28 feature grid to 49 768-dim patch tokens matching CLIP ViT."""
+
+    def __init__(self, in_channels: int = 192, out_channels: int = 768) -> None:
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.AdaptiveAvgPool2d((7, 7)),
+            nn.Conv2d(in_channels, out_channels, 1, bias=False),
+        )
+
+    def forward(self, features: GridFeatures) -> Tensor:
+        return F.normalize(self.proj(features).flatten(2).transpose(1, 2), dim=-1)
+
+
 class SketchStudent(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -95,6 +109,7 @@ class SketchStudent(nn.Module):
         )
         self.blocks = nn.Sequential(HybridBlock(), HybridBlock())
         self.projection = nn.Linear(192, 512)
+        self.last_features: GridFeatures | None = None
 
     @property
     def device(self) -> torch.device:
@@ -103,6 +118,7 @@ class SketchStudent(nn.Module):
     def forward(self, sketches: SketchImages) -> Embeddings:
         ink = 1.0 - sketches.mean(dim=1, keepdim=True)
         features = self.blocks(self.stem(ink))
+        self.last_features = features
         # Max pooling keeps thin ink represented; retain 10% background context.
         weights = 0.1 + 0.9 * F.adaptive_max_pool2d(ink, features.shape[-2:])
         pooled = (features * weights).sum(dim=(-2, -1)) / weights.sum(dim=(-2, -1))

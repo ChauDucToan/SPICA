@@ -37,28 +37,17 @@ class QVLoRA(nn.Module):
 
 
 class VisualPrompt(nn.Module):
-    """Four tokens after CLS, before pre-LN; optional dynamic conditioning from sketch ink features."""
+    """Four learned soft prompt tokens after CLS, before pre-LN."""
 
-    def __init__(self, width: int, dynamic: bool = False, in_channels: int = 192):
+    def __init__(self, width: int):
         super().__init__()
         self.tokens = nn.Parameter(torch.empty(4, width))
         nn.init.normal_(self.tokens, std=0.02)
-        self.dynamic = dynamic
-        if dynamic:
-            self.generator = nn.Sequential(
-                nn.AdaptiveAvgPool2d((2, 2)),
-                nn.Conv2d(in_channels, width, 1, bias=False),
-            )
-        self.current_ink = None
 
     def forward(self, tokens: Tokens) -> PromptedTokens:
-        base = self.tokens.to(tokens.dtype).unsqueeze(0).expand(tokens.shape[0], -1, -1)
-        if self.dynamic and self.current_ink is not None:
-            dyn = self.generator(self.current_ink).flatten(2).transpose(1, 2)
-            prompts = base + dyn
-            self.current_ink = None
-        else:
-            prompts = base
+        prompts = (
+            self.tokens.to(tokens.dtype).unsqueeze(0).expand(tokens.shape[0], -1, -1)
+        )
         return torch.cat((tokens[:, :1], prompts, tokens[:, 1:]), dim=1)
 
 
@@ -70,7 +59,6 @@ class SketchTeacher(nn.Module):
         std,
         *,
         visual_prompt=False,
-        dynamic_prompt=False,
         mask_white_patches=False,
         deep_visual_prompt=False,
     ):
@@ -79,11 +67,8 @@ class SketchTeacher(nn.Module):
             raise ValueError("Deep prompts require visual prompts")
         self.mask_white_patches = mask_white_patches
         self.deep_visual_prompt = deep_visual_prompt
-        self.dynamic_prompt = dynamic_prompt
-        self.prompt_count = 4 if (visual_prompt or dynamic_prompt) and not deep_visual_prompt else 0
+        self.prompt_count = 4 if visual_prompt and not deep_visual_prompt else 0
         self.visual = deepcopy(visual).requires_grad_(False)
-        self.prompt = None
-        object.__setattr__(self, "_student_ref", None)
         # Isolate adapter initialization from the Student/data RNG stream.
         with torch.random.fork_rng(devices=[]):
             for block in self.visual.transformer.resblocks:
@@ -97,12 +82,10 @@ class SketchTeacher(nn.Module):
                     VisualPrompt(self.visual.conv1.out_channels)
                     for _ in self.visual.transformer.resblocks
                 ).to(self.visual.conv1.weight.device)
-            elif visual_prompt or dynamic_prompt:
-                self.prompt = VisualPrompt(
-                    self.visual.conv1.out_channels, dynamic=dynamic_prompt
-                )
+            elif visual_prompt:
+                prompt = VisualPrompt(self.visual.conv1.out_channels)
                 self.visual.ln_pre = nn.Sequential(
-                    self.prompt.to(self.visual.conv1.weight.device), self.visual.ln_pre
+                    prompt.to(self.visual.conv1.weight.device), self.visual.ln_pre
                 )
         self.register_buffer("mean", torch.tensor(mean).view(1, 3, 1, 1))
         self.register_buffer("std", torch.tensor(std).view(1, 3, 1, 1))
@@ -118,14 +101,11 @@ class SketchTeacher(nn.Module):
         # CLS and visual prompts are always valid, including all-white sketches.
         return F.pad(blank, (1 + self.prompt_count, 0), value=False)
 
-    def forward(self, sketches: SketchImages) -> Embeddings:
-        if self.prompt is not None and self.prompt.dynamic:
-            if self.student is not None:
-                with torch.no_grad():
-                    ink = 1.0 - sketches.mean(dim=1, keepdim=True)
-                    self.prompt.current_ink = self.student.stem(ink).detach()
+    def forward(
+        self, sketches: SketchImages, return_patches: bool = False
+    ) -> Embeddings | tuple[Embeddings, Tensor]:
         normalized = (sketches - self.mean) / self.std
-        if not self.mask_white_patches and not self.deep_visual_prompt:
+        if not self.mask_white_patches and not self.deep_visual_prompt and not return_patches:
             return F.normalize(self.visual(normalized), dim=-1)
         tokens = self.visual._embeds(normalized)
         mask = None
@@ -163,17 +143,15 @@ class SketchTeacher(nn.Module):
                 tokens = torch.cat((tokens[:, :1], tokens[:, 5:]), dim=1)
         else:
             tokens = self.visual.transformer(tokens, attn_mask=mask)
-        pooled, _ = self.visual._pool(tokens)
+        tokens_post = self.visual.ln_post(tokens)
+        pooled = tokens_post[:, 0]
         if self.visual.proj is not None:
             pooled = pooled @ self.visual.proj
-        return F.normalize(pooled, dim=-1)
-
-    @property
-    def student(self):
-        return getattr(self, "_student_ref", None)
-
-    def set_student(self, student):
-        object.__setattr__(self, "_student_ref", student)
+        query = F.normalize(pooled, dim=-1)
+        if return_patches:
+            patches = F.normalize(tokens_post[:, -49:], dim=-1)
+            return query, patches
+        return query
 
     def adapter_state_dict(self):
         trainable = {name for name, p in self.named_parameters() if p.requires_grad}
@@ -214,19 +192,60 @@ def feature_alignment_kd(
     return ((student_query - teacher_query.detach()) ** 2).sum(dim=-1).mean()
 
 
+def patch_alignment_kd(
+    student_patches: Tensor,
+    teacher_patches: Tensor,
+) -> Scalar:
+    """Patch-level token MSE alignment across 49 tokens: shape (B, 49, D)."""
+    return ((student_patches - teacher_patches.detach()) ** 2).sum(dim=-1).mean()
+
+
+def dynamic_margin_ranking_kd(
+    student_query: Embeddings,
+    teacher_query: Embeddings,
+    pos_photos: Embeddings,
+    neg_photos: Embeddings,
+    alpha: float = 1.0,
+) -> Scalar:
+    """Teacher-guided dynamic margin triplet ranking loss."""
+    delta_t = (
+        (teacher_query.detach() * pos_photos.detach()).sum(dim=-1)
+        - (teacher_query.detach() * neg_photos.detach()).sum(dim=-1)
+    ).clamp(min=0.0)
+    sim_s_pos = (student_query * pos_photos).sum(dim=-1)
+    sim_s_neg = (student_query * neg_photos).sum(dim=-1)
+    return F.relu(sim_s_neg - sim_s_pos + alpha * delta_t).mean()
+
+
 def relational_distillation(
     student_query: Embeddings,
     teacher_query: Embeddings,
     photos: Embeddings,
+    student_patches: Tensor | None = None,
+    teacher_patches: Tensor | None = None,
+    pos_photos: Embeddings | None = None,
+    neg_photos: Embeddings | None = None,
     temperature: float = 0.2,
     weight_fd: float = 1.0,
-) -> tuple[Scalar, Scalar, Scalar, Scalar]:
-    # ponytail: Combined relational + affinity + feature MSE anchor.
+    weight_patch: float = 0.5,
+    weight_margin: float = 1.0,
+) -> tuple[Scalar, Scalar, Scalar, Scalar, Scalar, Scalar]:
+    # ponytail: Combined relational, affinity, FD anchor, patch token MSE, and dynamic margin ranking.
     rel = cross_modal_relational_kd(student_query, teacher_query, photos, temperature)
     aff = intra_modal_affinity_kd(student_query, teacher_query)
     fd = feature_alignment_kd(student_query, teacher_query)
-    total = rel + aff + weight_fd * fd
-    return total, rel, aff, fd
+    patch_loss = (
+        patch_alignment_kd(student_patches, teacher_patches)
+        if student_patches is not None and teacher_patches is not None
+        else torch.tensor(0.0, device=student_query.device)
+    )
+    margin_loss = (
+        dynamic_margin_ranking_kd(student_query, teacher_query, pos_photos, neg_photos)
+        if pos_photos is not None and neg_photos is not None
+        else torch.tensor(0.0, device=student_query.device)
+    )
+    total = rel + aff + weight_fd * fd + weight_patch * patch_loss + weight_margin * margin_loss
+    return total, rel, aff, fd, patch_loss, margin_loss
 
 
 def cosine_distillation(student: Embeddings, teacher: Embeddings) -> Scalar:

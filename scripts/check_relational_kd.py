@@ -22,12 +22,28 @@ def main():
     teacher_q = F.normalize(torch.randn(b, d), dim=-1)
     photos = F.normalize(torch.randn(8, d), dim=-1)
 
-    total_kd, rel_kd, aff_kd, fd_kd = relational_distillation(student_q, teacher_q, photos, temperature=0.2)
+    student_patches = F.normalize(torch.randn(b, 49, 16), dim=-1)
+    teacher_patches = F.normalize(torch.randn(b, 49, 16), dim=-1)
+    pos_photos = photos[:b]
+    neg_photos = photos[b:]
+
+    total_kd, rel_kd, aff_kd, fd_kd, patch_kd, margin_kd = relational_distillation(
+        student_q,
+        teacher_q,
+        photos,
+        student_patches=student_patches,
+        teacher_patches=teacher_patches,
+        pos_photos=pos_photos,
+        neg_photos=neg_photos,
+        temperature=0.2,
+    )
     assert total_kd.ndim == 0 and torch.isfinite(total_kd)
     assert rel_kd.ndim == 0 and torch.isfinite(rel_kd) and rel_kd >= 0
     assert aff_kd.ndim == 0 and torch.isfinite(aff_kd) and aff_kd >= 0
     assert fd_kd.ndim == 0 and torch.isfinite(fd_kd) and fd_kd >= 0
-    assert torch.allclose(total_kd, rel_kd + aff_kd + fd_kd)
+    assert patch_kd.ndim == 0 and torch.isfinite(patch_kd) and patch_kd >= 0
+    assert margin_kd.ndim == 0 and torch.isfinite(margin_kd) and margin_kd >= 0
+    assert torch.allclose(total_kd, rel_kd + aff_kd + fd_kd + 0.5 * patch_kd + margin_kd)
 
     # 2. Test Dynamic Visual Prompt in SketchTeacher
     mean = (0.48, 0.46, 0.42)
@@ -42,24 +58,13 @@ def main():
         output_dim=16,
     ).cpu().eval()
 
-    teacher = SketchTeacher(visual, mean, std, dynamic_prompt=True).cpu().eval()
-    assert teacher.prompt is not None and teacher.prompt.dynamic
+    teacher = SketchTeacher(visual, mean, std, visual_prompt=True).cpu().eval()
     raw_sketch = torch.rand(2, 3, 32, 32)
-    out_no_student = teacher(raw_sketch)
-    assert out_no_student.shape == (2, 16)
-    assert torch.isfinite(out_no_student).all()
+    out = teacher(raw_sketch)
+    assert out.shape == (2, 16)
+    assert torch.isfinite(out).all()
 
-    student_mock = nn.Module()
-    student_mock.stem = nn.Sequential(
-        nn.Conv2d(1, 192, 3, padding=1),
-        nn.AdaptiveAvgPool2d((28, 28)),
-    )
-    teacher.student = student_mock
-    out_with_student = teacher(raw_sketch)
-    assert out_with_student.shape == (2, 16)
-    assert torch.isfinite(out_with_student).all()
-
-    print({"status": "PASS", "scope": "CPU_dynamic_prompt_and_relational_kd"})
+    print({"status": "PASS", "scope": "CPU_visual_prompt_and_relational_kd"})
 
 
 if __name__ == "__main__":
